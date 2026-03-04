@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/resource_model.dart';
 import '../../services/storage_service.dart';
+import '../../providers/search_provider.dart';
+import '../services/haptics_service.dart';
 
 /// Global search screen covering resources, topics, and AI history.
 class SearchScreen extends StatefulWidget {
@@ -65,6 +67,13 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  void _onResultTap(ResourceModel resource) {
+    // Save to history
+    Provider.of<SearchProvider>(context, listen: false)
+        .addSearch(resource.title);
+    context.pop(resource);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -114,19 +123,92 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildBody() {
+    final theme = Theme.of(context);
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     if (_query.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('🔎', style: TextStyle(fontSize: 48)),
+      final searchProvider = Provider.of<SearchProvider>(context);
+      final history = searchProvider.history;
+      final suggestions = searchProvider.getSuggestions(_controller.text);
+
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (_controller.text.isNotEmpty && suggestions.isNotEmpty) ...[
+            Text(
+              'Suggestions',
+              style: GoogleFonts.nunito(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
-            Text('Search for resources or topics',
-                style: GoogleFonts.nunito(fontSize: 15, color: Colors.grey)),
+            ...suggestions.map((s) => ListTile(
+                  leading: const Icon(Icons.search, size: 20),
+                  title: Text(s, style: GoogleFonts.nunito()),
+                  onTap: () {
+                    _controller.text = s;
+                    _search(s);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                )),
+            const SizedBox(height: 24),
           ],
-        ),
+          if (history.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Searches',
+                  style: GoogleFonts.nunito(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => searchProvider.clearHistory(),
+                  child: const Text('Clear All'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: history
+                  .map((s) => ActionChip(
+                        label: Text(s),
+                        onPressed: () {
+                          HapticsService.instance.lightImpact();
+                          _controller.text = s;
+                          _search(s);
+                        },
+                        backgroundColor: theme.primaryColor.withValues(alpha: 0.05),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 32),
+          ],
+          Text(
+            'Popular Topics',
+            style: GoogleFonts.nunito(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildPopularTopic(
+              'Algebra & Equations', 'Mathematics', Icons.calculate_outlined),
+          _buildPopularTopic(
+              'Organic Chemistry', 'Chemistry', Icons.science_outlined),
+          _buildPopularTopic(
+              'World War II', 'History', Icons.history_edu_outlined),
+          _buildPopularTopic('Newton\'s Laws', 'Physics', Icons.speed_outlined),
+        ],
       );
     }
 
@@ -161,8 +243,32 @@ class _SearchScreenState extends State<SearchScreen> {
               style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
           subtitle: Text('${r.subject} · Grade ${r.grade}',
               style: GoogleFonts.nunito(fontSize: 12, color: Colors.grey)),
-          onTap: () => context.pop(r),
+          onTap: () => _onResultTap(r),
         );
+      },
+    );
+  }
+
+  Widget _buildPopularTopic(String title, String subtitle, IconData icon) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: Theme.of(context).primaryColor),
+      ),
+      title:
+          Text(title, style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle,
+          style: GoogleFonts.nunito(fontSize: 12, color: Colors.grey)),
+      trailing:
+          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      onTap: () {
+        _controller.text = title;
+        _search(title);
       },
     );
   }

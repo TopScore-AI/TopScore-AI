@@ -7,24 +7,29 @@
   --card-foreground: 226 66% 15%;
   --popover: 0 0% 100%;
   --popover-foreground: 226 66% 15%;
-  --primary: 226 64% 33%;
+  --primary: #1e3a8a;
   --primary-foreground: 210 40% 98%;
-  --secondary: 142 72% 29%;
+  --secondary: #15803d;
   --secondary-foreground: 210 40% 98%;
   --muted: 226 30% 90%;
   --muted-foreground: 226 30% 40%;
-  --accent: 0 74% 42%;
+  --accent: #b91c1c;
   --accent-foreground: 210 40% 98%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
-  --border: 226 64% 90%;
+  --border: rgba(30, 58, 138, 0.15);
   --input: 226 64% 90%;
   --ring: 226 64% 33%;
   --radius: 0.5rem;
 
-  /* Legacy variables for compatibility */
+  /* Semantic tokens used across module.css files */
   --bg: #f0f4ff;
   --text: #0d1a40;
+  --text-muted: #4a5578;
+  --text-dim: #7a8aab;
+  --bg-card: #ffffff;
+  --bg-card2: #f0f4ff;
+  --glow: 0 0 40px rgba(30, 58, 138, 0.08);
   --primary-raw: #1e3a8a;
   --secondary-raw: #15803d;
   --accent-raw: #b91c1c;
@@ -39,22 +44,27 @@
   --card-foreground: 210 40% 98%;
   --popover: 222 47% 8%;
   --popover-foreground: 210 40% 98%;
-  --primary: 226 64% 43%;
+  --primary: #3b6cf5;
   --primary-foreground: 210 40% 98%;
-  --secondary: 142 72% 39%;
+  --secondary: #22c55e;
   --secondary-foreground: 210 40% 98%;
   --muted: 217.2 32.6% 17.5%;
   --muted-foreground: 215 20.2% 65.1%;
-  --accent: 0 74% 52%;
+  --accent: #ef4444;
   --accent-foreground: 210 40% 98%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
+  --border: rgba(255, 255, 255, 0.08);
   --input: 217.2 32.6% 17.5%;
   --ring: 226 64% 43%;
 
   --bg: #05080f;
   --text: #e8eeff;
+  --text-muted: #8a9bc0;
+  --text-dim: #506080;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-card2: rgba(255, 255, 255, 0.06);
+  --glow: 0 0 40px rgba(59, 108, 245, 0.12);
 }
 
 *,

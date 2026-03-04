@@ -157,6 +157,12 @@ class OfflineService {
     await _prefs.setStringList(key, value);
   }
 
+  /// Remove a key from SharedPreferences
+  Future<void> remove(String key) async {
+    if (!_isInitialized) return;
+    await _prefs.remove(key);
+  }
+
   /// Clear all settings
   Future<void> clearSettings() async {
     if (!_isInitialized) return;

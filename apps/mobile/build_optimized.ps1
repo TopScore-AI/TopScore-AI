@@ -21,6 +21,26 @@ flutter build web --release --source-maps
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nBuild completed successfully!" -ForegroundColor Green
+
+    # Auto-generate version.json with build timestamp
+    Write-Host "`nGenerating version.json..." -ForegroundColor Yellow
+    $pubspec = Get-Content "pubspec.yaml" -Raw
+    if ($pubspec -match 'version:\s*(.+)') {
+        $appVersion = $Matches[1].Trim()
+    } else {
+        $appVersion = "0.0.0"
+    }
+    $buildTimestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $versionJson = @"
+{
+  "version": "$appVersion",
+  "buildTimestamp": "$buildTimestamp"
+}
+"@
+    # Write to both source (for git tracking) and build output
+    $versionJson | Set-Content "web\version.json" -Encoding UTF8
+    $versionJson | Set-Content "build\web\version.json" -Encoding UTF8
+    Write-Host "   version.json -> v$appVersion @ $buildTimestamp" -ForegroundColor Gray
     
     # Show build size
     $mainDartJs = "build\web\main.dart.js"

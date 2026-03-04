@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
+import TrustedBy from '@/components/TrustedBy';
+import Features from '@/components/Features';
 import Screenshots from '@/components/Screenshots';
+import HowItWorks from '@/components/HowItWorks';
 import Testimonials from '@/components/Testimonials';
-import VideoDemo from '@/components/VideoDemo';
 import FAQ from '@/components/FAQ';
 import Newsletter from '@/components/Newsletter';
 import CtaBanner from '@/components/CtaBanner';
@@ -49,8 +51,10 @@ export default function Home() {
       <JsonLd data={softwareSchema} />
       <Nav />
       <Hero />
+      <TrustedBy />
+      <Features />
       <Screenshots />
-      <VideoDemo />
+      <HowItWorks />
       <Testimonials />
       <FAQ />
       <Newsletter />

@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'package:provider/provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../constants/colors.dart';
+import '../../services/clipboard_service.dart';
+import '../../services/haptics_service.dart';
+import '../../services/onboarding_tooltip_service.dart';
+import '../../widgets/coach_mark.dart';
 import '../../widgets/network_aware_image.dart';
 import '../../widgets/gemini_reasoning_view.dart';
 import '../../widgets/math_markdown.dart';
@@ -15,7 +22,7 @@ import '../../utils/markdown/mermaid_builder.dart';
 import '../message_model.dart';
 import '../../models/user_model.dart';
 
-class ChatMessageBubble extends StatelessWidget {
+class ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
   final bool isStreaming;
   final String? playingAudioMessageId;
@@ -42,6 +49,8 @@ class ChatMessageBubble extends StatelessWidget {
   final Function(int) onFeedback;
   final VoidCallback onEdit;
   final VoidCallback onDownloadImage;
+  final Function(ChatMessage) onReply;
+  final VoidCallback onLongPress;
 
   const ChatMessageBubble({
     super.key,
@@ -68,142 +77,247 @@ class ChatMessageBubble extends StatelessWidget {
     required this.onFeedback,
     required this.onEdit,
     required this.onDownloadImage,
+    required this.onReply,
+    required this.onLongPress,
     this.user,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isUser = message.isUser;
-    final isDark = theme.brightness == Brightness.dark;
+  State<ChatMessageBubble> createState() => _ChatMessageBubbleState();
+}
 
-    if (isUser) {
-      return _buildUserBubble(context, theme, isDark);
-    } else {
-      return _buildAiBubble(context, theme, isDark);
+class _ChatMessageBubbleState extends State<ChatMessageBubble> {
+  bool isPlaybackError = false;
+  bool _showCopyCoachMark = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCoachMark();
+  }
+
+  Future<void> _checkCoachMark() async {
+    if (widget.message.isUser) return;
+    final seen = OnboardingTooltipService().shouldShow('chat_long_press');
+    if (seen && mounted) {
+      setState(() => _showCopyCoachMark = true);
     }
   }
 
-  Widget _buildUserBubble(BuildContext context, ThemeData theme, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 4),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
-                  ),
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(4),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (message.audioUrl != null &&
-                          message.text == '🎤 Audio Message')
-                        _buildVoicePlayer(context, theme),
-                      if (message.imageUrl != null) _buildImage(context),
-                      if (!(message.audioUrl != null &&
-                          message.text == '🎤 Audio Message'))
-                        _buildMarkdown(context, theme, isDark),
-                    ],
-                  ),
-                ),
-                _buildUserActions(theme),
-              ],
+  void _dismissCoachMark() {
+    setState(() => _showCopyCoachMark = false);
+    OnboardingTooltipService().markAsSeen('chat_long_press');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Dismissible(
+      key: Key('msg_${widget.message.id}'),
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart) {
+          // Swipe left to reply
+          widget.onReply(widget.message);
+          return false; // Don't actually dismiss
+        }
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: const Icon(Icons.reply, color: Colors.grey),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.reply, color: Colors.grey),
+      ),
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, child) {
+          return GestureDetector(
+            onLongPress: () {
+              if (_showCopyCoachMark) {
+                _dismissCoachMark();
+              }
+              widget.onLongPress();
+            },
+            child: CoachMark(
+              text: 'Long-press to copy',
+              show: _showCopyCoachMark,
+              onDismiss: _dismissCoachMark,
+              child: widget.message.isUser
+                  ? _buildUserBubble(context, theme, isDark, settings)
+                  : _buildAiBubble(context, theme, isDark, settings),
             ),
-          ),
-          const SizedBox(width: 12),
-          _buildUserAvatar(),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildAiBubble(BuildContext context, ThemeData theme, bool isDark) {
+  Widget _buildUserBubble(BuildContext context, ThemeData theme, bool isDark,
+      SettingsProvider settings) {
     return Align(
-      alignment: Alignment.center,
+      alignment: Alignment.centerRight,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 850),
-        margin: const EdgeInsets.symmetric(vertical: 16),
-        padding: const EdgeInsets.only(right: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _buildAiAvatar(isStreaming),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Thinking skeleton — shows when streaming starts before any content
-                        if (isStreaming &&
-                            message.text.isEmpty &&
-                            (message.reasoning == null ||
-                                message.reasoning!.isEmpty))
-                          _ThinkingSkeleton(isDark: isDark),
-                        if (message.reasoning != null &&
-                            message.reasoning!.isNotEmpty)
-                          GeminiReasoningView(
-                            content: message.reasoning!,
-                            isThinking: message.text.isEmpty,
-                          ),
-                        if (message.text.isNotEmpty)
-                          _buildMarkdown(context, theme, isDark),
-
-                        // Specialized Widgets
-                        if (message.quizData != null)
-                          QuizWidget(
-                            quizData: message.quizData!,
-                            onComplete: (score) {},
-                          ),
-                        if (message.mathSteps != null &&
-                            message.mathSteps!.isNotEmpty)
-                          MathStepperWidget(
-                            steps: message.mathSteps!,
-                            finalAnswer: message.mathAnswer,
-                          ),
-                        if (message.videos != null &&
-                            message.videos!.isNotEmpty)
-                          VideoCarousel(videos: message.videos!),
-
-                        // Sources
-                        if (message.sources != null &&
-                            message.sources!.isNotEmpty)
-                          _buildSources(theme, isDark),
-
-                        if (!message.isUser &&
-                            message.isComplete &&
-                            !isStreaming)
-                          _buildAiActions(theme),
-                      ],
-                    ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xFF37393E), const Color(0xFF2B2D31)]
+                      : [const Color(0xFF0B57D0), const Color(0xFF4285F4)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(22),
+                  topRight: Radius.circular(22),
+                  bottomLeft: Radius.circular(22),
+                  bottomRight: Radius.circular(4), // Distinct tip
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (widget.message.replyToText != null)
+                    _buildReplyPreview(theme, true),
+                  if (widget.message.audioUrl != null &&
+                      widget.message.text == '🎤 Audio Message')
+                    _buildVoicePlayer(context, theme),
+                  if (widget.message.imageUrl != null) _buildImage(context),
+                  if (!(widget.message.audioUrl != null &&
+                      widget.message.text == '🎤 Audio Message'))
+                    _buildMarkdown(context, theme, isDark, settings),
+                ],
+              ),
             ),
+            _buildUserActions(theme),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiBubble(BuildContext context, ThemeData theme, bool isDark,
+      SettingsProvider settings) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        onLongPress: () {
+          HapticsService.instance.mediumImpact();
+          ClipboardService.instance
+              .copyWithFeedback(context, widget.message.text);
+        },
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 850),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Small AI label
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6, left: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? const Color(0xFF1E1F22) : Colors.white,
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          width: 22,
+                          height: 22,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'TopScore AI',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Content
+              // Thinking skeleton
+              if (widget.isStreaming &&
+                  widget.message.text.isEmpty &&
+                  (widget.message.reasoning == null ||
+                      widget.message.reasoning!.isEmpty))
+                _ThinkingSkeleton(isDark: isDark),
+              if (widget.message.reasoning != null &&
+                  widget.message.reasoning!.isNotEmpty)
+                GeminiReasoningView(
+                  content: widget.message.reasoning!,
+                  isThinking: widget.message.text.isEmpty,
+                ),
+              if (widget.message.replyToText != null)
+                _buildReplyPreview(theme, false),
+              if (widget.message.text.isNotEmpty)
+                _buildMarkdown(context, theme, isDark, settings),
+
+              // Specialized Widgets
+              if (widget.message.quizData != null)
+                QuizWidget(
+                  quizData: widget.message.quizData!,
+                  onComplete: (score) {},
+                ),
+              if (widget.message.mathSteps != null &&
+                  widget.message.mathSteps!.isNotEmpty)
+                MathStepperWidget(
+                  steps: widget.message.mathSteps!,
+                  finalAnswer: widget.message.mathAnswer,
+                ),
+              if (widget.message.videos != null &&
+                  widget.message.videos!.isNotEmpty)
+                VideoCarousel(videos: widget.message.videos!),
+
+              // Sources
+              if (widget.message.sources != null &&
+                  widget.message.sources!.isNotEmpty)
+                _buildSources(theme, isDark),
+
+              if (!widget.message.isUser &&
+                  widget.message.isComplete &&
+                  !widget.isStreaming)
+                _buildAiActions(theme),
+            ],
+          ),
         ),
       ),
     );
@@ -217,20 +331,22 @@ class ChatMessageBubble extends StatelessWidget {
         children: [
           IconButton(
             icon: Icon(
-              playingAudioMessageId == message.id && isPlayingAudio
+              widget.playingAudioMessageId == widget.message.id &&
+                      widget.isPlayingAudio
                   ? Icons.pause_circle_filled
                   : Icons.play_circle_filled,
               color: Colors.white,
               size: 32,
             ),
             onPressed: () {
-              if (playingAudioMessageId == message.id && isPlayingAudio) {
-                onPauseVoice();
-              } else if (playingAudioMessageId == message.id &&
-                  !isPlayingAudio) {
-                onResumeVoice();
+              if (widget.playingAudioMessageId == widget.message.id &&
+                  widget.isPlayingAudio) {
+                widget.onPauseVoice();
+              } else if (widget.playingAudioMessageId == widget.message.id &&
+                  !widget.isPlayingAudio) {
+                widget.onResumeVoice();
               } else {
-                onPlayVoice();
+                widget.onPlayVoice();
               }
             },
           ),
@@ -247,12 +363,13 @@ class ChatMessageBubble extends StatelessWidget {
                   ),
                   child: FractionallySizedBox(
                     alignment: Alignment.centerLeft,
-                    widthFactor: playingAudioMessageId == message.id
-                        ? (audioDuration.inMilliseconds > 0
-                            ? audioPosition.inMilliseconds /
-                                audioDuration.inMilliseconds
-                            : 0.0)
-                        : 0.0,
+                    widthFactor:
+                        widget.playingAudioMessageId == widget.message.id
+                            ? (widget.audioDuration.inMilliseconds > 0
+                                ? widget.audioPosition.inMilliseconds /
+                                    widget.audioDuration.inMilliseconds
+                                : 0.0)
+                            : 0.0,
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(2),
@@ -263,8 +380,8 @@ class ChatMessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  playingAudioMessageId == message.id
-                      ? '${_formatDuration(audioPosition)} / ${_formatDuration(audioDuration)}'
+                  widget.playingAudioMessageId == widget.message.id
+                      ? '${_formatDuration(widget.audioPosition)} / ${_formatDuration(widget.audioDuration)}'
                       : 'Voice message',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
@@ -287,7 +404,7 @@ class ChatMessageBubble extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: NetworkAwareImage(
-              imageUrl: message.imageUrl!,
+              imageUrl: widget.message.imageUrl!,
               height: 150,
               fit: BoxFit.cover,
             ),
@@ -296,7 +413,7 @@ class ChatMessageBubble extends StatelessWidget {
             top: 8,
             right: 8,
             child: InkWell(
-              onTap: onDownloadImage,
+              onTap: widget.onDownloadImage,
               child: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -324,13 +441,13 @@ class ChatMessageBubble extends StatelessWidget {
         children: [
           _buildSmallActionIcon(
             Icons.edit_outlined,
-            onEdit,
+            widget.onEdit,
             theme,
             tooltip: 'Edit',
           ),
           _buildSmallActionIcon(
             Icons.copy_all_outlined,
-            onCopy,
+            widget.onCopy,
             theme,
             tooltip: 'Copy',
           ),
@@ -339,87 +456,10 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildAiAvatar(bool isStreaming) {
-    return Container(
-      margin: const EdgeInsets.only(right: 16, top: 0),
-      child: isStreaming
-          ? TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(seconds: 2),
-              builder: (context, value, child) {
-                return Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      transform: GradientRotation(value * 2 * 3.14159),
-                      colors: const [
-                        Color(0xFF4285F4),
-                        Color(0xFFEA4335),
-                        Color(0xFFFBBC05),
-                        Color(0xFF34A853),
-                        Color(0xFF4285F4),
-                      ],
-                    ),
-                  ),
-                  child: const CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.auto_awesome,
-                        size: 20, color: Color(0xFF4285F4)),
-                  ),
-                );
-              },
-            )
-          : CircleAvatar(
-              radius: 18,
-              backgroundColor: Colors.white,
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildUserAvatar() {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      child: CircleAvatar(
-        radius: 18,
-        backgroundColor: AppColors.primary,
-        child: ClipOval(
-          child: NetworkAwareImage(
-            imageUrl: user?.photoURL,
-            isProfilePicture: true,
-            errorWidget: Container(
-              color: AppColors.primary,
-              child: Center(
-                child: Text(
-                  (user?.displayName != null && user!.displayName.isNotEmpty)
-                      ? user!.displayName[0].toUpperCase()
-                      : 'S',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMarkdown(BuildContext context, ThemeData theme, bool isDark) {
+  Widget _buildMarkdown(BuildContext context, ThemeData theme, bool isDark,
+      SettingsProvider settings) {
     return MarkdownBody(
-      data: _cleanContent(message.text),
+      data: _cleanContent(widget.message.text),
       selectable: true,
       softLineBreak: true,
       sizedImageBuilder: (config) {
@@ -447,7 +487,9 @@ class ChatMessageBubble extends StatelessWidget {
       builders: {
         'latex': LatexElementBuilder(),
         'mermaid': MermaidElementBuilder(),
-        'a': YouTubeLinkBuilder(context, isDark, isStreaming: isStreaming),
+        'a': YouTubeLinkBuilder(context, isDark,
+            isStreaming: widget.isStreaming),
+        'pre': _CodeBlockBuilder(isDark: isDark),
       },
       extensionSet: md.ExtensionSet(
         [...md.ExtensionSet.gitHubFlavored.blockSyntaxes, MermaidBlockSyntax()],
@@ -459,9 +501,11 @@ class ChatMessageBubble extends StatelessWidget {
       ),
       styleSheet: MarkdownStyleSheet(
         p: GoogleFonts.dmSans(
-          fontSize: 16,
-          height: 1.6,
-          color: theme.colorScheme.onSurface,
+          fontSize: settings.fontSize + 2,
+          height: settings.lineHeight,
+          color: widget.message.isUser
+              ? Colors.white
+              : theme.colorScheme.onSurface,
         ),
         h1: GoogleFonts.outfit(
           fontSize: 24,
@@ -498,7 +542,7 @@ class ChatMessageBubble extends StatelessWidget {
               : Colors.black.withValues(alpha: 0.05),
           color: isDark ? Colors.tealAccent : Colors.teal.shade700,
         ),
-        codeblockPadding: const EdgeInsets.all(12),
+        codeblockPadding: EdgeInsets.zero,
         codeblockDecoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
           borderRadius: BorderRadius.circular(8),
@@ -508,138 +552,75 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   Widget _buildAiActions(ThemeData theme) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 400;
+    final isDark = theme.brightness == Brightness.dark;
 
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                if (speakingMessageId == message.id && isTtsSpeaking)
-                  ..._buildTtsControls(theme)
-                else
-                  _buildActionIcon(
-                    Icons.volume_up_outlined,
-                    () => onSpeak(message.text),
-                    theme,
-                    tooltip: 'Listen',
-                  ),
-                _buildActionIcon(
-                  Icons.copy_all_outlined,
-                  onCopy,
-                  theme,
-                  tooltip: 'Copy',
-                ),
-                if (!isNarrow) ...[
-                  _buildActionIcon(
-                    message.isBookmarked
-                        ? Icons.bookmark
-                        : Icons.bookmark_border,
-                    onToggleBookmark,
-                    theme,
-                    tooltip: 'Bookmark',
-                    color: message.isBookmarked ? Colors.amber : null,
-                  ),
-                  _buildActionIcon(
-                    Icons.share_outlined,
-                    onShare,
-                    theme,
-                    tooltip: 'Share',
-                  ),
-                  _buildActionIcon(
-                    Icons.refresh_outlined,
-                    onRegenerate,
-                    theme,
-                    tooltip: 'Regenerate',
-                  ),
-                ],
-              ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          // Left action group
+          if (widget.speakingMessageId == widget.message.id &&
+              widget.isTtsSpeaking)
+            ..._buildTtsControls(theme)
+          else
+            _buildActionIcon(
+              Icons.volume_up_outlined,
+              () => widget.onSpeak(widget.message.text),
+              theme,
+              tooltip: 'Read aloud',
             ),
-            Row(
-              children: [
-                _buildActionIcon(
-                  Icons.thumb_up_alt_outlined,
-                  () => onFeedback(1),
-                  theme,
-                  isActive: message.feedback == 1,
-                ),
-                _buildActionIcon(
-                  Icons.thumb_down_alt_outlined,
-                  () => onFeedback(-1),
-                  theme,
-                  isActive: message.feedback == -1,
-                ),
-                if (isNarrow)
-                  PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert,
-                      size: 20,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'bookmark':
-                          onToggleBookmark();
-                          break;
-                        case 'share':
-                          onShare();
-                          break;
-                        case 'regenerate':
-                          onRegenerate();
-                          break;
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'bookmark',
-                        child: ListTile(
-                          leading: Icon(
-                            message.isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                            color: message.isBookmarked ? Colors.amber : null,
-                          ),
-                          title: const Text('Bookmark'),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'share',
-                        child: ListTile(
-                          leading: Icon(Icons.share_outlined),
-                          title: Text('Share'),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'regenerate',
-                        child: ListTile(
-                          leading: Icon(Icons.refresh_outlined),
-                          title: Text('Regenerate'),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ],
-        );
-      },
+          _buildActionIcon(Icons.content_copy_rounded, widget.onCopy, theme,
+              tooltip: 'Copy'),
+          _buildActionIcon(Icons.refresh_rounded, widget.onRegenerate, theme,
+              tooltip: 'Regenerate'),
+          _buildActionIcon(
+            widget.message.isBookmarked
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_outline_rounded,
+            widget.onToggleBookmark,
+            theme,
+            tooltip: 'Bookmark',
+            color: widget.message.isBookmarked ? Colors.amber : null,
+          ),
+          _buildActionIcon(Icons.share_outlined, widget.onShare, theme,
+              tooltip: 'Share'),
+
+          // Separator
+          Container(
+            width: 1,
+            height: 16,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.1),
+          ),
+
+          // Feedback
+          _buildActionIcon(
+            Icons.thumb_up_outlined,
+            () => widget.onFeedback(1),
+            theme,
+            isActive: widget.message.feedback == 1,
+            color: widget.message.feedback == 1 ? AppColors.accentTeal : null,
+          ),
+          _buildActionIcon(
+            Icons.thumb_down_outlined,
+            () => widget.onFeedback(-1),
+            theme,
+            isActive: widget.message.feedback == -1,
+            color: widget.message.feedback == -1 ? Colors.redAccent : null,
+          ),
+        ],
+      ),
     );
   }
 
   List<Widget> _buildTtsControls(ThemeData theme) {
     return [
-      if (isTtsPaused)
+      if (widget.isTtsPaused)
         _buildActionIcon(
           Icons.play_arrow,
-          onResumeTts,
+          widget.onResumeTts,
           theme,
           isActive: true,
           color: AppColors.googleBlue,
@@ -647,14 +628,14 @@ class ChatMessageBubble extends StatelessWidget {
       else
         _buildActionIcon(
           Icons.pause,
-          onPauseTts,
+          widget.onPauseTts,
           theme,
           isActive: true,
           color: AppColors.googleBlue,
         ),
       _buildActionIcon(
         Icons.stop,
-        onStopTts,
+        widget.onStopTts,
         theme,
         isActive: true,
         color: Colors.redAccent,
@@ -674,13 +655,17 @@ class ChatMessageBubble extends StatelessWidget {
         (isActive
             ? AppColors.googleBlue
             : theme.colorScheme.onSurface.withValues(alpha: 0.6));
-    return IconButton(
-      icon: Icon(icon, size: 18, color: finalColor),
-      tooltip: tooltip,
-      onPressed: onTap,
-      splashRadius: 20,
-      constraints: const BoxConstraints(),
-      padding: const EdgeInsets.all(8),
+    return Semantics(
+      label: tooltip ?? 'Action button',
+      button: true,
+      child: IconButton(
+        icon: Icon(icon, size: 18, color: finalColor),
+        tooltip: tooltip,
+        onPressed: onTap,
+        splashRadius: 20,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(8),
+      ),
     );
   }
 
@@ -690,12 +675,16 @@ class ChatMessageBubble extends StatelessWidget {
     ThemeData theme, {
     String? tooltip,
   }) {
-    return IconButton(
-      icon: Icon(icon, size: 16, color: theme.disabledColor),
-      onPressed: onTap,
-      tooltip: tooltip,
-      constraints: const BoxConstraints(),
-      padding: const EdgeInsets.all(8),
+    return Semantics(
+      label: tooltip ?? 'Small action button',
+      button: true,
+      child: IconButton(
+        icon: Icon(icon, size: 16, color: theme.disabledColor),
+        onPressed: onTap,
+        tooltip: tooltip,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(8),
+      ),
     );
   }
 
@@ -733,7 +722,7 @@ class ChatMessageBubble extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: message.sources!
+            children: widget.message.sources!
                 .map((s) => _buildSourceChip(s, theme, isDark))
                 .toList(),
           ),
@@ -769,6 +758,209 @@ class ChatMessageBubble extends StatelessWidget {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$minutes:$seconds';
+  }
+
+  Widget _buildReplyPreview(ThemeData theme, bool isUser) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isUser
+            ? Colors.white.withValues(alpha: 0.1)
+            : theme.primaryColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: isUser ? Colors.white70 : theme.primaryColor,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Text(
+        widget.message.replyToText!,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontStyle: FontStyle.italic,
+          color: isUser
+              ? Colors.white.withValues(alpha: 0.8)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+}
+
+// --- Code Block with Copy Button ---
+
+class _CodeBlockBuilder extends MarkdownElementBuilder {
+  final bool isDark;
+
+  _CodeBlockBuilder({required this.isDark});
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    // Extract code text from the element tree
+    String codeText = element.textContent;
+
+    // Try to detect language from the class attribute of the <code> child
+    String? language;
+    if (element.children != null && element.children!.isNotEmpty) {
+      final firstChild = element.children!.first;
+      if (firstChild is md.Element && firstChild.attributes['class'] != null) {
+        final className = firstChild.attributes['class']!;
+        if (className.startsWith('language-')) {
+          language = className.substring('language-'.length);
+        }
+      }
+    }
+
+    return _CodeBlockWidget(
+      code: codeText,
+      language: language,
+      isDark: isDark,
+    );
+  }
+}
+
+class _CodeBlockWidget extends StatefulWidget {
+  final String code;
+  final String? language;
+  final bool isDark;
+
+  const _CodeBlockWidget({
+    required this.code,
+    this.language,
+    required this.isDark,
+  });
+
+  @override
+  State<_CodeBlockWidget> createState() => _CodeBlockWidgetState();
+}
+
+class _CodeBlockWidgetState extends State<_CodeBlockWidget> {
+  bool _copied = false;
+
+  void _copyCode() {
+    ClipboardService.instance.copyWithFeedback(context, widget.code);
+    HapticFeedback.mediumImpact();
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color:
+            widget.isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header bar with language label + copy button
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: widget.isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                if (widget.language != null)
+                  Text(
+                    widget.language!,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color:
+                          widget.isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _copyCode,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: _copied
+                        ? Row(
+                            key: const ValueKey('copied'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_rounded,
+                                size: 14,
+                                color: AppColors.accentTeal,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Copied',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.accentTeal,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            key: const ValueKey('copy'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.content_copy_rounded,
+                                size: 14,
+                                color: widget.isDark
+                                    ? Colors.grey[400]
+                                    : Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Copy',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: widget.isDark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Code content
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SelectableText(
+              widget.code,
+              style: GoogleFonts.firaCode(
+                fontSize: 14,
+                color: widget.isDark ? Colors.tealAccent : Colors.teal.shade700,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

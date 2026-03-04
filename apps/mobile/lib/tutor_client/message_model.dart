@@ -32,7 +32,7 @@ class ChatMessage {
   final String? audioUrl;
   final String? imageUrl;
   final int?
-  feedback; // 1 for thumbs up, -1 for thumbs down, null for no feedback
+      feedback; // 1 for thumbs up, -1 for thumbs down, null for no feedback
   final List<SourceMetadata>? sources; // Sources for verification
   final String? reasoning; // Chain-of-thought reasoning
   final Map<String, dynamic>? quizData;
@@ -40,10 +40,13 @@ class ChatMessage {
   final String? mathAnswer;
   final bool isBookmarked;
   final List<VideoResult>? videos; // <--- NEW: Video Results
-  
+
   // Hybrid Streaming Architecture flags
-  final bool isTemporary; // true when from WebSocket (temporary), false when from Firebase (final)
+  final bool
+      isTemporary; // true when from WebSocket (temporary), false when from Firebase (final)
   final bool isComplete; // true when streaming is done
+  final String? replyToId;
+  final String? replyToText;
 
   ChatMessage({
     required this.id,
@@ -61,7 +64,9 @@ class ChatMessage {
     this.isBookmarked = false,
     this.videos,
     this.isTemporary = false, // Default: final Firebase message
-    this.isComplete = true,   // Default: complete message
+    this.isComplete = true, // Default: complete message
+    this.replyToId,
+    this.replyToText,
   });
 
   ChatMessage copyWith({
@@ -81,6 +86,8 @@ class ChatMessage {
     List<VideoResult>? videos,
     bool? isTemporary,
     bool? isComplete,
+    String? replyToId,
+    String? replyToText,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -99,6 +106,8 @@ class ChatMessage {
       videos: videos ?? this.videos,
       isTemporary: isTemporary ?? this.isTemporary,
       isComplete: isComplete ?? this.isComplete,
+      replyToId: replyToId ?? this.replyToId,
+      replyToText: replyToText ?? this.replyToText,
     );
   }
 }

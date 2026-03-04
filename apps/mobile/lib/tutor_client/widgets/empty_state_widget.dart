@@ -61,9 +61,46 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
                 children: [
                   const SizedBox(height: 40),
 
-                  // Removed auto_awesome icon.
+                  // Animated sparkle icon
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.elasticOut,
+                    builder: (context, value, child) {
+                      return Transform.scale(
+                        scale: value,
+                        child: child,
+                      );
+                    },
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: widget.isDark
+                              ? [const Color(0xFF9B72CB), const Color(0xFFD96570)]
+                              : [const Color(0xFF4285F4), const Color(0xFF9B72CB)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF9B72CB).withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 28),
 
                   // Gradient Greeting
                   ShaderMask(

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../providers/auth_provider.dart';
-import 'package:provider/provider.dart';
 
 class CollapsedSidebar extends StatelessWidget {
   final bool isDark;
@@ -79,24 +77,16 @@ class CollapsedSidebar extends StatelessWidget {
 
           const Spacer(),
 
-          // Bottom area: avatar + >> toggle
+          // Bottom area: expand toggle
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
-            child: Column(
-              children: [
-                // User avatar
-                _buildUserAvatar(context, theme),
-                const SizedBox(height: 20),
-                // >> Expand toggle
-                GestureDetector(
-                  onTap: () => onModeChange('expanded'),
-                  child: Icon(
-                    Icons.keyboard_double_arrow_right_rounded,
-                    size: 18,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
+            child: GestureDetector(
+              onTap: () => onModeChange('expanded'),
+              child: Icon(
+                Icons.keyboard_double_arrow_right_rounded,
+                size: 18,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
             ),
           ),
         ],
@@ -135,26 +125,6 @@ class CollapsedSidebar extends StatelessWidget {
               )
             : null,
       ),
-    );
-  }
-
-  Widget _buildUserAvatar(BuildContext context, ThemeData theme) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final user = authProvider.userModel;
-
-    return CircleAvatar(
-      radius: 14,
-      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      backgroundImage: (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-          ? NetworkImage(user.photoURL!)
-          : null,
-      child: (user?.photoURL == null || user!.photoURL!.isEmpty)
-          ? Icon(
-              Icons.person,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
-            )
-          : null,
     );
   }
 }

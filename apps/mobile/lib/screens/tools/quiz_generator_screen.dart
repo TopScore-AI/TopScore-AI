@@ -68,7 +68,8 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.userModel?.uid ?? 'anonymous';
+      final userId = authProvider.userModel?.uid;
+      if (userId == null) return;
       final sourceText = _sourceTextController.text.trim();
 
       final quiz = await _aiService.generateQuiz(

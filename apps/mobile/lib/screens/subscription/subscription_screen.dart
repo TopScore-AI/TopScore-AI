@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../services/mpesa_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/paystack_service.dart';
+import '../../services/subscription_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../config/app_theme.dart';
+import '../../config/api_config.dart';
+import 'paystack_checkout_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -13,73 +19,164 @@ class SubscriptionScreen extends StatefulWidget {
 }
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
-  final TextEditingController _phoneController = TextEditingController();
-  final MpesaService _mpesaService = MpesaService();
+  final PaystackService _paystackService = PaystackService();
   bool _isLoading = false;
   String? _errorMessage;
 
   // Selected Plan
-  final int _selectedAmount = 1000; // Default amount
+  final int _selectedAmount = 1000; // KES 1,000
 
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initiatePayment() async {
-    if (_phoneController.text.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your phone number');
-      return;
-    }
-
+  Future<void> _initiatePaystackPayment() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final user = context.read<AuthProvider>().userModel;
-      // Prepend 254 if missing, simple validation
-      String phone = _phoneController.text.trim();
-      if (phone.startsWith('0')) {
-        phone = '254${phone.substring(1)}';
-      } else if (phone.startsWith('+')) {
-        phone = phone.substring(1);
-      }
+      final auth = context.read<AuthProvider>();
+      final user = auth.userModel;
+      if (user == null) throw Exception("User not logged in");
 
-      final result = await _mpesaService.initiateSTKPush(
-        phoneNumber: phone,
-        amount: _selectedAmount,
-        accountReference: "TopScore Premium",
-        transactionDesc: "Sub for ${user?.displayName ?? 'User'}",
+      final result = await _paystackService.initializeTransaction(
+        userId: user.uid,
+        email:
+            user.email.isNotEmpty ? user.email : "${user.uid}@topscoreapp.ai",
+        amount: _selectedAmount * 100, // Backend expects cents
+        callbackUrl: kIsWeb ? null : ApiConfig.paystackCallback,
       );
 
-      // Check if ResponseCode is 0 (Success)
-      if (result['ResponseCode'] == '0') {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'STK Push sent! Please check your phone to complete payment.',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // Ideally, poll or wait for callback confirmation here.
-          // For now, we simulate success or just let user wait.
-          Navigator.pop(context);
+      if (!mounted) return;
+
+      if (kIsWeb) {
+        // Web: open in a new tab and show manual verify dialog
+        if (await canLaunchUrl(Uri.parse(result.authorizationUrl))) {
+          await launchUrl(Uri.parse(result.authorizationUrl),
+              mode: LaunchMode.platformDefault);
+          if (mounted) _showVerifyDialog(result.reference);
+        } else {
+          throw Exception("Could not launch checkout URL");
         }
       } else {
-        setState(
-          () => _errorMessage =
-              'Payment failed: ${result['ResponseDescription']}',
+        // Mobile: open in-app WebView checkout
+        final checkoutResult = await Navigator.push<PaystackCheckoutResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaystackCheckoutScreen(
+              authorizationUrl: result.authorizationUrl,
+              reference: result.reference,
+              callbackUrl: ApiConfig.paystackCallback,
+            ),
+          ),
         );
+
+        if (!mounted) return;
+        _handleCheckoutResult(checkoutResult);
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleCheckoutResult(PaystackCheckoutResult? result) async {
+    if (result == null || result.error == 'cancelled') return;
+
+    if (result.success && result.verifyResult != null) {
+      await _activateSubscription();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.error ?? 'Payment was not completed. Please try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showVerifyDialog(String reference) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Payment'),
+        content: const Text('Did you complete the payment on Paystack?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              _verifyPayment(reference);
+            },
+            child: const Text('Yes, Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _verifyPayment(String reference) async {
+    setState(() => _isLoading = true);
+    try {
+      final result = await _paystackService.verifyTransaction(reference);
+      if (result.isSuccess) {
+        await _activateSubscription();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    'Payment status: ${result.status}. If you paid, please contact support.'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Activates the user's premium subscription after successful payment.
+  ///
+  /// 1. Updates Firestore and local UserModel via AuthProvider
+  /// 2. Refreshes the Firebase ID token to pick up custom claims
+  ///    set by the backend webhook (plan: 'premium')
+  /// 3. Shows success feedback and pops back
+  Future<void> _activateSubscription() async {
+    try {
+      final auth = context.read<AuthProvider>();
+
+      // 1. Update Firestore + local model (30-day subscription)
+      await auth.updateSubscription(30);
+
+      // 2. Force-refresh the Firebase ID token so custom claims
+      //    (set by the Paystack webhook) are available immediately
+      await SubscriptionService().refreshSubscriptionStatus();
+    } catch (e) {
+      debugPrint('Subscription activation warning: $e');
+      // Non-fatal — the webhook already updated the backend.
+      // The next token refresh will pick up the claims.
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment Verified! Welcome to Premium.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
     }
   }
 
@@ -102,7 +199,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Plan Card
             AppTheme.buildGlassContainer(
               context,
               padding: const EdgeInsets.all(24),
@@ -138,66 +234,79 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Phone Input
-            Text(
-              'Enter M-Pesa Number',
-              style: GoogleFonts.nunito(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Paystack Payment Button
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _initiatePaystackPayment,
+              icon: _isLoading
+                  ? const SizedBox.shrink()
+                  : const Icon(Icons.lock, color: Colors.white, size: 20),
+              label: _isLoading
+                  ? _buildLoading()
+                  : const Text('Pay Securely with Paystack',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF09A5DB),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                hintText: 'e.g. 0712345678',
-                prefixIcon: const Icon(Icons.phone),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 12),
+
+            // Accepted methods
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.credit_card,
+                    size: 20,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                const SizedBox(width: 8),
+                Text(
+                  'Card  •  M-Pesa  •  Bank Transfer',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    fontSize: 13,
+                  ),
                 ),
-                errorText: _errorMessage,
-              ),
+              ],
             ),
             const SizedBox(height: 24),
 
-            // Pay Button
-            ElevatedButton(
-              onPressed: _isLoading ? null : _initiatePayment,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green, // M-Pesa Green
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(
-                      'Pay KES $_selectedAmount with M-Pesa',
-                      style: GoogleFonts.nunito(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 16),
             const Text(
-              'A prompt will be sent to your phone to complete the transaction.',
+              'Your subscription will be activated immediately after payment is confirmed.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return const SizedBox(
+      height: 20,
+      width: 20,
+      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
     );
   }
 }

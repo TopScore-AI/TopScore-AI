@@ -3,7 +3,8 @@
     "allow": [
       "Bash(flutter analyze:*)",
       "Bash(dart analyze:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(dart pub deps)"
     ]
   }
 }

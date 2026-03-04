@@ -40,6 +40,22 @@
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 32px;
     margin-top: 56px;
+    position: relative;
+}
+
+/* Connecting line between steps on desktop */
+@media (min-width: 769px) {
+    .stepsGrid::before {
+        content: '';
+        position: absolute;
+        top: 28px;
+        left: 15%;
+        right: 15%;
+        height: 2px;
+        background: var(--gradient);
+        opacity: 0.2;
+        z-index: 0;
+    }
 }
 
 .stepWrapper {

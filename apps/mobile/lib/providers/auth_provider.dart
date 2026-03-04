@@ -19,51 +19,52 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  // Guest mode (disabled)
-  bool _isGuest = false;
-  bool get isGuest => _isGuest;
+  bool get isAuthenticated => _userModel != null;
 
-  static const int kGuestMessageLimit = 5;
-  static const int kGuestDocumentLimit = 3;
-
-  bool get isAuthOrGuest => _userModel != null || _isGuest;
-
-  Future<void> continueAsGuest() async {
-    throw Exception('Guest access is disabled. Please sign in.');
+  /// Whether the user has a currently active (non-expired) subscription.
+  bool get hasActiveSubscription {
+    if (_userModel == null) return false;
+    if (!_userModel!.isSubscribed) return false;
+    final expiry = _userModel!.subscriptionExpiry;
+    if (expiry == null) return false;
+    return expiry.isAfter(DateTime.now());
   }
 
   bool get canSendMessage {
     if (_userModel == null) return false;
+    if (hasActiveSubscription) return true;
 
-    // Check if we need to reset the count (new day)
+    // Check if 24 hours have passed since the tracking window started
     if (_userModel!.lastMessageDate != null) {
       final now = DateTime.now();
-      final lastDate = _userModel!.lastMessageDate!;
-      if (now.year != lastDate.year ||
-          now.month != lastDate.month ||
-          now.day != lastDate.day) {
-        // It's a new day, so effectively count is 0
+      final elapsed = now.difference(_userModel!.lastMessageDate!);
+      if (elapsed.inHours >= 24) {
+        // 24h window expired, count is effectively 0
         return true;
       }
     }
 
-    // Limit to 5 per day for Freemium
+    // Limit to 5 per 24-hour window for Freemium
     return _userModel!.dailyMessageCount < 5;
   }
 
   Future<void> incrementDailyMessage() async {
     if (_userModel == null) return;
+    if (hasActiveSubscription) return; // No tracking for subscribers
 
     final now = DateTime.now();
     int newCount = 1;
+    DateTime newDate = now;
 
     if (_userModel!.lastMessageDate != null) {
-      final lastDate = _userModel!.lastMessageDate!;
-      if (now.year == lastDate.year &&
-          now.month == lastDate.month &&
-          now.day == lastDate.day) {
+      final elapsed = now.difference(_userModel!.lastMessageDate!);
+      if (elapsed.inHours < 24) {
+        // Still within the 24h window — increment
         newCount = _userModel!.dailyMessageCount + 1;
+        newDate =
+            _userModel!.lastMessageDate!; // preserve original window start
       }
+      // else: window expired — reset to count=1 with new timestamp
     }
 
     try {
@@ -72,12 +73,12 @@ class AuthProvider with ChangeNotifier {
           .doc(_userModel!.uid)
           .update({
         'dailyMessageCount': newCount,
-        'lastMessageDate': now.millisecondsSinceEpoch,
+        'lastMessageDate': newDate.millisecondsSinceEpoch,
       });
 
       _userModel = _userModel!.copyWith(
         dailyMessageCount: newCount,
-        lastMessageDate: now,
+        lastMessageDate: newDate,
       );
       notifyListeners();
     } catch (e) {
@@ -85,9 +86,20 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Whether the 24h document access window has expired and the list should reset.
+  bool get _documentWindowExpired {
+    if (_userModel?.lastDocumentAccessDate == null) return true;
+    return DateTime.now()
+            .difference(_userModel!.lastDocumentAccessDate!)
+            .inHours >=
+        24;
+  }
+
   // Used by UI to check without side-effects
   bool get canOpenDocument {
     if (_userModel == null) return false;
+    if (hasActiveSubscription) return true;
+    if (_documentWindowExpired) return true;
     return _userModel!.accessedDocuments.length < 5;
   }
 
@@ -99,25 +111,37 @@ class AuthProvider with ChangeNotifier {
         await SubscriptionService().isSessionPremiumOrTrial();
     if (isPremiumOrTrial) return true;
 
-    // Already accessed?
-    if (_userModel!.accessedDocuments.contains(docId)) {
+    // Reset the document list if 24h window has expired
+    List<String> currentDocs = List<String>.from(_userModel!.accessedDocuments);
+    DateTime windowStart = _userModel!.lastDocumentAccessDate ?? DateTime.now();
+
+    if (_documentWindowExpired) {
+      currentDocs = [];
+      windowStart = DateTime.now();
+    }
+
+    // Already accessed within this window?
+    if (currentDocs.contains(docId)) {
       return true;
     }
 
     // If limits not reached
-    if (_userModel!.accessedDocuments.length < 5) {
+    if (currentDocs.length < 5) {
       try {
-        final newList = List<String>.from(_userModel!.accessedDocuments)
-          ..add(docId);
+        final newList = List<String>.from(currentDocs)..add(docId);
 
         await _authService.firestore
             .collection('users')
             .doc(_userModel!.uid)
             .update({
           'accessedDocuments': newList,
+          'lastDocumentAccessDate': windowStart.millisecondsSinceEpoch,
         });
 
-        _userModel = _userModel!.copyWith(accessedDocuments: newList);
+        _userModel = _userModel!.copyWith(
+          accessedDocuments: newList,
+          lastDocumentAccessDate: windowStart,
+        );
         notifyListeners();
         return true;
       } catch (e) {
@@ -242,25 +266,35 @@ class AuthProvider with ChangeNotifier {
   }
 
   // --- EMAIL SIGN UP ---
-  Future<bool> signUpWithEmail(String email, String password) async {
+  Future<bool> signUpWithEmail(
+    String email,
+    String password, {
+    String? displayName,
+  }) async {
     try {
       _setLoading(true);
       final credential = await _authService.signUpWithEmail(email, password);
       final user = credential?.user;
       if (user != null) {
-        // Send verification email in the background, but don't block login
+        // Set display name on the Firebase Auth user first
+        if (displayName != null && displayName.isNotEmpty) {
+          await user.updateDisplayName(displayName);
+          await user.reload();
+        }
+
+        // Send verification email
         await user.sendEmailVerification().catchError((e) {
           debugPrint("Failed to send verification email: $e");
         });
 
-        _requiresEmailVerification = false;
-        await _ensureUserProfile(user);
+        // Create profile immediately so it's ready when they verify
+        await _ensureUserProfile(_authService.currentUser ?? user);
 
-        // Mark onboarding complete on successful sign-up
-        await OfflineService().setStringList('onboarding_complete', ['true']);
-
+        // Require verification before granting access
+        _requiresEmailVerification = true;
+        _userModel = null;
         notifyListeners();
-        return true;
+        return false; // Signals caller to show verification screen
       }
       return false;
     } catch (e) {
@@ -297,19 +331,6 @@ class AuthProvider with ChangeNotifier {
 
     notifyListeners();
     return true;
-  }
-
-  Future<void> clearGuestSession() async {
-    try {
-      final user = _authService.currentUser;
-      if (user != null && user.isAnonymous) {
-        await user.delete();
-      }
-      await signOut();
-    } catch (e) {
-      debugPrint("Error clearing guest session: $e");
-      await signOut();
-    }
   }
 
   Future<void> updateUserRole({
@@ -381,7 +402,6 @@ class AuthProvider with ChangeNotifier {
   Future<void> signOut() async {
     await _authService.signOut();
     _userModel = null;
-    _isGuest = false;
     _requiresEmailVerification = false;
     notifyListeners();
   }
@@ -444,11 +464,15 @@ class AuthProvider with ChangeNotifier {
         .update({
       'isSubscribed': true,
       'subscriptionExpiry': Timestamp.fromDate(expiry),
+      'dailyMessageCount': 0,
+      'accessedDocuments': <String>[],
     });
 
     _userModel = _userModel!.copyWith(
       isSubscribed: true,
       subscriptionExpiry: expiry,
+      dailyMessageCount: 0,
+      accessedDocuments: const [],
     );
     notifyListeners();
   }

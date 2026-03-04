@@ -70,8 +70,17 @@ class _GeminiReasoningViewState extends State<GeminiReasoningView>
                   widget.isThinking
                       ? FadeTransition(
                           opacity: _pulseController,
-                          child: Icon(Icons.auto_awesome,
-                              size: 16, color: activeColor),
+                          child: ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [
+                                Color(0xFF4285F4),
+                                Color(0xFF9B72CB),
+                                Color(0xFFD96570),
+                              ],
+                            ).createShader(bounds),
+                            child: const Icon(Icons.auto_awesome,
+                                size: 16, color: Colors.white),
+                          ),
                         )
                       : Icon(Icons.check_circle_outline,
                           size: 16, color: idleColor),

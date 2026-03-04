@@ -129,32 +129,36 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextButton.icon(
-                  onPressed: () {
-                    final selectedText = details.selectedText;
-                    if (selectedText != null) {
-                      Clipboard.setData(ClipboardData(text: selectedText));
-                      _checkAndCloseContextMenu();
-                      _pdfViewerController.clearSelection();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Copied to clipboard',
-                              style: TextStyle(
-                                color: colorScheme.onInverseSurface,
+                Semantics(
+                  label: 'Copy selected text',
+                  button: true,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      final selectedText = details.selectedText;
+                      if (selectedText != null) {
+                        Clipboard.setData(ClipboardData(text: selectedText));
+                        _checkAndCloseContextMenu();
+                        _pdfViewerController.clearSelection();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Copied to clipboard',
+                                style: TextStyle(
+                                  color: colorScheme.onInverseSurface,
+                                ),
                               ),
+                              backgroundColor: colorScheme.inverseSurface,
                             ),
-                            backgroundColor: colorScheme.inverseSurface,
-                          ),
-                        );
+                          );
+                        }
                       }
-                    }
-                  },
-                  icon: Icon(Icons.copy, color: contentColor, size: 16),
-                  label: Text(
-                    'Copy',
-                    style: TextStyle(color: contentColor, fontSize: 14),
+                    },
+                    icon: Icon(Icons.copy, color: contentColor, size: 16),
+                    label: Text(
+                      'Copy',
+                      style: TextStyle(color: contentColor, fontSize: 14),
+                    ),
                   ),
                 ),
                 // Separation Divider
@@ -164,32 +168,36 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   color: contentColor.withValues(alpha: 0.3),
                 ),
                 // "Explain" Button
-                TextButton.icon(
-                  onPressed: () {
-                    final selectedText = details.selectedText;
-                    if (selectedText != null) {
-                      _checkAndCloseContextMenu();
-                      _pdfViewerController.clearSelection();
+                Semantics(
+                  label: 'Explain selected text with AI',
+                  button: true,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      final selectedText = details.selectedText;
+                      if (selectedText != null) {
+                        _checkAndCloseContextMenu();
+                        _pdfViewerController.clearSelection();
 
-                      // Navigate to AI Chat
-                      Provider.of<NavigationProvider>(
-                        context,
-                        listen: false,
-                      ).navigateToChat(
-                        message:
-                            "Please explain this text:\n\n\"$selectedText\"",
-                        context: context,
-                      );
-                    }
-                  },
-                  icon: FaIcon(
-                    FontAwesomeIcons.wandMagicSparkles,
-                    color: contentColor,
-                    size: 14,
-                  ),
-                  label: Text(
-                    'Explain',
-                    style: TextStyle(color: contentColor, fontSize: 14),
+                        // Navigate to AI Chat
+                        Provider.of<NavigationProvider>(
+                          context,
+                          listen: false,
+                        ).navigateToChat(
+                          message:
+                              "Please explain this text:\n\n\"$selectedText\"",
+                          context: context,
+                        );
+                      }
+                    },
+                    icon: FaIcon(
+                      FontAwesomeIcons.wandMagicSparkles,
+                      color: contentColor,
+                      size: 14,
+                    ),
+                    label: Text(
+                      'Explain',
+                      style: TextStyle(color: contentColor, fontSize: 14),
+                    ),
                   ),
                 ),
               ],
@@ -539,6 +547,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   Icons.chevron_left,
                   color: theme.colorScheme.onInverseSurface,
                 ),
+                tooltip: 'Previous page',
                 onPressed: _currentPage > 1
                     ? () => _pdfViewerController.previousPage()
                     : null,
@@ -560,6 +569,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   Icons.chevron_right,
                   color: theme.colorScheme.onInverseSurface,
                 ),
+                tooltip: 'Next page',
                 onPressed: _currentPage < _totalPages
                     ? () => _pdfViewerController.nextPage()
                     : null,
@@ -681,14 +691,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       body: _buildBody(theme),
       // Themed Floating Action Button
       floatingActionButton: !_isLoading && _pdfBytes != null
-          ? FloatingActionButton.extended(
-              onPressed: _openAiTutorDialog,
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-              icon: const FaIcon(FontAwesomeIcons.wandMagicSparkles, size: 20),
-              label: const Text(
-                'Ask AI',
-                style: TextStyle(fontWeight: FontWeight.bold),
+          ? Semantics(
+              label: 'Ask AI Tutor for help',
+              button: true,
+              child: FloatingActionButton.extended(
+                onPressed: _openAiTutorDialog,
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                icon:
+                    const FaIcon(FontAwesomeIcons.wandMagicSparkles, size: 20),
+                label: const Text(
+                  'Ask AI',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             )
           : null,

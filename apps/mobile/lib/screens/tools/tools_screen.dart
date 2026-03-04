@@ -209,12 +209,11 @@ class ToolsScreen extends StatelessWidget {
   }
 
   Widget _buildToolCard(BuildContext context, ToolCardData tool) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () {
-        // --- FIXED NAVIGATION LOGIC ---
-        // 1. Identify the screen first
         Widget? targetScreen;
-
         switch (tool.routeId) {
           case 'calculator':
             targetScreen = const CalculatorScreen();
@@ -241,10 +240,7 @@ class ToolsScreen extends StatelessWidget {
             targetScreen = const FilesScreen();
             break;
         }
-
-        // 2. Safe Navigation Check
         if (targetScreen != null) {
-          // Capture in a final local variable to ensure non-nullability in closure
           final Widget destination = targetScreen;
           Navigator.push(
             context,
@@ -256,16 +252,22 @@ class ToolsScreen extends StatelessWidget {
           );
         }
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
+          color: isDark ? const Color(0xFF1E1F22) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : tool.color.withValues(alpha: 0.12),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
+              color: tool.color.withValues(alpha: isDark ? 0.08 : 0.1),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -273,24 +275,31 @@ class ToolsScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: tool.color.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    tool.color.withValues(alpha: 0.15),
+                    tool.color.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(tool.icon, color: tool.color, size: 32),
+              child: Icon(tool.icon, color: tool.color, size: 30),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Text(
               tool.title,
               textAlign: TextAlign.center,
               style: GoogleFonts.nunito(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               tool.description,
               textAlign: TextAlign.center,
@@ -298,9 +307,7 @@ class ToolsScreen extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.nunito(
                 fontSize: 12,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],

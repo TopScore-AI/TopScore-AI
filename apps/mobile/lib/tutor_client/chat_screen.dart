@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io' show File, Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pasteboard/pasteboard.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -19,15 +16,14 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:camera/camera.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
-import '../screens/auth/auth_screen.dart';
-import '../screens/subscription/subscription_screen.dart';
+import 'package:image/image.dart' as img;
 
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
-import '../providers/navigation_provider.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_history_sidebar.dart';
@@ -36,19 +32,23 @@ import 'widgets/empty_state_widget.dart';
 import 'widgets/voice_session_overlay.dart';
 import 'widgets/session_rating_dialog.dart';
 import '../config/app_theme.dart';
-import '../../constants/colors.dart';
 
 import '../models/video_result.dart';
+import '../services/clipboard_service.dart';
 
 import '../utils/paste_handler/paste_handler.dart';
 import 'message_model.dart';
-import 'enhanced_websocket_service.dart';
 import 'camera_screen.dart';
+import '../providers/tutor_connection_provider.dart';
+import '../providers/ai_tutor_history_provider.dart';
+import '../config/api_config.dart';
+import 'enhanced_websocket_service.dart';
+import 'pcm_recorder.dart';
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? chatThread;
   final File? initialImageFile;
-  final XFile? initialImage; // NEW: Cross-platform image
+  final XFile? initialImage;
   final String? initialMessage;
 
   const ChatScreen({
@@ -66,31 +66,30 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Smart Backend URL Detection
-  // Smart Backend URL Detection
-  String get _backendUrl {
-    if (kIsWeb) {
-      return 'https://agent.topscoreapp.ai'; // MUST be localhost for Web
-    }
-    if (Platform.isAndroid) {
-      return 'https://agent.topscoreapp.ai';
-    }
-    return 'https://agent.topscoreapp.ai'; // Replace with your PC IP
-  }
+  String get _backendUrl => ApiConfig.baseUrl;
 
   final TextEditingController _textController = TextEditingController();
-  late final EnhancedWebSocketService _wsService;
+
+  // Getter for the global WebSocket service
+  EnhancedWebSocketService get _wsService =>
+      Provider.of<TutorConnectionProvider>(context, listen: false).wsService!;
+
   final List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
+
+  /// Streams raw PCM 16kHz mono audio for Gemini Live real-time input.
+  final PcmRecorder _pcmRecorder = PcmRecorder();
+  StreamSubscription<Uint8List>? _pcmStreamSub;
+  StreamSubscription<double>? _pcmAmplitudeSub;
   final FlutterTts _flutterTts = FlutterTts();
 
   // Voice message playback state
   String? _playingAudioMessageId;
   bool _isPlayingAudio = false;
-  Duration _audioDuration = Duration.zero;
+  final Duration _audioDuration = Duration.zero;
   Duration _audioPosition = Duration.zero;
 
   bool _isTyping = false;
@@ -133,6 +132,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoadingHistory = false;
   bool _isLoadingMessages = false;
 
+  // Current chat title — displayed in top bar and synced with sidebar
+  String _currentTitle = 'New Chat';
+
   // Sidebar Search
   String _historySearchQuery = '';
   final TextEditingController _historySearchController =
@@ -144,6 +146,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // Pagination
   static const int _initialMessageLimit = 50; // Load last 50 messages initially
   // bool _hasMoreMessages = false; // Reserved for future load-more feature
+
+  // Message Queuing
+  final List<Map<String, dynamic>> _messageQueue = [];
 
   // Settings
 
@@ -159,14 +164,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isSidebarInitialized) {
-      final isDesktop = MediaQuery.of(context).size.width > 700;
-      // On mobile, start hidden. On desktop, start expanded.
-      _sidebarMode = isDesktop ? 'expanded' : 'hidden';
+      // Always start collapsed
+      _sidebarMode = 'collapsed';
       _isSidebarInitialized = true;
     }
   }
 
   bool _showScrollDownButton = false;
+  ChatMessage? _replyingToMessage;
 
   // Live Voice Mode Variables (UPDATED)
   // Removed: stt.SpeechToText _speechToText = stt.SpeechToText();
@@ -176,16 +181,20 @@ class _ChatScreenState extends State<ChatScreen> {
       false; // Tracks if server sent audio for current response
   StateSetter? _voiceDialogSetState; // For updating voice dialog UI
 
-  // VAD (Voice Activity Detection) State - Smart Implementation
+  // Voice phase state machine for immersive UI
+  VoicePhase _voicePhase = VoicePhase.listening;
+  double _currentAmplitude = -50.0;
+  String _liveTranscription = '';
+
+  // Camera for immersive voice mode
+  CameraController? _cameraController;
+  bool _showCamera = false;
+  bool _isMuted = false;
+  Timer? _cameraFrameTimer;
+
+  // VAD timers (server-side VAD via Gemini Live API handles speech detection)
   Timer? _amplitudeTimer;
-  Timer? _vadTimer; // Smart VAD timer
-  bool _isSpeechDetected = false; // Tracks if user has started talking
-  DateTime? _lastSpeechTime; // Last time we detected speech
-  final double _speechThreshold =
-      -20.0; // Sensitivity (Lower = more sensitive). -20 is safer for noisy rooms.
-  final Duration _silenceTimeout = const Duration(
-    milliseconds: 1200,
-  ); // 1.2s pause = end of turn
+  Timer? _vadTimer;
 
   // Attachment Staging
   String? _pendingPreviewData; // Base64 Data URI (For local display ONLY)
@@ -245,105 +254,44 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
 
-    // 1. Initialize the Service (But do not connect yet)
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userId = authProvider.userModel?.uid ??
-        FirebaseAuth.instance.currentUser?.uid ??
-        'guest';
-    _wsService = EnhancedWebSocketService(userId: userId);
-
-    // Initial check for guest limit
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkFreemiumAccess();
-    });
+      if (!mounted) return;
 
-    // Start dynamic placeholder rotation
-    _startPlaceholderRotation();
+      final connProvider =
+          Provider.of<TutorConnectionProvider>(context, listen: false);
 
-    // 2. Load suggestions (not shuffling anymore as strict list is gone from UI, but kept for logic)
-    // _currentSuggestions = _allSuggestions.take(4).toList(); // REMOVED unused
-
-    // 3. Set up audio player listeners for voice message playback
-    _audioPlayer.onDurationChanged.listen((duration) {
-      if (mounted) {
-        setState(() {
-          _audioDuration = duration;
-        });
+      // Auto-connect if not connected
+      if (!connProvider.isConnected) {
+        connProvider.reconnect();
       }
-    });
 
-    _audioPlayer.onPositionChanged.listen((position) {
-      if (mounted) {
-        setState(() {
-          _audioPosition = position;
-        });
-      }
-    });
-
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isPlayingAudio = false;
-          _playingAudioMessageId = null;
-          _audioPosition = Duration.zero;
-        });
-
-        // Handle Native Audio Voice Mode completion
-        // If the AI just finished speaking, immediately return to listening state
-        if (_isVoiceMode) {
-          setState(() {
-            _isAiSpeaking = false;
-          });
-          _voiceDialogSetState?.call(() {});
-          Future.delayed(const Duration(milliseconds: 300), _startListening);
-        }
-      }
-    });
-
-    // Load suggested questions
-    // _loadSuggestedQuestions();
-
-    // 3. Setup Initial UI State (Text/Images from other screens)
-    if (widget.chatThread != null) {
-      // Title loaded from widget.chatThread!['title']
-    }
-
-    if (widget.initialMessage != null) {
-      _textController.text = widget.initialMessage!;
-    }
-
-    _initTts();
-
-    // 4. DEFER CONNECTION & LOGIC UNTIL AFTER RENDER
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // A. Handle Provider Data (Pending screenshots/messages)
-      _checkProviderData();
-
-      // B. Fetch Bookmarks
+      // 1. Initial Logic
+      _initTts();
       _fetchBookmarks();
+      _startPlaceholderRotation();
 
-      // C. Connect to Backend
-      // This ensures the widget tree is fully mounted and rendered before we start
-      // receiving WebSocket events that might trigger setStates.
-      _wsService.connect();
+      // NEW: Listen to global WebSocket messages
       _wsMessageSub = _wsService.messageStream.listen(_handleIncomingMessage);
+      _wsConnectionSub = _wsService.isConnectedStream.listen((connected) {
+        if (mounted) setState(() {});
+      });
 
-      // D. Load History
-      _fetchThreadList();
-
-      // E. Handle Initial Auto-Send
-      if (widget.initialImageFile != null || widget.initialImage != null) {
-        _processInitialImage();
-      } else if (widget.initialMessage != null) {
-        // Delay slightly to look natural
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) _sendMessage();
-        });
-      }
-
-      // F. Load Thread if ID passed
+      // 2. Load thread if passed from another screen
       if (widget.chatThread != null) {
         _loadThread(widget.chatThread!['thread_id']);
+      } else {
+        // Background load of previous chats
+        _fetchThreadList(silent: true);
+      }
+
+      // 3. Handle initial data
+      if (widget.initialImage != null) {
+        _processProviderImage(widget.initialImage!, autoSend: true);
+      } else if (widget.initialImageFile != null) {
+        _processProviderImage(XFile(widget.initialImageFile!.path),
+            autoSend: true);
+      } else if (widget.initialMessage != null) {
+        _sendMessage(text: widget.initialMessage);
       }
     });
 
@@ -352,7 +300,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Handle Enter key to send message and Paste shortcut
     _messageFocusNode.onKeyEvent = (node, event) {
-      // 1. Enter to Send
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.enter &&
           !HardwareKeyboard.instance.isShiftPressed) {
@@ -362,24 +309,20 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      // 2. Paste Shortcut (Ctrl+V or Cmd+V)
       final isPaste = event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.keyV &&
           (HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isMetaPressed);
 
       if (isPaste) {
-        if (kIsWeb) return KeyEventResult.ignored; // Let browser handle it
-
-        // Trigger image check (Mobile/Desktop)
+        if (kIsWeb) return KeyEventResult.ignored;
         _handlePaste();
-        return KeyEventResult.ignored; // Allow default text paste bubble
+        return KeyEventResult.ignored;
       }
 
       return KeyEventResult.ignored;
     };
 
-    // Register paste handler (Web only)
     registerPasteHandler(
       onImagePasted: (dataUri) async {
         if (!mounted) return;
@@ -402,6 +345,28 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     _initLiveVoice();
+  }
+
+  @override
+  void dispose() {
+    _wsMessageSub?.cancel();
+    _wsConnectionSub?.cancel();
+    _chunkUpdateTimer?.cancel();
+    _scrollDebounceTimer?.cancel();
+    _textController.dispose();
+    _scrollController.dispose();
+    _messageFocusNode.dispose();
+    _typingTimer?.cancel();
+    _placeholderTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    _pcmStreamSub?.cancel();
+    _pcmAmplitudeSub?.cancel();
+    _pcmRecorder.dispose();
+    _flutterTts.stop();
+    _disposeVoiceCamera();
+    removePasteHandler();
+    super.dispose();
   }
 
   // --- Scroll Listener for Smart Scroll Button ---
@@ -429,30 +394,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // --- Helper Methods (Data Loading) ---
   // Suggested questions removed - replaced by dynamic backend suggestions in Empty State
-
-  void _checkProviderData() {
-    final navProvider = Provider.of<NavigationProvider>(context, listen: false);
-    if (navProvider.pendingMessage != null ||
-        navProvider.pendingImage != null) {
-      if (navProvider.pendingMessage != null) {
-        _textController.text = navProvider.pendingMessage!;
-      }
-      if (navProvider.pendingImage != null) {
-        setState(() {
-          _isUploading = true;
-          _pendingFileName = "Screenshot.png";
-        });
-        // Auto-send if we also have a message (e.g. from PDF Viewer "Ask AI Tutor")
-        _processProviderImage(
-          navProvider.pendingImage!,
-          autoSend: navProvider.pendingMessage != null,
-        );
-      } else if (navProvider.pendingMessage != null) {
-        _sendMessage();
-      }
-      navProvider.clearPendingData();
-    }
-  }
 
   // REMOVED _loadSuggestedQuestions logic as we use dynamic backend suggestions now
   Future<void> _processProviderImage(
@@ -518,54 +459,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       developer.log("Error fetching bookmarks: $e");
-    }
-  }
-
-  Future<void> _processInitialImage() async {
-    if (widget.initialImageFile == null && widget.initialImage == null) return;
-
-    try {
-      setState(() {
-        _isUploading = true;
-        _pendingFileName = "Captured Image.jpg";
-      });
-
-      Uint8List bytes;
-      final initialImage = widget.initialImage;
-      final initialImageFile = widget.initialImageFile;
-
-      if (initialImage != null) {
-        // XFile path for web/mobile
-        bytes = await initialImage.readAsBytes();
-      } else if (initialImageFile != null) {
-        // Fallback legacy File
-        bytes = await initialImageFile.readAsBytes();
-      } else {
-        return;
-      }
-
-      final url = await _uploadToFirebase(
-        bytes,
-        'camera_capture_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        'image/jpeg',
-      );
-
-      if (mounted) {
-        setState(() {
-          _pendingFileUrl = url;
-          _isUploading = false;
-        });
-
-        // Auto-send if we have a prompt
-        if (widget.initialMessage != null && url != null) {
-          _sendMessage();
-        }
-      }
-    } catch (e) {
-      developer.log("Error processing initial image: $e", name: "ChatScreen");
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
     }
   }
 
@@ -641,6 +534,98 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _initVoiceCamera() async {
+    if (kIsWeb) return; // Camera not supported on web for voice mode
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) return;
+      // Prefer front camera for face-to-face feel
+      final frontCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.medium,
+        enableAudio: false, // Audio handled by AudioRecorder
+      );
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() => _showCamera = true);
+        _voiceDialogSetState?.call(() {});
+      }
+
+      // Start periodic camera frame capture (~1 FPS) and send to Gemini
+      _startCameraFrameCapture();
+    } catch (e) {
+      developer.log('Camera init error (non-fatal): $e', name: 'ChatScreen');
+      // Camera is optional — voice mode works without it
+    }
+  }
+
+  /// Capture a camera frame, blur detected faces for privacy, and send
+  /// the processed JPEG to the Gemini Live session as video context.
+  void _startCameraFrameCapture() {
+    _cameraFrameTimer?.cancel();
+    _cameraFrameTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _captureAndSendFrame(),
+    );
+  }
+
+  Future<void> _captureAndSendFrame() async {
+    if (_cameraController == null ||
+        !_cameraController!.value.isInitialized ||
+        !_isVoiceMode) {
+      return;
+    }
+
+    try {
+      final xFile = await _cameraController!.takePicture();
+      final bytes = await xFile.readAsBytes();
+
+      // Process in an isolate-friendly way to avoid jank
+      final processed = await compute(_blurFacesInImage, bytes);
+
+      if (_isVoiceMode && mounted) {
+        final b64 = base64Encode(processed);
+        _wsService.sendVideoFrame(b64);
+      }
+    } catch (e) {
+      developer.log('Frame capture error: $e', name: 'ChatScreen');
+    }
+  }
+
+  /// Static function that runs in a compute isolate.
+  /// Decodes JPEG, applies a heavy Gaussian blur to the entire image for
+  /// privacy (obscures faces, text on screen, etc.), then re-encodes as
+  /// JPEG.  A full-frame blur is used instead of per-face detection
+  /// because ML Kit cannot run in an isolate, and blurring everything
+  /// is the most reliable privacy guarantee.
+  static Uint8List _blurFacesInImage(Uint8List jpegBytes) {
+    var decoded = img.decodeJpg(jpegBytes);
+    if (decoded == null) return jpegBytes;
+
+    // Downscale to 640px wide for efficiency and additional privacy
+    if (decoded.width > 640) {
+      decoded = img.copyResize(decoded, width: 640);
+    }
+
+    // Apply Gaussian blur — radius 10 obscures facial features while
+    // keeping scene-level context (room, objects, gestures) visible.
+    final blurred = img.gaussianBlur(decoded, radius: 10);
+
+    return Uint8List.fromList(img.encodeJpg(blurred, quality: 70));
+  }
+
+  void _disposeVoiceCamera() {
+    _cameraFrameTimer?.cancel();
+    _cameraFrameTimer = null;
+    _cameraController?.dispose();
+    _cameraController = null;
+    _showCamera = false;
+  }
+
   Future<void> _initLiveVoice() async {
     // TTS completion handler for loop-back logic in voice mode
     // This ensures continuous conversation: speak -> listen -> speak -> ...
@@ -649,6 +634,8 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _isAiSpeaking = false;
           _isTtsSpeaking = false;
+          _voicePhase = VoicePhase.listening;
+          _liveTranscription = '';
           // _statusMessage = null;
         });
         _voiceDialogSetState?.call(() {});
@@ -656,9 +643,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // If still in Voice Mode and AI finished speaking, auto-listen again
       if (_isVoiceMode && mounted) {
-        // setState(() => _statusMessage = "Listening...");
         _voiceDialogSetState?.call(() {});
         Future.delayed(const Duration(milliseconds: 500), _startListening);
+      }
+    });
+
+    // Global audio player completion handler for Gemini audio responses
+    _audioPlayer.onPlayerComplete.listen((event) {
+      if (mounted && _isVoiceMode) {
+        setState(() {
+          _isAiSpeaking = false;
+          _voicePhase = VoicePhase.listening;
+          _liveTranscription = '';
+        });
+        _voiceDialogSetState?.call(() {});
+        // Auto-listen after AI finishes speaking
+        Future.delayed(const Duration(milliseconds: 300), _startListening);
       }
     });
   }
@@ -668,65 +668,41 @@ class _ChatScreenState extends State<ChatScreen> {
     await prefs.setString('last_thread_id', threadId);
   }
 
-  Future<void> _fetchThreadList() async {
-    setState(() => _isLoadingHistory = true);
+  Future<void> _fetchThreadList({bool silent = false}) async {
+    if (!silent) setState(() => _isLoadingHistory = true);
 
     try {
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final userId = authProvider.userModel?.uid ??
-          FirebaseAuth.instance.currentUser?.uid ??
-          'guest';
+      final userId =
+          authProvider.userModel?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) return;
 
-      // --- OPTIMIZED: API CALL ---
-      final response = await http.get(
-        Uri.parse('$_backendUrl/api/history/$userId'),
-      );
+      await historyProvider.fetchHistory(userId);
 
-      if (!mounted) return;
+      if (mounted) {
+        setState(() {
+          _threads = historyProvider.threads;
+          _isLoadingHistory = false;
+        });
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-
-        final List<Map<String, dynamic>> loadedThreads = data.map((item) {
-          final threadId = item['thread_id'];
-          final title = item['title'];
-
-          // Cache titles for instant display
-          if (threadId != null && title != null) {
-            _titleCache[threadId] = title;
+        // Sync title cache
+        for (final t in _threads) {
+          final tId = t['thread_id'];
+          final title = t['title'];
+          if (tId != null && title != null) {
+            _titleCache[tId] = title;
           }
-
-          return {
-            'thread_id': threadId,
-            'title': title,
-            'updated_at': item['updated_at'],
-            'model': item['model'],
-          };
-        }).toList();
-
-        if (mounted) {
-          setState(() {
-            _threads = loadedThreads;
-            _isLoadingHistory = false;
-          });
         }
-      } else {
-        developer.log('API Error: ${response.statusCode}', name: 'ChatScreen');
-        if (mounted) setState(() => _isLoadingHistory = false);
       }
     } catch (e) {
       developer.log('Error loading history: $e', name: 'ChatScreen');
-      if (mounted) {
-        setState(() {
-          _threads = [];
-          _isLoadingHistory = false;
-        });
-      }
+      if (mounted) setState(() => _isLoadingHistory = false);
     }
 
     // Initialize with a new chat if empty
     if (_threads.isEmpty) {
-      // Just set the ID, don't add to _threads list
       final newId = const Uuid().v4();
       _wsService.setThreadId(newId);
       _saveLastThreadId(newId);
@@ -753,9 +729,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.clear();
       _wsService.setThreadId(threadId);
 
-      // Instant title update from cache
+      // Set the top bar title immediately from cache or thread list
       if (cachedTitle != null) {
-        // Title loaded from cache
+        _currentTitle = cachedTitle;
+      } else {
+        final thread = _threads.firstWhere(
+          (t) => t['thread_id'] == threadId,
+          orElse: () => <String, dynamic>{},
+        );
+        _currentTitle = thread['title'] as String? ?? 'New Chat';
       }
     });
 
@@ -997,6 +979,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       _messages.clear();
+      _currentTitle = 'New Chat';
+
+      // Add the new thread to the top of _threads so the sidebar
+      // shows it immediately with the placeholder title.
+      _threads.insert(0, {
+        'thread_id': newId,
+        'title': 'New Chat',
+        'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      });
+
       // Auto-close sidebar on mobile for better UX
       final isMobile = MediaQuery.of(context).size.width <= 700;
       if (isMobile) {
@@ -1081,21 +1073,17 @@ class _ChatScreenState extends State<ChatScreen> {
         break;
 
       case 'transcription':
-        // --- VOICE LOOP FIX: User's speech has been transcribed ---
+        // User's speech transcribed by Gemini's built-in STT.
+        // Only update the phase — do NOT show transcription text or call
+        // _sendMessage() because Gemini Live already processes audio
+        // end-to-end and will respond with native audio + text via
+        // the 'response' event.
         final transcribedText = data['content'] as String? ?? '';
-        if (transcribedText.isNotEmpty) {
+        if (transcribedText.isNotEmpty && _isVoiceMode) {
           setState(() {
-            // _liveTranscription = transcribedText;
-            // _statusMessage = "Thinking...";
+            _voicePhase = VoicePhase.thinking;
           });
           _voiceDialogSetState?.call(() {});
-
-          // --- AUTO-SEND: Trigger AI response ---
-          // This allows the AI to respond to what was just heard
-          // _sendMessage already adds the user message bubble, so we don't add it here
-          if (_isVoiceMode) {
-            _sendMessage(text: transcribedText);
-          }
         }
         break;
 
@@ -1126,10 +1114,9 @@ class _ChatScreenState extends State<ChatScreen> {
         );
 
         if (responseText.isNotEmpty && _isVoiceMode) {
-          // Update transcription to show AI's text response
+          // Update phase only — no transcription text shown
           setState(() {
-            // _liveTranscription = responseText;
-            // _statusMessage = 'Speaking...';
+            _voicePhase = VoicePhase.responding;
           });
           _voiceDialogSetState?.call(() {});
 
@@ -1157,16 +1144,36 @@ class _ChatScreenState extends State<ChatScreen> {
         break;
 
       case 'title_updated':
+        final updatedThreadId = data['thread_id'] ?? _wsService.threadId;
         final newTitle = data['title'];
         if (newTitle != null && newTitle.toString().isNotEmpty) {
           setState(() {
-            // Title updated to newTitle
+            // Update sidebar thread list
             final threadIndex = _threads.indexWhere(
-              (t) => t['thread_id'] == _wsService.threadId,
+              (t) => t['thread_id'] == updatedThreadId,
             );
             if (threadIndex != -1) {
               _threads[threadIndex]['title'] = newTitle;
             }
+
+            // Update title cache
+            _titleCache[updatedThreadId] = newTitle;
+
+            // Update top bar title if this is the active thread
+            if (updatedThreadId == _wsService.threadId) {
+              _currentTitle = newTitle;
+            }
+          });
+
+          // Also update the history provider so it stays in sync
+          final historyProvider = Provider.of<AiTutorHistoryProvider>(
+            context,
+            listen: false,
+          );
+          historyProvider.addThread({
+            'thread_id': updatedThreadId,
+            'title': newTitle,
+            'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
           });
         }
         break;
@@ -1368,6 +1375,27 @@ class _ChatScreenState extends State<ChatScreen> {
         _finalizeTurn();
         break;
 
+      // Gemini Live: User interrupted the model mid-response
+      case 'interrupted':
+        developer.log('Voice: User interrupted model response', name: 'ChatScreen');
+        if (_isVoiceMode) {
+          // Stop any audio playback immediately
+          _audioPlayer.stop();
+          setState(() {
+            _isAiSpeaking = false;
+            _voicePhase = VoicePhase.listening;
+          });
+          _voiceDialogSetState?.call(() {});
+          // Resume listening for next utterance
+          Future.delayed(const Duration(milliseconds: 300), _startListening);
+        }
+        break;
+
+      // Gemini Live: Turn finished – model is done speaking
+      case 'turn_complete':
+        developer.log('Voice: Turn complete', name: 'ChatScreen');
+        break;
+
       case 'error':
         final errorMsg = data['message'] ?? 'Unknown error';
         if (!_messages.any((m) => m.text.contains(errorMsg))) {
@@ -1443,6 +1471,27 @@ class _ChatScreenState extends State<ChatScreen> {
         _isTyping = false; // STOP LOADING
         // _statusMessage = null;
       });
+
+      // Check for queued messages
+      if (_messageQueue.isNotEmpty) {
+        final nextMessage = _messageQueue.removeAt(0);
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final settings = Provider.of<SettingsProvider>(context, listen: false);
+
+        setState(() {
+          _isTyping = true;
+          _userStoppedGeneration = false;
+        });
+
+        _wsService.sendMessage(
+          message: nextMessage['message'] ?? '',
+          userId: authProvider.userModel?.uid ?? 'anon',
+          fileUrl: nextMessage['fileUrl'],
+          fileType: nextMessage['fileType'] ?? 'image',
+          modelPreference: 'auto',
+          dataSaver: settings.isLiteMode,
+        );
+      }
     }
   }
 
@@ -1477,9 +1526,9 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       setState(() => _isUploading = true);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final userId = authProvider.userModel?.uid ??
-          FirebaseAuth.instance.currentUser?.uid ??
-          'guest';
+      final userId =
+          authProvider.userModel?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) return null;
       final uuid = const Uuid().v4();
 
       // Create a reference: uploads/{userId}/{uuid}_{filename}
@@ -1505,50 +1554,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _downloadImage(String url) async {
-    try {
-      if (kIsWeb) {
-        // On Web, launch the URL to trigger browser download
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-        return;
-      }
-
-      // Show feedback
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Downloading image...'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-
-      final response = await http.get(Uri.parse(url));
-
-      if (response.statusCode == 200) {
-        // Get temporary directory
-        final tempDir = await getTemporaryDirectory();
-        final fileName =
-            'ai_tutor_${DateTime.now().millisecondsSinceEpoch}.png';
-        final file = File('${tempDir.path}/$fileName');
-
-        // Write bytes to file
-        await file.writeAsBytes(response.bodyBytes);
-
-        // Open Share sheet (allows "Save to Files" or "Save Image" on iOS/Android)
-        await SharePlus.instance.share(
-          ShareParams(files: [XFile(file.path)], text: 'Image from AI Tutor'),
-        );
-      } else {
-        throw Exception('Failed to download');
-      }
-    } catch (e) {
-      developer.log('Download Error: $e', name: 'ChatScreen');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to download image')),
-        );
-      }
-    }
+    if (!mounted) return;
+    await ClipboardService.instance.shareImage(
+      context,
+      url,
+      caption: 'Image from AI Tutor',
+    );
   }
 
   // NEW: Method to stop generation
@@ -1561,33 +1572,22 @@ class _ChatScreenState extends State<ChatScreen> {
       // _statusMessage = null;
       _userStoppedGeneration = true; // Ignore subsequent chunks
     });
+    _finalizeTurn();
   }
 
-  void _showRegistrationPrompt() {
+  void _showDailyLimitReached() {
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (context) => AlertDialog(
-        title: const Text('Continue Learning?'),
+        title: const Text('Daily Limit Reached'),
         content: const Text(
-          'You\'ve reached the free guest limit. Create an account to save your progress and unlock unlimited learning!',
+          'You\'ve reached your daily message limit. Upgrade your plan or wait 24 hours for it to reset.',
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            child: const Text('Sign Up / Login'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -1597,7 +1597,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage({String? text, String? fileUrl}) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (!authProvider.canSendMessage) {
-      _showRegistrationPrompt();
+      _showDailyLimitReached();
       return;
     }
 
@@ -1631,6 +1631,9 @@ class _ChatScreenState extends State<ChatScreen> {
     // Generate pending ID for optimistic add (RTDB will replace with real ID)
     final pendingId = 'pending-${const Uuid().v4()}';
 
+    // Check if AI is busy
+    final isBusy = _isTyping || _currentStreamingMessageId != null;
+
     setState(() {
       _messages.add(
         ChatMessage(
@@ -1639,6 +1642,8 @@ class _ChatScreenState extends State<ChatScreen> {
           isUser: true,
           timestamp: DateTime.now(),
           imageUrl: fileUrlToSend,
+          replyToId: _replyingToMessage?.id,
+          replyToText: _replyingToMessage?.text,
         ),
       );
       _isTyping = true;
@@ -1646,6 +1651,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (_isVoiceMode) _voiceDialogSetState?.call(() {});
 
       _textController.clear();
+      _replyingToMessage = null; // Clear reply state
       _pendingFileUrl = null;
       _pendingPreviewData = null;
       _pendingFileName = null;
@@ -1654,6 +1660,16 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     _scrollToBottom();
+
+    if (isBusy) {
+      developer.log("AI is busy, queuing message", name: "ChatScreen");
+      _messageQueue.add({
+        'message': messageText,
+        'fileUrl': fileUrlToSend,
+        'fileType': fileTypeToSend,
+      });
+      return;
+    }
 
     // SAFETY TIMEOUT: Stop loading if no response for 30s
     Timer(const Duration(seconds: 30), () {
@@ -1675,20 +1691,13 @@ class _ChatScreenState extends State<ChatScreen> {
         fileType: fileTypeToSend,
         modelPreference: 'auto',
         dataSaver: settings.isLiteMode,
+        replyToId: _replyingToMessage?.id,
+        replyToText: _replyingToMessage?.text,
       );
     } catch (e) {
       _addSystemMessage("Failed to send: $e");
       _finalizeTurn();
     }
-  }
-
-  void _handleDictation() {
-    // Placeholder for simple dictation
-    // In valid implementation, this would start speech-to-text for the input field
-    debugPrint('Dictation triggered');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Dictation feature coming soon!')),
-    );
   }
 
   Future<void> _pickFile(
@@ -2016,7 +2025,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isAiSpeaking = true;
       _isTtsSpeaking = true;
-      // _statusMessage = ''; // Clear previous transcription
+      _voicePhase = VoicePhase.responding;
     });
     _voiceDialogSetState?.call(() {});
 
@@ -2111,72 +2120,48 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _copyToClipboard(String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+    ClipboardService.instance.copyWithFeedback(context, text);
   }
 
   Future<void> _handlePaste() async {
     try {
-      // 1. Try Image Paste (Mobile/Desktop ONLY)
-      if (!kIsWeb) {
-        final imageBytes = await Pasteboard.image;
-        if (imageBytes != null && imageBytes.isNotEmpty) {
-          // Validate Header (Prevent HTML pastes pretending to be images)
-          if (imageBytes.length > 4 && imageBytes[0] == 0x3c) return;
+      final clipboard = ClipboardService.instance;
+      final result = await clipboard.readClipboard();
 
-          // Show Preview Immediately
-          final base64Image = base64Encode(imageBytes);
+      if (!result.hasContent) return;
 
-          setState(() {
-            _pendingPreviewData = 'data:image/png;base64,$base64Image';
-            _pendingFileName = "Pasted Image.png";
-            _isUploading = true;
-          });
+      // Image paste — show preview and upload
+      if (result.hasImage) {
+        final base64Image = base64Encode(result.imageBytes!);
 
-          // Upload in Background
-          final url = await _uploadToFirebase(
-            imageBytes,
-            'pasted_image.png',
-            'image/png',
-          );
+        setState(() {
+          _pendingPreviewData = 'data:image/png;base64,$base64Image';
+          _pendingFileName = "Pasted Image.png";
+          _isUploading = true;
+        });
 
-          if (mounted) {
-            if (url != null) {
-              setState(() => _pendingFileUrl = url);
-            } else {
-              _clearPendingAttachment();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Failed to upload image")),
-              );
-            }
+        final url = await _uploadToFirebase(
+          result.imageBytes!,
+          'pasted_image.png',
+          'image/png',
+        );
+
+        if (mounted) {
+          if (url != null) {
+            setState(() => _pendingFileUrl = url);
+          } else {
+            _clearPendingAttachment();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Failed to upload image")),
+            );
           }
-          return;
         }
+        return;
       }
 
-      // 2. Try Text Paste
-      final ClipboardData? cbd = await Clipboard.getData(Clipboard.kTextPlain);
-      if (cbd != null && cbd.text != null && cbd.text!.isNotEmpty) {
-        final text = cbd.text!;
-        final selection = _textController.selection;
-
-        // Insert text at cursor position
-        final newText = _textController.text.replaceRange(
-          selection.start < 0 ? 0 : selection.start,
-          selection.end < 0 ? 0 : selection.end,
-          text,
-        );
-
-        // Update selection to end of pasted text
-        final newSelectionIndex =
-            (selection.start < 0 ? 0 : selection.start) + text.length;
-
-        _textController.value = TextEditingValue(
-          text: newText,
-          selection: TextSelection.collapsed(offset: newSelectionIndex),
-        );
+      // Text paste — insert at cursor
+      if (result.hasText) {
+        clipboard.pasteIntoController(_textController, result.text!);
       }
     } catch (e) {
       developer.log('Paste Error: $e', name: 'ChatScreen');
@@ -2344,7 +2329,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Logic for Sharing
   void _shareMessage(String text) {
-    SharePlus.instance.share(ShareParams(text: text));
+    ClipboardService.instance.shareText(text);
   }
 
   // Regenerate response
@@ -2368,10 +2353,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _wsService.sendMessage(
             message: previousMessage.text,
             userId: Provider.of<AuthProvider>(
-                  context,
-                  listen: false,
-                ).userModel?.uid ??
-                'guest',
+              context,
+              listen: false,
+            ).userModel!.uid,
             modelPreference: _selectedModelKey,
           );
         }
@@ -2419,35 +2403,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // ============ LIVE VOICE MODE ============
-
-  @override
-  void dispose() {
-    // Cancel RTDB listeners
-    _childAddedSub?.cancel();
-    _childChangedSub?.cancel();
-    _childRemovedSub?.cancel();
-
-    // Cancel Timers
-    _chunkUpdateTimer?.cancel();
-    _scrollDebounceTimer?.cancel();
-
-    // Cancel WebSocket subscriptions
-    _wsMessageSub?.cancel();
-    _wsConnectionSub?.cancel();
-    _wsService.dispose();
-    _textController.dispose();
-    _scrollController.dispose();
-    _messageFocusNode.dispose();
-    _typingTimer?.cancel();
-    _placeholderTimer?.cancel();
-    _audioRecorder.dispose();
-    _audioPlayer.dispose();
-    _flutterTts.stop();
-    removePasteHandler();
-    super.dispose();
-  }
-
   void _startPlaceholderRotation() {
     _placeholderTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mounted && _textController.text.isEmpty) {
@@ -2459,80 +2414,64 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  /// Checks if Freemium user has exceeded their daily message limit
-  void _checkFreemiumAccess() {
+  Future<void> _deleteAllChatHistory() async {
+    final historyProvider =
+        Provider.of<AiTutorHistoryProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (!authProvider.canSendMessage) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Daily Limit Reached'),
-          content: const Text(
-            'You\'ve used your 5 free messages for today. Upgrade to TopScore AI Pro for unlimited access!',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(ctx).pop(); // Close dialog
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.googleBlue,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Upgrade'),
-            ),
-          ],
-        ),
+    final userId =
+        authProvider.userModel?.uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    final success = await historyProvider.deleteAllThreads(userId);
+    if (success && mounted) {
+      setState(() {
+        _threads = [];
+        _messages.clear();
+        _startNewChat();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All chats deleted')),
       );
     }
   }
 
   Future<void> _startListening() async {
-    if (!_isVoiceMode || _isAiSpeaking || _isRecording) return;
+    if (!_isVoiceMode || _isAiSpeaking || _isRecording || _isMuted) return;
 
     try {
-      if (await _audioRecorder.hasPermission()) {
-        // Reset VAD State
-        _isSpeechDetected = false;
-        _lastSpeechTime = null;
-        _vadTimer?.cancel();
-
-        // --- NEW: Safety Timer (Force stop after 10 seconds) ---
-        // This prevents the "stuck in listening" bug if VAD fails.
-        final startTime = DateTime.now();
-        const maxDuration = Duration(seconds: 10);
-        // -------------------------------------------------------
-
-        // 1. Prepare Path
-        String path = '';
-        if (!kIsWeb) {
-          final tempDir = await getTemporaryDirectory();
-          path =
-              '${tempDir.path}/live_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        } else {
-          path = 'live_audio.m4a'; // Web handles path internally
-        }
-
-        // 2. Start Recording
-        await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: path,
-        );
-
+      if (await _pcmRecorder.hasPermission()) {
         setState(() {
-          _isRecording = true;
-          // _statusMessage = "Listening..."; // Initial state
+          _voicePhase = VoicePhase.listening;
+          _currentAmplitude = -50.0;
+          _liveTranscription = '';
         });
+        _voiceDialogSetState?.call(() {});
+
+        // Start streaming PCM 16kHz mono directly to Gemini via WebSocket.
+        // Gemini's built-in VAD detects speech start/end — no client-side
+        // silence timer needed.  Each chunk is sent in real-time so the
+        // model can begin processing before the user finishes speaking.
+        await _pcmRecorder.start();
+
+        // Forward every PCM chunk to the voice WebSocket
+        _pcmStreamSub?.cancel();
+        _pcmStreamSub = _pcmRecorder.audioStream.listen((chunk) {
+          final b64 = base64Encode(chunk);
+          _wsService.sendAudio(b64);
+        });
+
+        // Forward amplitude for the pulsing orb visualisation
+        _pcmAmplitudeSub?.cancel();
+        _pcmAmplitudeSub = _pcmRecorder.amplitudeStream.listen((norm) {
+          if (mounted) {
+            // Convert 0-1 normalised back to dBFS-like range for the orb
+            final dbLike = (norm * 60) - 60; // 0.0→-60, 1.0→0
+            setState(() => _currentAmplitude = dbLike);
+            _voiceDialogSetState?.call(() {});
+          }
+        });
+
+        setState(() => _isRecording = true);
         _voiceDialogSetState?.call(() {});
 
         // Haptic feedback for recording start
@@ -2540,67 +2479,9 @@ class _ChatScreenState extends State<ChatScreen> {
           HapticFeedback.selectionClick();
         }
 
-        // 3. Start Smart VAD Monitoring (Check volume every 100ms)
-        _amplitudeTimer?.cancel();
-        _amplitudeTimer = Timer.periodic(const Duration(milliseconds: 100), (
-          timer,
-        ) async {
-          if (!_isRecording) {
-            timer.cancel();
-            return;
-          }
-
-          // --- NEW: Check Safety Timeout ---
-          if (DateTime.now().difference(startTime) > maxDuration) {
-            developer.log(
-              '⏱️ Max duration reached. Forcing stop.',
-              name: 'ChatScreen',
-            );
-            timer.cancel();
-            _stopListeningAndSend();
-            return;
-          }
-          // ---------------------------------
-
-          final amplitude = await _audioRecorder.getAmplitude();
-          final currentDb = amplitude.current;
-
-          // Debug Print: UNCOMMENT THIS to see your actual room noise level!
-          // developer.log('🎤 dB: $currentDb | Threshold: $_speechThreshold', name: 'ChatScreen');
-
-          // Update amplitude for visual feedback
-          if (mounted) {
-            // setState(() => _currentAmplitude = currentDb);
-            // _voiceDialogSetState?.call(() => _currentAmplitude = currentDb);
-          }
-
-          // 1. Detect if user STARTED talking
-          if (currentDb > _speechThreshold) {
-            _lastSpeechTime = DateTime.now();
-            if (!_isSpeechDetected) {
-              if (mounted) {
-                setState(() {
-                  _isSpeechDetected = true;
-                  // _statusMessage = "I'm listening...";
-                });
-                _voiceDialogSetState?.call(() {});
-              }
-            }
-          }
-
-          // 2. Logic: Only stop IF we heard speech AND silence has passed
-          if (_isSpeechDetected && _lastSpeechTime != null) {
-            final timeSinceSpeech = DateTime.now().difference(_lastSpeechTime!);
-
-            if (timeSinceSpeech > _silenceTimeout) {
-              // User has stopped talking for 1.2 seconds -> SEND IT
-              timer.cancel();
-              _stopListeningAndSend();
-            }
-          }
-        });
+        developer.log('🎤 Streaming PCM to Gemini Live', name: 'ChatScreen');
       } else {
-        // Permission denied - show message and exit voice mode
+        // Permission denied
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2612,7 +2493,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _stopLiveVoice();
       }
     } catch (e) {
-      developer.log('Error starting VAD recording: $e', name: 'ChatScreen');
+      developer.log('Error starting PCM stream: $e', name: 'ChatScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2625,63 +2506,24 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Stop the PCM stream.  Because we use Gemini's server-side VAD,
+  /// this is only called when the user explicitly exits voice mode or
+  /// the model interrupts.  No file I/O or Groq transcription needed.
   Future<void> _stopListeningAndSend() async {
-    // 1. Immediate UI Update (Latency hiding)
+    _pcmStreamSub?.cancel();
+    _pcmStreamSub = null;
+    _pcmAmplitudeSub?.cancel();
+    _pcmAmplitudeSub = null;
+
+    await _pcmRecorder.stop();
+
     setState(() {
-      _isRecording = false; // Stop the orb pulsing
-      // _liveTranscription = 'Transcribing...';
-      // _statusMessage = "Thinking..."; // Show we heard them
+      _isRecording = false;
+      _voicePhase = VoicePhase.thinking;
     });
     _voiceDialogSetState?.call(() {});
 
-    _amplitudeTimer?.cancel();
-
-    if (!_isRecording && _isSpeechDetected) {
-      // Already stopped, just exit
-      return;
-    }
-
-    try {
-      final path = await _audioRecorder.stop();
-
-      if (path != null) {
-        // Read file and encode as base64
-        String? base64Audio;
-        if (kIsWeb) {
-          final response = await http.get(Uri.parse(path));
-          if (response.statusCode == 200) {
-            base64Audio = base64Encode(response.bodyBytes);
-          }
-        } else {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            base64Audio = base64Encode(bytes);
-          }
-        }
-
-        if (base64Audio != null) {
-          // Send to Gemini Native Audio WebSocket endpoint
-          // This provides end-to-end speech-to-speech using gemini-2.5-flash-native-audio
-          // The server will respond with both text AND audio
-          _wsService.sendGeminiAudioMessage(
-            base64Audio: base64Audio,
-            mimeType: 'audio/aac', // m4a is AAC
-          );
-
-          developer.log(
-            'Gemini voice audio sent (${base64Audio.length} chars)',
-            name: 'ChatScreen',
-          );
-        }
-      }
-    } catch (e) {
-      developer.log('Error sending VAD audio: $e', name: 'ChatScreen');
-      // If error, reset to listening
-      if (mounted && _isVoiceMode) {
-        Future.delayed(const Duration(milliseconds: 500), _startListening);
-      }
-    }
+    developer.log('🎤 PCM stream stopped', name: 'ChatScreen');
   }
 
   Future<void> _playAudioResponse(String url) async {
@@ -2690,8 +2532,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Reset UI for Overlay to update
     setState(() {
       _isAiSpeaking = true;
-      // _statusMessage = "Speaking...";
-      // _liveTranscription = ''; // Clear transcription when AI speaks
+      _voicePhase = VoicePhase.responding;
     });
     _voiceDialogSetState?.call(() {});
 
@@ -2702,24 +2543,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       await _audioPlayer.play(UrlSource(url));
-
-      // Ensure we catch the end
-      _audioPlayer.onPlayerComplete.listen((event) {
-        if (mounted && _isVoiceMode) {
-          setState(() {
-            _isAiSpeaking = false;
-            // _statusMessage = "Listening...";
-          });
-          _voiceDialogSetState?.call(() {});
-          // Auto-listen after AI finishes
-          Future.delayed(const Duration(milliseconds: 300), _startListening);
-        }
-      });
+      // Completion handled by global _audioPlayer.onPlayerComplete in _initLiveVoice()
     } catch (e) {
       developer.log("Audio play error: $e");
       setState(() {
         _isAiSpeaking = false;
-        // _statusMessage = "Error playing audio";
+        _voicePhase = VoicePhase.listening;
       });
       _voiceDialogSetState?.call(() {});
       // Retry listening after error
@@ -2738,7 +2567,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Reset UI for Overlay to update
     setState(() {
       _isAiSpeaking = true;
-      // _statusMessage = "Speaking...";
+      _voicePhase = VoicePhase.responding;
     });
     _voiceDialogSetState?.call(() {});
 
@@ -2786,7 +2615,7 @@ class _ChatScreenState extends State<ChatScreen> {
       developer.log("Gemini audio play error: $e", name: 'ChatScreen');
       setState(() {
         _isAiSpeaking = false;
-        // _statusMessage = "Error playing audio";
+        _voicePhase = VoicePhase.listening;
       });
       _voiceDialogSetState?.call(() {});
       // Retry listening after error
@@ -2801,30 +2630,66 @@ class _ChatScreenState extends State<ChatScreen> {
     // Cancel all timers
     _amplitudeTimer?.cancel();
     _vadTimer?.cancel();
+    _cameraFrameTimer?.cancel();
+    _cameraFrameTimer = null;
+
+    // Stop PCM streaming
+    _pcmStreamSub?.cancel();
+    _pcmStreamSub = null;
+    _pcmAmplitudeSub?.cancel();
+    _pcmAmplitudeSub = null;
+    _pcmRecorder.stop();
 
     // Stop TTS if speaking
     _flutterTts.stop();
 
-    // Stop audio recording and playback
+    // Stop legacy audio recorder and playback
     _audioRecorder.stop();
     _audioPlayer.stop();
 
     // Disconnect voice channel
     _wsService.disconnectVoice();
 
+    // Dispose camera
+    _disposeVoiceCamera();
+
     // Reset all voice mode state
     setState(() {
       _isVoiceMode = false;
       _isAiSpeaking = false;
       _isRecording = false;
-      _isSpeechDetected = false;
       _isTtsSpeaking = false;
       _isTtsPaused = false;
-      _lastSpeechTime = null;
-      // _liveTranscription = '';
-      // _currentAmplitude = -50.0;
-      // _statusMessage = null;
+      _voicePhase = VoicePhase.listening;
+      _currentAmplitude = -50.0;
+      _liveTranscription = '';
+      _showCamera = false;
+      _isMuted = false;
     });
+  }
+
+  /// Toggle microphone mute in live voice mode.
+  void _toggleMute() {
+    if (!_isVoiceMode) return;
+
+    setState(() => _isMuted = !_isMuted);
+
+    if (_isMuted) {
+      // Pause PCM streaming — stop sending audio chunks
+      _pcmStreamSub?.cancel();
+      _pcmStreamSub = null;
+      _pcmAmplitudeSub?.cancel();
+      _pcmAmplitudeSub = null;
+      _pcmRecorder.stop();
+      setState(() {
+        _isRecording = false;
+        _currentAmplitude = -50.0;
+      });
+    } else {
+      // Resume listening
+      _startListening();
+    }
+    _voiceDialogSetState?.call(() {});
   }
 
   // Search Messages - Unused, cleanup
@@ -2910,6 +2775,11 @@ class _ChatScreenState extends State<ChatScreen> {
           }
           // Sync cache
           _titleCache[threadId] = newTitle;
+
+          // Update top bar if renaming the active thread
+          if (threadId == _wsService.threadId) {
+            _currentTitle = newTitle;
+          }
         });
       } else {
         throw Exception('Server error: ${response.statusCode}');
@@ -3029,6 +2899,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _refreshChat() async {
+    // threadId is non-nullable and always has a value in EnhancedWebSocketService
+    await _loadThread(_wsService.threadId);
+  }
+
   PreferredSizeWidget _buildMobileAppBar(ThemeData theme, bool isDark) {
     return AppBar(
       backgroundColor: Colors.transparent,
@@ -3039,7 +2914,9 @@ class _ChatScreenState extends State<ChatScreen> {
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       title: Text(
-        'TopScore AI',
+        _currentTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.outfit(
           fontSize: 18,
           fontWeight: FontWeight.bold,
@@ -3064,6 +2941,7 @@ class _ChatScreenState extends State<ChatScreen> {
         onLoadThread: _loadThread,
         onRenameThread: _showRenameDialog,
         onDeleteThread: _confirmDeleteThread,
+        onDeleteAllThreads: _deleteAllChatHistory,
         onFinishLesson: _showRatingDialog,
         onSearchChanged: (value) {
           setState(() {
@@ -3117,6 +2995,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     onLoadThread: _loadThread,
                     onRenameThread: _showRenameDialog,
                     onDeleteThread: _confirmDeleteThread,
+                    onDeleteAllThreads: _deleteAllChatHistory,
                     onFinishLesson: _showRatingDialog,
                     onSearchChanged: (value) {
                       setState(() {
@@ -3237,9 +3116,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       _isVoiceMode = true;
+      _voicePhase = VoicePhase.listening;
+      _currentAmplitude = -50.0;
+      _liveTranscription = '';
     });
 
+    // Connect the Gemini voice WebSocket BEFORE streaming begins
+    await _wsService.connectVoice();
+
+    // Initialize camera in background (non-blocking)
+    _initVoiceCamera();
+
+    // Auto-start listening after overlay renders
+    Future.delayed(const Duration(milliseconds: 600), _startListening);
+
     // Show voice mode overlay
+    if (!mounted) return;
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -3248,15 +3140,17 @@ class _ChatScreenState extends State<ChatScreen> {
           builder: (context, setState) {
             _voiceDialogSetState = setState;
             return VoiceSessionOverlay(
-              isAiSpeaking: _isAiSpeaking,
-              isRecording: _isRecording,
-              statusText: _isAiSpeaking
-                  ? 'Speaking...'
-                  : _isRecording
-                      ? 'Listening...'
-                      : 'Thinking...',
-              transcription: '',
-              amplitude: -50.0,
+              phase: _voicePhase,
+              transcription: _liveTranscription,
+              amplitude: _currentAmplitude,
+              cameraController: _cameraController,
+              showCamera: _showCamera,
+              isMuted: _isMuted,
+              onMuteToggle: () {
+                _toggleMute();
+                // Also refresh the dialog's local state
+                setState(() {});
+              },
               onClose: () {
                 _stopLiveVoice();
                 Navigator.pop(context);
@@ -3267,6 +3161,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   _audioPlayer.stop();
                   setState(() {
                     _isAiSpeaking = false;
+                    _voicePhase = VoicePhase.listening;
+                    _liveTranscription = '';
                   });
                   _startListening();
                 }
@@ -3281,13 +3177,36 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMainChatArea(ThemeData theme) {
     final authProvider = Provider.of<AuthProvider>(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isDesktop = MediaQuery.of(context).size.width > 700;
 
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 850),
         child: Column(
           children: [
-            const SizedBox(height: 8),
+            // Desktop-only title bar (mobile uses AppBar)
+            if (isDesktop)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _currentTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              const SizedBox(height: 8),
             // Messages area
             Expanded(
               child: Stack(
@@ -3307,53 +3226,65 @@ class _ChatScreenState extends State<ChatScreen> {
                               onSuggestionTap: (prompt) =>
                                   _sendMessage(text: prompt),
                             )
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 24,
+                          : RefreshIndicator(
+                              onRefresh: _refreshChat,
+                              color: theme.primaryColor,
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 24,
+                                ),
+                                itemCount: _messages.length,
+                                itemBuilder: (context, index) {
+                                  final message = _messages[index];
+                                  final isStreaming =
+                                      _currentStreamingMessageId == message.id;
+                                  return ChatMessageBubble(
+                                    key: ValueKey(message.id),
+                                    message: message,
+                                    isStreaming: isStreaming,
+                                    playingAudioMessageId:
+                                        _playingAudioMessageId,
+                                    isPlayingAudio: _isPlayingAudio,
+                                    audioDuration: _audioDuration,
+                                    audioPosition: _audioPosition,
+                                    speakingMessageId: _speakingMessageId,
+                                    isTtsSpeaking: _isTtsSpeaking,
+                                    isTtsPaused: _isTtsPaused,
+                                    onPlayVoice: () => _playVoiceMessage(
+                                      message.id,
+                                      message.audioUrl!,
+                                    ),
+                                    onPauseVoice: _pauseVoiceMessage,
+                                    onResumeVoice: _resumeVoiceMessage,
+                                    onSpeak: (text) =>
+                                        _speak(text, messageId: message.id),
+                                    onStopTts: _stopTts,
+                                    onPauseTts: _pauseTts,
+                                    onResumeTts: _resumeTts,
+                                    onCopy: () =>
+                                        _copyToClipboard(message.text),
+                                    onToggleBookmark: () =>
+                                        _toggleBookmark(message),
+                                    onShare: () => _shareMessage(message.text),
+                                    onRegenerate: () =>
+                                        _regenerateResponse(message),
+                                    onFeedback: (feedback) =>
+                                        _provideFeedback(message, feedback),
+                                    onEdit: () => _handleUserEdit(message),
+                                    onDownloadImage: () =>
+                                        _downloadImage(message.imageUrl!),
+                                    onReply: (msg) {
+                                      setState(() => _replyingToMessage = msg);
+                                      _messageFocusNode.requestFocus();
+                                    },
+                                    onLongPress: () =>
+                                        _copyToClipboard(message.text),
+                                    user: authProvider.userModel,
+                                  );
+                                },
                               ),
-                              itemCount: _messages.length,
-                              itemBuilder: (context, index) {
-                                final message = _messages[index];
-                                final isStreaming =
-                                    _currentStreamingMessageId == message.id;
-                                return ChatMessageBubble(
-                                  key: ValueKey(message.id),
-                                  message: message,
-                                  isStreaming: isStreaming,
-                                  playingAudioMessageId: _playingAudioMessageId,
-                                  isPlayingAudio: _isPlayingAudio,
-                                  audioDuration: _audioDuration,
-                                  audioPosition: _audioPosition,
-                                  speakingMessageId: _speakingMessageId,
-                                  isTtsSpeaking: _isTtsSpeaking,
-                                  isTtsPaused: _isTtsPaused,
-                                  onPlayVoice: () => _playVoiceMessage(
-                                    message.id,
-                                    message.audioUrl!,
-                                  ),
-                                  onPauseVoice: _pauseVoiceMessage,
-                                  onResumeVoice: _resumeVoiceMessage,
-                                  onSpeak: (text) =>
-                                      _speak(text, messageId: message.id),
-                                  onStopTts: _stopTts,
-                                  onPauseTts: _pauseTts,
-                                  onResumeTts: _resumeTts,
-                                  onCopy: () => _copyToClipboard(message.text),
-                                  onToggleBookmark: () =>
-                                      _toggleBookmark(message),
-                                  onShare: () => _shareMessage(message.text),
-                                  onRegenerate: () =>
-                                      _regenerateResponse(message),
-                                  onFeedback: (feedback) =>
-                                      _provideFeedback(message, feedback),
-                                  onEdit: () => _handleUserEdit(message),
-                                  onDownloadImage: () =>
-                                      _downloadImage(message.imageUrl!),
-                                  user: authProvider.userModel,
-                                );
-                              },
                             ),
 
                   // Scroll to Bottom Button
@@ -3382,7 +3313,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 12, top: 4),
               child: Text(
-                'AI can make mistakes. Double check information.',
+                'TopScore AI can make mistakes, please verify important information.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
@@ -3406,6 +3337,7 @@ class _ChatScreenState extends State<ChatScreen> {
       pendingFileUrl: _pendingFileUrl,
       isUploading: _isUploading,
       isTyping: _isTyping,
+      isGenerating: _isTyping || _currentStreamingMessageId != null,
       isRecording: _isRecording,
       suggestions: _dynamicSuggestions,
       placeholderMessages: _placeholderMessages,
@@ -3418,8 +3350,10 @@ class _ChatScreenState extends State<ChatScreen> {
       onStopListeningAndSend: _stopListeningAndSend,
       onStartLiveVoiceMode: _startLiveVoiceMode,
       onClearPendingAttachment: _clearPendingAttachment,
-      onShuffleQuestions: () {}, // No-op as chips are removed
-      onDictation: _handleDictation,
+      onShuffleQuestions: () {}, // Not used
+      onDictation: () {}, // Not used
+      replyingToMessage: _replyingToMessage,
+      onCancelReply: () => setState(() => _replyingToMessage = null),
     );
   }
 }

@@ -6,9 +6,13 @@ class SettingsProvider with ChangeNotifier {
   final OfflineService? _offlineService = kIsWeb ? null : OfflineService();
   bool _isLiteMode = false;
   ThemeMode _themeMode = ThemeMode.system; // Default to system
+  double _fontSize = 14.0;
+  double _lineHeight = 1.5;
 
   bool get isLiteMode => _isLiteMode;
   ThemeMode get themeMode => _themeMode;
+  double get fontSize => _fontSize;
+  double get lineHeight => _lineHeight;
 
   SettingsProvider() {
     _loadSettings();
@@ -42,6 +46,16 @@ class SettingsProvider with ChangeNotifier {
   void setLocale(Locale locale) {
     if (_locale == locale) return;
     _locale = locale;
+    notifyListeners();
+  }
+
+  void setFontSize(double size) {
+    _fontSize = size;
+    notifyListeners();
+  }
+
+  void setLineHeight(double height) {
+    _lineHeight = height;
     notifyListeners();
   }
 }

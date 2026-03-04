@@ -4,9 +4,14 @@ import 'dart:js_interop';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:web/web.dart' as web;
 
+/// Polls /version.json and auto-reloads when a newer build is detected.
+///
+/// The build script writes both `version` (semver) and `buildTimestamp`
+/// (ISO-8601 UTC) into version.json on every `flutter build web`.  This
+/// service caches the first-seen timestamp in memory and compares it on
+/// every poll.  Any change triggers a service-worker purge + hard reload.
 class UpdateService {
   static final UpdateService _instance = UpdateService._internal();
   factory UpdateService() => _instance;
@@ -15,9 +20,13 @@ class UpdateService {
   bool _isChecking = false;
   Timer? _timer;
 
+  /// The buildTimestamp captured when the app first loaded.
+  /// A mismatch means a newer build has been deployed.
+  String? _initialBuildTimestamp;
+
   void startAutoCheck() {
-    // Initial check
-    checkForUpdate();
+    // Capture initial version immediately
+    _captureInitialVersion();
     // Periodic check every 60 seconds
     _timer?.cancel();
     _timer = Timer.periodic(
@@ -26,30 +35,52 @@ class UpdateService {
     );
   }
 
+  /// Fetch the server version once at startup to establish the baseline.
+  Future<void> _captureInitialVersion() async {
+    try {
+      final serverData = await _fetchVersionJson();
+      if (serverData != null) {
+        _initialBuildTimestamp = serverData['buildTimestamp'] as String?;
+        debugPrint(
+          '[UpdateService] Baseline: v${serverData['version']} '
+          '@ $_initialBuildTimestamp',
+        );
+      }
+    } catch (e) {
+      debugPrint('[UpdateService] Initial version capture failed: $e');
+    }
+  }
+
   Future<void> checkForUpdate() async {
     if (_isChecking) return;
     _isChecking = true;
 
     try {
-      final localVersion = await _getLocalVersion();
-      final serverVersion = await _getServerVersion();
+      final serverData = await _fetchVersionJson();
+      if (serverData == null) return;
 
-      if (localVersion == null || serverVersion == null) return;
+      final serverVersion = serverData['version'] as String? ?? '';
+      final serverTimestamp = serverData['buildTimestamp'] as String? ?? '';
 
-      final cleanLocal = _cleanVersion(localVersion);
-      final cleanServer = _cleanVersion(serverVersion);
+      debugPrint(
+        '[UpdateService] Poll: v$serverVersion @ $serverTimestamp '
+        '(baseline: $_initialBuildTimestamp)',
+      );
 
-      debugPrint('[UpdateService] Current version: $localVersion');
-      debugPrint('[UpdateService] New version available: $serverVersion');
-      debugPrint('[UpdateService] Clean compare: $cleanLocal vs $cleanServer');
+      // If we haven't captured a baseline yet, store it now
+      if (_initialBuildTimestamp == null) {
+        _initialBuildTimestamp = serverTimestamp;
+        return;
+      }
 
-      if (cleanLocal != cleanServer) {
-        debugPrint('[UpdateService] Real update found. Reloading...');
-        await _reloadApp();
-      } else {
+      // Compare timestamps — any change means a new build
+      if (serverTimestamp.isNotEmpty &&
+          serverTimestamp != _initialBuildTimestamp) {
         debugPrint(
-          '[UpdateService] Versions match (ignoring trailing metadata).',
+          '[UpdateService] New build detected! '
+          '$_initialBuildTimestamp -> $serverTimestamp. Reloading...',
         );
+        await _reloadApp();
       }
     } catch (e) {
       debugPrint('[UpdateService] Update check failed: $e');
@@ -58,26 +89,24 @@ class UpdateService {
     }
   }
 
-  Future<String?> _getLocalVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    if (info.buildNumber.trim().isEmpty) return info.version.trim();
-    return '${info.version.trim()}+${info.buildNumber.trim()}';
-  }
-
-  Future<String?> _getServerVersion() async {
+  /// Fetches and parses /version.json with cache-busting.
+  Future<Map<String, dynamic>?> _fetchVersionJson() async {
     final cacheBust = DateTime.now().millisecondsSinceEpoch;
-    // Use relative path or origin-aware URI to avoid ERR_NAME_NOT_RESOLVED
     final currentUri = Uri.base;
     final uri = Uri(
       scheme: currentUri.scheme,
       host: currentUri.host,
       port: currentUri.port,
       path: '/version.json',
-      queryParameters: {'v': cacheBust.toString()},
+      queryParameters: {'_': cacheBust.toString()},
     );
+
     final response = await http.get(
       uri,
-      headers: const {'cache-control': 'no-cache'},
+      headers: const {
+        'cache-control': 'no-cache, no-store',
+        'pragma': 'no-cache',
+      },
     );
 
     if (response.statusCode != 200) {
@@ -89,25 +118,20 @@ class UpdateService {
     if (!contentType.contains('application/json') &&
         !response.body.trim().startsWith('{')) {
       debugPrint(
-          '[UpdateService] Invalid content type: $contentType. Likely HTML error page.');
+        '[UpdateService] Invalid content type: $contentType. '
+        'Likely HTML error page.',
+      );
       return null;
     }
 
     try {
       final decoded = jsonDecode(response.body);
-      if (decoded is Map && decoded['version'] != null) {
-        return decoded['version'].toString().trim();
-      }
+      if (decoded is Map<String, dynamic>) return decoded;
     } catch (e) {
-      debugPrint('[UpdateService] JSON Decode failed: $e');
+      debugPrint('[UpdateService] JSON decode failed: $e');
     }
 
-    final body = response.body.trim();
-    return body;
-  }
-
-  String _cleanVersion(String version) {
-    return version.trim();
+    return null;
   }
 
   Future<void> _reloadApp() async {

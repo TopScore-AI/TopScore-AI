@@ -5,8 +5,8 @@
     "start_url": ".",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#FFFFFF",
-    "theme_color": "#2B4E9A",
+    "background_color": "#hexcode",
+    "theme_color": "#hexcode",
     "description": "Kenya's #1 AI-powered learning platform. Get 24/7 AI tutoring, chat with past papers, generate flashcards, and ace your KCSE & CBC exams.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
@@ -15,30 +15,6 @@
     "categories": [
         "education",
         "productivity"
-    ],
-    "icons": [
-        {
-            "src": "icons/Icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/Icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png"
-        },
-        {
-            "src": "icons/Icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
-        },
-        {
-            "src": "icons/Icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
-        }
     ],
     "screenshots": [
         {
@@ -62,21 +38,60 @@
             "short_name": "Tutor",
             "description": "Chat with your AI tutor",
             "url": "/ai-tutor",
-            "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
         },
         {
             "name": "Library",
             "short_name": "Library",
             "description": "Browse study resources",
             "url": "/library",
-            "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
         },
         {
             "name": "Study Tools",
             "short_name": "Tools",
             "description": "Calculator, flashcards, timetable",
             "url": "/tools",
-            "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ],
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
         }
     ]
 }

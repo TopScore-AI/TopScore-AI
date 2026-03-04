@@ -28,6 +28,7 @@ class UserModel {
   final int dailyMessageCount;
   final DateTime? lastMessageDate;
   final List<String> accessedDocuments;
+  final DateTime? lastDocumentAccessDate;
 
   UserModel({
     required this.uid,
@@ -55,6 +56,7 @@ class UserModel {
     this.dailyMessageCount = 0,
     this.lastMessageDate,
     this.accessedDocuments = const [],
+    this.lastDocumentAccessDate,
   });
 
   /// Whether this user is under 18 based on dateOfBirth (Kenya DPA 2019 Section 33)
@@ -97,6 +99,7 @@ class UserModel {
       'dailyMessageCount': dailyMessageCount,
       'lastMessageDate': lastMessageDate?.millisecondsSinceEpoch,
       'accessedDocuments': accessedDocuments,
+      'lastDocumentAccessDate': lastDocumentAccessDate?.millisecondsSinceEpoch,
     };
   }
 
@@ -154,6 +157,7 @@ class UserModel {
       accessedDocuments: map['accessedDocuments'] != null
           ? List<String>.from(map['accessedDocuments'])
           : [],
+      lastDocumentAccessDate: getDateTime(map['lastDocumentAccessDate']),
     );
   }
 
@@ -183,6 +187,7 @@ class UserModel {
     int? dailyMessageCount,
     DateTime? lastMessageDate,
     List<String>? accessedDocuments,
+    DateTime? lastDocumentAccessDate,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -210,6 +215,8 @@ class UserModel {
       dailyMessageCount: dailyMessageCount ?? this.dailyMessageCount,
       lastMessageDate: lastMessageDate ?? this.lastMessageDate,
       accessedDocuments: accessedDocuments ?? this.accessedDocuments,
+      lastDocumentAccessDate:
+          lastDocumentAccessDate ?? this.lastDocumentAccessDate,
     );
   }
 

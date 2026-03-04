@@ -9,12 +9,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:uuid/uuid.dart';
 
+void _log(String msg) => stdout.writeln(msg);
+
 Future<void> testWebSocket() async {
   final sessionId = const Uuid().v4();
   final threadId = const Uuid().v4();
   final url = 'ws://localhost:8080/ws/chat/$sessionId';
 
-  print('Connecting to $url ...');
+  _log('Connecting to $url ...');
 
   try {
     final ws = await WebSocket.connect(url).timeout(
@@ -24,7 +26,7 @@ Future<void> testWebSocket() async {
       },
     );
 
-    print('Connected! Listening for messages...\n');
+    _log('Connected! Listening for messages...\n');
 
     String fullResponse = '';
     int chunkCount = 0;
@@ -34,7 +36,7 @@ Future<void> testWebSocket() async {
     // Listen to all messages in a single subscription
     await for (final message in ws) {
       if (chunkCount >= maxChunks) {
-        print('  ⚠️  Max chunks ($maxChunks) reached, stopping...');
+        _log('  ⚠️  Max chunks ($maxChunks) reached, stopping...');
         break;
       }
 
@@ -44,7 +46,7 @@ Future<void> testWebSocket() async {
 
         // 1. Handle handshake first
         if (!handshakeReceived && msgType == 'connected') {
-          print(
+          _log(
               '✅ Handshake: ${const JsonEncoder.withIndent('  ').convert(data)}\n');
           handshakeReceived = true;
 
@@ -57,10 +59,10 @@ Future<void> testWebSocket() async {
             'model_preference': 'fast',
           };
 
-          print(
+          _log(
               '📤 Sending: ${const JsonEncoder.withIndent('  ').convert(payload)}\n');
           ws.add(jsonEncode(payload));
-          print('📥 Receiving response:');
+          _log('📥 Receiving response:');
           continue;
         }
 
@@ -71,14 +73,14 @@ Future<void> testWebSocket() async {
             final preview = content.length > 120
                 ? '${content.substring(0, 120)}...'
                 : content;
-            print('  [chunk] $preview');
+            _log('  [chunk] $preview');
             break;
 
           case 'done':
           case 'complete':
           case 'end':
             final responseId = data['id'] ?? 'N/A';
-            print('  [done] ✅ Response complete. ID: $responseId');
+            _log('  [done] ✅ Response complete. ID: $responseId');
 
             // Check for final content in done message
             if (data.containsKey('content')) {
@@ -93,24 +95,24 @@ Future<void> testWebSocket() async {
 
           case 'error':
             final errorMsg = data['message'] ?? data.toString();
-            print('  [error] ❌ $errorMsg');
+            _log('  [error] ❌ $errorMsg');
             await ws.close();
             break;
 
           case 'status':
             final status = data['status'] ?? '';
-            print('  [status] 📊 $status');
+            _log('  [status] 📊 $status');
             break;
 
           case 'response_start':
             final msgId = data['id'] ?? '';
-            print('  [response_start] 🚀 Starting message: $msgId');
+            _log('  [response_start] 🚀 Starting message: $msgId');
             break;
 
           case 'ping':
             // Respond to ping
             ws.add(jsonEncode({'type': 'pong'}));
-            print('  [ping] 🏓 Sent pong');
+            _log('  [ping] 🏓 Sent pong');
             break;
 
           default:
@@ -118,7 +120,7 @@ Future<void> testWebSocket() async {
             final shortPreview = preview.length > 150
                 ? '${preview.substring(0, 150)}...'
                 : preview;
-            print('  [$msgType] $shortPreview');
+            _log('  [$msgType] $shortPreview');
         }
 
         chunkCount++;
@@ -131,7 +133,7 @@ Future<void> testWebSocket() async {
           break;
         }
       } on FormatException catch (e) {
-        print('  [parse error] Failed to parse message: $e');
+        _log('  [parse error] Failed to parse message: $e');
       }
     }
 
@@ -139,26 +141,26 @@ Future<void> testWebSocket() async {
       final preview = fullResponse.length > 500
           ? '${fullResponse.substring(0, 500)}...'
           : fullResponse;
-      print('\n📝 Full AI response:\n$preview');
+      _log('\n📝 Full AI response:\n$preview');
     } else {
-      print('\n⚠️  No response content received');
+      _log('\n⚠️  No response content received');
     }
 
     await ws.close();
-    print('\n🔌 Test complete.');
+    _log('\n🔌 Test complete.');
   } on TimeoutException catch (e) {
-    print('\n❌ Timeout: $e');
+    _log('\n❌ Timeout: $e');
     exit(1);
   } on WebSocketException catch (e) {
-    print('\n❌ WebSocket Error: $e');
+    _log('\n❌ WebSocket Error: $e');
     exit(1);
   } catch (e) {
-    print('\n❌ Error: ${e.runtimeType}: $e');
+    _log('\n❌ Error: ${e.runtimeType}: $e');
     exit(1);
   }
 }
 
 void main() async {
-  print('=== Flutter WebSocket Test for TutorAgent ===\n');
+  _log('=== Flutter WebSocket Test for TutorAgent ===\n');
   await testWebSocket();
 }

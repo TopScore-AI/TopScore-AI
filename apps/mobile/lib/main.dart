@@ -15,6 +15,9 @@ import 'providers/navigation_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/resources_provider.dart';
 import 'providers/ai_tutor_history_provider.dart';
+import 'providers/tutor_connection_provider.dart';
+import 'providers/search_provider.dart';
+import 'providers/notification_provider.dart';
 import 'router.dart' as app_router;
 
 import 'screens/home_screen.dart';
@@ -156,6 +159,7 @@ class _MyAppState extends State<MyApp> {
   late final ConnectivityProvider _connectivityProvider;
   late final ResourcesProvider _resourcesProvider;
   late final AiTutorHistoryProvider _aiTutorHistoryProvider;
+  late final TutorConnectionProvider _tutorConnectionProvider;
   late final AppLinks _appLinks;
 
   @override
@@ -168,6 +172,7 @@ class _MyAppState extends State<MyApp> {
     _connectivityProvider = ConnectivityProvider();
     _resourcesProvider = ResourcesProvider();
     _aiTutorHistoryProvider = AiTutorHistoryProvider();
+    _tutorConnectionProvider = TutorConnectionProvider();
 
     if (kIsWeb) {
       UpdateService().startAutoCheck();
@@ -197,8 +202,15 @@ class _MyAppState extends State<MyApp> {
       AnalyticsService.instance.setUserId(user.uid);
       AnalyticsService.instance.setUserRole(user.role);
 
-      // Also fetch AI Tutor history when auth resolves
-      _aiTutorHistoryProvider.fetchHistory(user.uid);
+      // Fast load recent 10 chats first
+      _aiTutorHistoryProvider.fetchHistory(user.uid, limit: 10);
+
+      // Load the rest in the background
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _aiTutorHistoryProvider.fetchHistory(user.uid);
+      });
+
+      _tutorConnectionProvider.updateUserId(user.uid);
     }
   }
 
@@ -254,14 +266,22 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider<AiTutorHistoryProvider>.value(
           value: _aiTutorHistoryProvider,
         ),
+        ChangeNotifierProvider<TutorConnectionProvider>.value(
+          value: _tutorConnectionProvider,
+        ),
+        ChangeNotifierProvider<SearchProvider>(
+          create: (_) => SearchProvider(),
+        ),
+        ChangeNotifierProvider<NotificationProvider>(
+          create: (_) => NotificationProvider(),
+        ),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
           return Consumer<SettingsProvider>(
             builder: (context, settings, _) {
-              // Check if user is logged in or guest to decide routing strategy
-              final isLoggedIn =
-                  authProvider.userModel != null || authProvider.isGuest;
+              // Check if user is authenticated to decide routing strategy
+              final isLoggedIn = authProvider.userModel != null;
 
               if (isLoggedIn && !authProvider.needsRoleSelection) {
                 // Use go_router for logged-in users/guests with clean URLs

@@ -19,8 +19,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _nameController = TextEditingController();
   bool _isRegister = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -33,6 +37,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -287,12 +293,37 @@ class _LoginScreenState extends State<LoginScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
+
+          // Name field (sign-up only)
+          if (_isRegister) ...[
+            TextFormField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.name],
+              decoration: InputDecoration(
+                labelText: 'Full Name',
+                prefixIcon: const Icon(Icons.person_outline, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              validator: (value) {
+                final name = value?.trim() ?? '';
+                if (name.isEmpty) return 'Name is required';
+                if (name.length < 2) return 'Enter your full name';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
             decoration: InputDecoration(
               labelText: 'Email',
+              prefixIcon: const Icon(Icons.email_outlined, size: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -309,9 +340,13 @@ class _LoginScreenState extends State<LoginScreen> {
           TextFormField(
             controller: _passwordController,
             obscureText: _obscurePassword,
-            autofillHints: const [AutofillHints.password],
+            autofillHints: _isRegister
+                ? const [AutofillHints.newPassword]
+                : const [AutofillHints.password],
+            onChanged: _isRegister ? (_) => setState(() {}) : null,
             decoration: InputDecoration(
               labelText: 'Password',
+              prefixIcon: const Icon(Icons.lock_outline, size: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -327,76 +362,85 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             validator: (value) {
-              if ((value ?? '').length < 6) {
+              final password = value ?? '';
+              if (password.length < 6) {
                 return 'Password must be at least 6 characters';
+              }
+              if (_isRegister && _getPasswordStrength(password) < 2) {
+                return 'Password is too weak. Add numbers or symbols.';
               }
               return null;
             },
           ),
-          const SizedBox(height: 16),
+
+          // Password strength indicator (sign-up only)
+          if (_isRegister && _passwordController.text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildPasswordStrengthIndicator(theme),
+          ],
+
+          // Confirm password (sign-up only)
+          if (_isRegister) ...[
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirmPassword,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: InputDecoration(
+                labelText: 'Confirm Password',
+                prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirmPassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                  onPressed: () {
+                    setState(() =>
+                        _obscureConfirmPassword = !_obscureConfirmPassword);
+                  },
+                ),
+              ),
+              validator: (value) {
+                if ((value ?? '') != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              },
+            ),
+          ],
+
+          const SizedBox(height: 20),
           SizedBox(
             height: 50,
             child: ElevatedButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      if (!(_formKey.currentState?.validate() ?? false)) {
-                        return;
-                      }
-                      final authProvider = Provider.of<AuthProvider>(
-                        context,
-                        listen: false,
-                      );
-                      try {
-                        final email = _emailController.text.trim();
-                        final password = _passwordController.text;
-                        final success = _isRegister
-                            ? await authProvider.signUpWithEmail(
-                                email,
-                                password,
-                              )
-                            : await authProvider.signInWithEmail(
-                                email,
-                                password,
-                              );
-
-                        if (!mounted) return;
-                        if (!success) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Check your email to verify your account before signing in.',
-                              ),
-                            ),
-                          );
-                        } else {
-                          if (context.mounted) context.go('/home');
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(_friendlyAuthError(e)),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
-                        }
-                      }
-                    },
+              onPressed: (isLoading || _isSubmitting) ? null : _handleSubmit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryPurple,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: Text(
-                _isRegister ? 'Create Account' : 'Sign In',
-                style: GoogleFonts.roboto(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      _isRegister ? 'Create Account' : 'Sign In',
+                      style: GoogleFonts.roboto(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 8),
@@ -444,7 +488,11 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: isLoading
                 ? null
                 : () {
-                    setState(() => _isRegister = !_isRegister);
+                    setState(() {
+                      _isRegister = !_isRegister;
+                      _confirmPasswordController.clear();
+                      _nameController.clear();
+                    });
                   },
             child: Text(
               _isRegister
@@ -455,6 +503,105 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  // ── Password strength ────────────────────────────────────────────
+
+  /// Returns 0-4 (weak → strong)
+  int _getPasswordStrength(String password) {
+    int score = 0;
+    if (password.length >= 6) score++;
+    if (password.length >= 10) score++;
+    if (RegExp(r'[0-9]').hasMatch(password)) score++;
+    if (RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(password)) score++;
+    return score;
+  }
+
+  Widget _buildPasswordStrengthIndicator(ThemeData theme) {
+    final strength = _getPasswordStrength(_passwordController.text);
+    final labels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    final colors = [
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.lightGreen,
+      Colors.green,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: List.generate(4, (i) {
+            return Expanded(
+              child: Container(
+                height: 4,
+                margin: EdgeInsets.only(right: i < 3 ? 4 : 0),
+                decoration: BoxDecoration(
+                  color: i < strength
+                      ? colors[strength]
+                      : theme.dividerColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          labels[strength],
+          style: TextStyle(
+            fontSize: 11,
+            color: colors[strength],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Submit handler ───────────────────────────────────────────────
+
+  Future<void> _handleSubmit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() => _isSubmitting = true);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      bool success;
+      if (_isRegister) {
+        success = await authProvider.signUpWithEmail(
+          email,
+          password,
+          displayName: _nameController.text.trim(),
+        );
+      } else {
+        success = await authProvider.signInWithEmail(email, password);
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        context.go('/home');
+      }
+      // If !success, AuthWrapper in main.dart will show EmailVerificationScreen
+      // via requiresEmailVerification flag automatically
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_friendlyAuthError(e)),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   /// Maps auth exceptions to user-friendly messages

@@ -18,7 +18,7 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
   final TextEditingController _topicController = TextEditingController();
   final TextEditingController _sourceTextController = TextEditingController();
   final AIService _aiService = AIService();
-  
+
   bool _isLoading = false;
   FlashcardSet? _flashcardSet;
   int _cardAmount = 5;
@@ -28,7 +28,7 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
   final List<String> _levels = [
     'Primary School',
     'Form 1',
-    'Form 2', 
+    'Form 2',
     'Form 3',
     'Form 4',
     'High School',
@@ -48,15 +48,16 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.userModel?.uid ?? 'guest_user';
-      
+      final userId = authProvider.userModel?.uid;
+      if (userId == null) return;
+
       final flashcardSet = await _aiService.generateFlashcards(
         userId: userId,
         topic: topic,
         amount: _cardAmount,
         level: _educationLevel,
-        sourceText: _sourceTextController.text.trim().isNotEmpty 
-            ? _sourceTextController.text.trim() 
+        sourceText: _sourceTextController.text.trim().isNotEmpty
+            ? _sourceTextController.text.trim()
             : null,
       );
 
@@ -67,7 +68,9 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString().replaceFirst('Exception: ', '')}")),
+          SnackBar(
+              content: Text(
+                  "Error: ${e.toString().replaceFirst('Exception: ', '')}")),
         );
       }
     } finally {
@@ -76,7 +79,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
   }
 
   void _nextCard() {
-    if (_flashcardSet != null && _currentCardIndex < _flashcardSet!.cards.length - 1) {
+    if (_flashcardSet != null &&
+        _currentCardIndex < _flashcardSet!.cards.length - 1) {
       setState(() => _currentCardIndex++);
     }
   }
@@ -121,7 +125,9 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
             ),
         ],
       ),
-      body: _flashcardSet == null ? _buildInputSection(theme) : _buildFlashcardViewer(theme),
+      body: _flashcardSet == null
+          ? _buildInputSection(theme)
+          : _buildFlashcardViewer(theme),
     );
   }
 
@@ -163,7 +169,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
             controller: _topicController,
             style: TextStyle(color: theme.colorScheme.onSurface),
             decoration: InputDecoration(
-              hintText: "e.g., Photosynthesis, Newton's Laws, Quadratic Equations",
+              hintText:
+                  "e.g., Photosynthesis, Newton's Laws, Quadratic Equations",
               hintStyle: TextStyle(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
@@ -264,7 +271,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
               style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: "Paste your notes here to generate flashcards from specific content...",
+                hintText:
+                    "Paste your notes here to generate flashcards from specific content...",
                 hintStyle: TextStyle(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
@@ -291,7 +299,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
                   : const Icon(Icons.auto_awesome),
               label: Text(
                 _isLoading ? "Generating..." : "Generate Flashcards",
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6C63FF),
@@ -339,7 +348,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
               LinearProgressIndicator(
                 value: (_currentCardIndex + 1) / cards.length,
                 backgroundColor: Colors.grey.shade300,
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
               ),
             ],
           ),
@@ -378,17 +388,20 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade700,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: _currentCardIndex < cards.length - 1 ? _nextCard : null,
+                onPressed:
+                    _currentCardIndex < cards.length - 1 ? _nextCard : null,
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text("Next"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6C63FF),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
               ),
             ],
@@ -441,7 +454,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
     );
   }
 
-  Widget _buildCardFaceWithExplanation(String answer, String? explanation, Color color) {
+  Widget _buildCardFaceWithExplanation(
+      String answer, String? explanation, Color color) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),

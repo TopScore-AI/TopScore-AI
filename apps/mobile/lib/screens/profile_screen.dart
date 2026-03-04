@@ -83,9 +83,8 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     _buildSettingsTile(
                       context,
-                      icon: isDark
-                          ? FontAwesomeIcons.moon
-                          : FontAwesomeIcons.sun,
+                      icon:
+                          isDark ? FontAwesomeIcons.moon : FontAwesomeIcons.sun,
                       title: "Dark Mode",
                       iconColor: isDark ? Colors.deepPurple : Colors.orange,
                       trailing: Switch.adaptive(
@@ -128,8 +127,8 @@ class ProfileScreen extends StatelessWidget {
               title: "Language",
               subtitle:
                   context.watch<SettingsProvider>().locale.languageCode == 'sw'
-                  ? 'Kiswahili'
-                  : 'English',
+                      ? 'Kiswahili'
+                      : 'English',
               iconColor: Colors.blueAccent,
               onTap: () => _showLanguageSelector(
                 context,
@@ -214,19 +213,6 @@ class ProfileScreen extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const AuthScreen()),
                 ),
               ),
-              if (authProvider.isGuest) ...[
-                const SizedBox(height: 12),
-                _buildSettingsTile(
-                  context,
-                  icon: FontAwesomeIcons.eraser,
-                  title: "Clear Guest Data",
-                  iconColor: Colors.orange,
-                  textColor: Colors.orange,
-                  backgroundColor: Colors.orange.withValues(alpha: 0.05),
-                  hasShadow: false,
-                  onTap: () => _showClearGuestDialog(context, authProvider),
-                ),
-              ],
             ],
 
             const SizedBox(height: 30),
@@ -276,7 +262,7 @@ class ProfileScreen extends StatelessWidget {
                     : null,
               ),
               child: Semantics(
-                label: 'Profile picture of ${user?.displayName ?? "Guest"}',
+                label: 'Profile picture of ${user?.displayName ?? "Student"}',
                 image: true,
                 child: Container(
                   width: 100,
@@ -293,20 +279,20 @@ class ProfileScreen extends StatelessWidget {
                     ],
                     image:
                         (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                        ? DecorationImage(
-                            image: CachedNetworkImageProvider(
-                              user.photoURL!,
-                              cacheManager: ProfileImageCacheManager(),
-                            ),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
+                            ? DecorationImage(
+                                image: CachedNetworkImageProvider(
+                                  user.photoURL!,
+                                  cacheManager: ProfileImageCacheManager(),
+                                ),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                   ),
                   child: (user?.photoURL == null || user!.photoURL!.isEmpty)
                       ? Center(
                           child: Text(
                             user?.displayName?.substring(0, 1).toUpperCase() ??
-                                "G",
+                                "?",
                             style: GoogleFonts.nunito(
                               fontSize: 36,
                               fontWeight: FontWeight.bold,
@@ -339,7 +325,7 @@ class ProfileScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          user?.displayName ?? "Guest Student",
+          user?.displayName ?? "Student",
           style: GoogleFonts.nunito(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -435,8 +421,7 @@ class ProfileScreen extends StatelessWidget {
                   style: GoogleFonts.nunito(fontSize: 13, color: Colors.grey),
                 )
               : null,
-          trailing:
-              trailing ??
+          trailing: trailing ??
               const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
         ),
       ),
@@ -512,36 +497,6 @@ class ProfileScreen extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showClearGuestDialog(BuildContext context, AuthProvider auth) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Clear Guest Data?"),
-        content: const Text(
-          "This will delete your anonymous chat history. This cannot be undone.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await auth.clearGuestSession();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Guest session cleared.")),
-                );
-              }
-            },
-            child: const Text("Clear"),
-          ),
-        ],
       ),
     );
   }

@@ -6,7 +6,10 @@ import 'package:flutter/foundation.dart';
 /// Use [isOnline] to guard Firestore/API calls and show offline UI.
 class ConnectivityProvider with ChangeNotifier {
   bool _isOnline = true;
+  DateTime? _lastSyncTime;
+
   bool get isOnline => _isOnline;
+  DateTime? get lastSyncTime => _lastSyncTime;
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
@@ -34,6 +37,11 @@ class ConnectivityProvider with ChangeNotifier {
         r == ConnectivityResult.mobile ||
         r == ConnectivityResult.wifi ||
         r == ConnectivityResult.ethernet);
+  }
+
+  void recordSync() {
+    _lastSyncTime = DateTime.now();
+    notifyListeners();
   }
 
   @override

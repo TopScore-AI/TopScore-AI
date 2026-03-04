@@ -1,53 +1,133 @@
 .footer {
     border-top: 1px solid var(--border);
-    padding: 48px 24px;
-    text-align: center;
+    padding: 64px 24px 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+}
+
+/* ── Brand column ── */
+.brand {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 .logo {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 10px;
     font-family: var(--font-display);
     font-weight: 900;
     font-size: 20px;
+}
+
+.logo span {
     background: var(--gradient);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+}
+
+.logo img {
+    border-radius: 50%;
+}
+
+.tagline {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 280px;
+}
+
+.storeBadges {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.storeBadges a {
+    display: inline-flex;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.storeBadges a:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+/* ── Link columns ── */
+.linkCol {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.colTitle {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text);
     margin-bottom: 12px;
 }
 
-.footer p {
-    font-size: 13px;
-    color: var(--text-dim);
-}
-
-.footer p+p {
-    margin-top: 6px;
-}
-
-.legalLinks {
+.linkCol ul {
     display: flex;
-    justify-content: center;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    margin-top: 12px;
-    margin-bottom: 4px;
 }
 
-.legalLinks a {
-    font-size: 13px;
+.linkCol a {
+    font-size: 14px;
     color: var(--text-muted);
     transition: color 0.2s;
 }
 
-.legalLinks a:hover {
+.linkCol a:hover {
     color: var(--primary);
 }
 
-.dot {
+/* ── Bottom bar ── */
+.bottom {
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    text-align: center;
+}
+
+.bottom p {
+    font-size: 13px;
     color: var(--text-dim);
-    font-size: 12px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 36px;
+    }
+
+    .brand {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 480px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .brand {
+        grid-column: 1;
+    }
 }

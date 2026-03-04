@@ -187,6 +187,8 @@ class EnhancedWebSocketService {
     String? fileType,
     String? audioData,
     bool dataSaver = false,
+    String? replyToId,
+    String? replyToText,
     Map<String, dynamic>? extraData,
   }) async {
     final messageId = const Uuid().v4();
@@ -204,6 +206,8 @@ class EnhancedWebSocketService {
       if (fileUrl != null) 'file_url': fileUrl,
       if (fileType != null) 'file_type': fileType,
       if (audioData != null) 'audio_data': audioData,
+      if (replyToId != null) 'reply_to_id': replyToId,
+      if (replyToText != null) 'reply_to_text': replyToText,
       ...?extraData,
     };
 
@@ -333,20 +337,42 @@ class EnhancedWebSocketService {
     _audioQueue.clearQueue();
   }
 
-  /// Send audio data to Gemini Native Audio
+  /// Send a raw PCM audio chunk to Gemini Native Audio in real-time.
+  /// The chunk should be 16-bit, 16 kHz, mono PCM (no WAV header).
   void sendAudio(String base64Audio) {
-    if (_voiceChannel != null) {
-      final data = {
-        "type": "audio",
-        "audio_data": base64Audio,
-        "user_id": userId,
-        "mime_type": "audio/webm", // Adjust based on recording format
-        "timestamp": DateTime.now().millisecondsSinceEpoch,
-      };
-      _voiceChannel!.sink.add(jsonEncode(data));
-    } else {
-      debugPrint('Voice WebSocket: Not connected, cannot send audio');
+    if (_voiceChannel == null) {
+      // Auto-connect if caller forgot to call connectVoice() first
+      connectVoice();
+      // The first chunk may be lost while the WS is opening, but
+      // subsequent chunks will flow once the connection is ready.
+      return;
     }
+    final data = {
+      "type": "audio",
+      "audio_data": base64Audio,
+      "user_id": userId,
+      "mime_type": "audio/pcm;rate=16000",
+    };
+    _voiceChannel!.sink.add(jsonEncode(data));
+  }
+
+  /// Signal the server that the audio stream has paused/ended so
+  /// Gemini can flush any buffered audio and finalize recognition.
+  void sendAudioStreamEnd() {
+    if (_voiceChannel != null) {
+      _voiceChannel!.sink.add(jsonEncode({"type": "stop"}));
+    }
+  }
+
+  /// Send a JPEG camera frame to Gemini Live for multimodal input.
+  /// [base64Jpeg] should be the base64-encoded bytes of a JPEG image.
+  void sendVideoFrame(String base64Jpeg) {
+    if (_voiceChannel == null) return;
+    final data = {
+      "type": "video",
+      "frame": base64Jpeg,
+    };
+    _voiceChannel!.sink.add(jsonEncode(data));
   }
 
   /// Send text message specifically to Voice channel (TTS)
@@ -369,8 +395,7 @@ class EnhancedWebSocketService {
     final result = await _syncManager.syncPendingMessages(
       sendMessage: (pending) async {
         try {
-          final data =
-              pending.extraData ??
+          final data = pending.extraData ??
               {
                 "type": "message",
                 "message_id": pending.id,

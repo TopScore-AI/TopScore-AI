@@ -19,7 +19,7 @@ export default function LanguageSwitcher() {
                     className={`${styles.option} ${locale === opt.value ? styles.active : ''}`}
                     onClick={() => setLocale(opt.value)}
                     role="radio"
-                    aria-checked={locale === opt.value}
+                    aria-checked={locale === opt.value ? "true" : "false"}
                     aria-label={opt.value === 'en' ? 'English' : 'Kiswahili'}
                 >
                     <span className={styles.flag}>{opt.flag}</span>

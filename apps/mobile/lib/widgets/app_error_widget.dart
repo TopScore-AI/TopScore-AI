@@ -22,7 +22,7 @@ class AppErrorWidget extends StatelessWidget {
                 const Text('😬', style: TextStyle(fontSize: 64)),
                 const SizedBox(height: 24),
                 Text(
-                  'Something went wrong',
+                  'We encountered a hiccup',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.nunito(
                     fontSize: 24,
@@ -32,7 +32,10 @@ class AppErrorWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'The app hit an unexpected error. Please try again.',
+                  details?.exceptionAsString().contains('SocketException') ??
+                          false
+                      ? 'It looks like you\'re offline. Please check your connection and try again.'
+                      : 'Something unexpected happened on our end. We\'re working to fix it.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.nunito(
                     fontSize: 15,

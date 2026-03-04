@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -10,6 +11,9 @@ import '../constants/colors.dart';
 import '../config/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/resources_provider.dart';
+import '../providers/notification_provider.dart';
+import '../providers/connectivity_provider.dart';
+import '../services/onboarding_tooltip_service.dart';
 
 import '../widgets/interest_update_sheet.dart';
 import '../widgets/animated_search_bar.dart';
@@ -17,6 +21,7 @@ import '../widgets/enhanced_card.dart';
 import '../widgets/bounce_wrapper.dart';
 import '../widgets/skeleton_loader.dart';
 import 'pdf_viewer_screen.dart';
+import 'notifications/notification_inbox_screen.dart';
 import '../models/firebase_file.dart';
 import '../services/storage_service.dart';
 import '../widgets/session_history_carousel.dart';
@@ -42,7 +47,48 @@ class _HomeScreenState extends State<HomeScreen> {
         listen: false,
       );
       resourcesProvider.loadRecentlyOpened();
+      OnboardingTooltipService().init();
       _checkMissingInterests();
+      _setupConnectivityListener();
+    });
+  }
+
+  void _setupConnectivityListener() {
+    final connectivity =
+        Provider.of<ConnectivityProvider>(context, listen: false);
+    bool? wasOnline;
+
+    connectivity.addListener(() {
+      if (!mounted) return;
+      final isOnline = connectivity.isOnline;
+      if (wasOnline != null && wasOnline != isOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  isOnline ? Icons.wifi : Icons.wifi_off,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  isOnline
+                      ? 'You are back online'
+                      : 'You are currently offline',
+                  style: GoogleFonts.inter(color: Colors.white),
+                ),
+              ],
+            ),
+            backgroundColor: isOnline ? Colors.green : Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      wasOnline = isOnline;
     });
   }
 
@@ -486,11 +532,62 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _buildHeader(BuildContext context, String name, int streak) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    final photoURL = user?.photoURL;
+    final hasPhoto = photoURL != null && photoURL.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(top: AppTheme.spacingSm),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Profile avatar
+          Semantics(
+            label: 'Profile',
+            button: true,
+            child: GestureDetector(
+              onTap: () => context.push('/profile'),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4285F4), Color(0xFF34A853)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4285F4).withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(2),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor:
+                      isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                  backgroundImage:
+                      hasPhoto ? CachedNetworkImageProvider(photoURL) : null,
+                  child: hasPhoto
+                      ? null
+                      : Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : 'S',
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF4285F4),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacingMd),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,36 +600,95 @@ class _HomeTabState extends State<HomeTab> {
                     return Opacity(
                       opacity: value,
                       child: Transform.translate(
-                        offset: Offset(0, 20 * (1 - value)),
+                        offset: Offset(0, 12 * (1 - value)),
                         child: child,
                       ),
                     );
                   },
                   child: Text(
-                    "Jambo, $name! 👋",
+                    "Jambo, $name!",
                     style: GoogleFonts.nunito(
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.w900,
                       color: theme.colorScheme.onSurface,
                       height: 1.2,
                     ),
                   ),
                 ),
-                const SizedBox(height: AppTheme.spacingXs),
+                const SizedBox(height: 2),
                 Text(
-                  "Let's discover your path today.",
+                  _getGreetingSubtitle(),
                   style: GoogleFonts.nunito(
-                    fontSize: 15,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
+          // Notification bell
+          Stack(
+            children: [
+              Semantics(
+                label: 'Notifications',
+                button: true,
+                child: IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const NotificationInboxScreen()),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.notifications_none_rounded,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    size: 26,
+                  ),
+                ),
+              ),
+              Consumer<NotificationProvider>(
+                builder: (context, provider, child) {
+                  if (provider.unreadCount == 0) return const SizedBox.shrink();
+                  return Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '${provider.unreadCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  String _getGreetingSubtitle() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return "Good morning! Ready to learn?";
+    if (hour < 17) return "Good afternoon! Keep it up!";
+    return "Good evening! Let's review today.";
   }
 
   Widget _buildHeroCard(BuildContext context) {
@@ -544,7 +700,7 @@ class _HomeTabState extends State<HomeTab> {
         return Opacity(
           opacity: value,
           child: Transform.translate(
-            offset: Offset(0, 30 * (1 - value)),
+            offset: Offset(0, 24 * (1 - value)),
             child: child,
           ),
         );
@@ -555,18 +711,21 @@ class _HomeTabState extends State<HomeTab> {
         },
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(AppTheme.spacingLg),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF6C63FF), Color(0xFF8B80FF)],
+              colors: [Color(0xFF6C63FF), Color(0xFF9B72CB), Color(0xFFD96570)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            boxShadow: AppTheme.getGlowShadow(
-              const Color(0xFF6C63FF),
-              intensity: 0.3,
-            ),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6C63FF).withValues(alpha: 0.35),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -576,24 +735,24 @@ class _HomeTabState extends State<HomeTab> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: AppTheme.spacingSm,
-                        vertical: AppTheme.spacingXs,
+                        horizontal: 10,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         "CAREER INSIGHT",
-                        style: GoogleFonts.nunito(
+                        style: GoogleFonts.inter(
                           color: Colors.white,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 1.2,
                         ),
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingMd),
+                    const SizedBox(height: 14),
                     Text(
                       "Discover Your\nFuture Path",
                       style: GoogleFonts.nunito(
@@ -603,16 +762,15 @@ class _HomeTabState extends State<HomeTab> {
                         height: 1.2,
                       ),
                     ),
-                    const SizedBox(height: AppTheme.spacingMd),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: AppTheme.spacingMd,
-                        vertical: AppTheme.spacingSm,
+                        horizontal: 16,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusFull),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.1),
@@ -632,9 +790,9 @@ class _HomeTabState extends State<HomeTab> {
                               fontSize: 14,
                             ),
                           ),
-                          const SizedBox(width: AppTheme.spacingXs),
+                          const SizedBox(width: 6),
                           const Icon(
-                            Icons.arrow_forward,
+                            Icons.arrow_forward_rounded,
                             size: 16,
                             color: Color(0xFF6C63FF),
                           ),
@@ -644,16 +802,19 @@ class _HomeTabState extends State<HomeTab> {
                   ],
                 ),
               ),
-              const SizedBox(width: AppTheme.spacingMd),
+              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: const Icon(
                   FontAwesomeIcons.compass,
-                  size: 50,
+                  size: 44,
                   color: Colors.white,
                 ),
               ),

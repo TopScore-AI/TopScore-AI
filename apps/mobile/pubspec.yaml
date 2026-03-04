@@ -63,6 +63,9 @@ dependencies:
   
   universal_io: ^2.3.1
 
+  # --- In-app WebView (Paystack checkout) ---
+  webview_flutter: ^4.10.0
+
   # --- UI Components ---
   percent_indicator: ^4.2.3
   fluttertoast: ^9.0.0
@@ -110,7 +113,9 @@ dependencies:
   
   # Mobile Only (Must wrap in kIsWeb check)
   cunning_document_scanner: ^1.2.0 
-  google_mlkit_text_recognition: ^0.15.0 
+  google_mlkit_text_recognition: ^0.15.0
+
+  image: ^4.3.0
   open_file: ^3.3.0
   screenshot: ^3.0.0
 
@@ -131,6 +136,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.3.10
+  mocktail: ^1.0.4
 
 flutter:
   uses-material-design: true
