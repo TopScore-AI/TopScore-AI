@@ -89,10 +89,17 @@ export default function PrivacyPage() {
                     your first visit.
                 </p>
 
-                <h2>10. Contact Us</h2>
+                <h2>10. Google API Services Usage Disclosure</h2>
+                <p>
+                    TopScore AI&apos;s use and transfer to any other app of information received from Google APIs will
+                    adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+                    including the Limited Use requirements.
+                </p>
+
+                <h2>11. Contact Us</h2>
                 <p>
                     For privacy-related inquiries, please contact us at{' '}
-                    <a href="mailto:policy@topscoreapp.ai">privacy@topscore-ai.com</a>.
+                    <a href="mailto:privacy@topscoreapp.ai">privacy@topscoreapp.ai</a>.
                 </p>
             </article>
             <Footer />
