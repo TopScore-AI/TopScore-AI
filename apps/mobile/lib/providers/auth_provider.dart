@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +11,7 @@ class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
 
   bool _requiresEmailVerification = false;
+  StreamSubscription<UserModel?>? _userStreamSubscription;
 
   UserModel? _userModel;
   UserModel? get userModel => _userModel;
@@ -160,6 +162,14 @@ class AuthProvider with ChangeNotifier {
     _setLoading(true);
     try {
       await _authService.ensureBlockedEmailDomainsLoaded();
+
+      // Handle Google Sign In redirect result
+      final redirectResult = await _authService.getRedirectResult();
+      if (redirectResult?.user != null) {
+        debugPrint("Google Sign In redirect result handled successfully");
+        await _ensureUserProfile(redirectResult!.user!);
+      }
+
       User? user = _authService.currentUser;
       if (user != null) {
         if (user.isAnonymous) {
@@ -179,12 +189,24 @@ class AuthProvider with ChangeNotifier {
         }
 
         _userModel = await _authService.getUserProfile(user.uid);
+        _listenToUserProfile(user.uid);
       }
     } catch (e) {
       debugPrint("AuthProvider init error: $e");
     } finally {
       _setLoading(false);
     }
+  }
+
+  void _listenToUserProfile(String uid) {
+    _userStreamSubscription?.cancel();
+    _userStreamSubscription =
+        _authService.userProfileStream(uid).listen((model) {
+      if (model != null) {
+        _userModel = model;
+        notifyListeners();
+      }
+    });
   }
 
   Future<void> _ensureUserProfile(User user) async {
@@ -400,6 +422,8 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _userStreamSubscription?.cancel();
+    _userStreamSubscription = null;
     await _authService.signOut();
     _userModel = null;
     _requiresEmailVerification = false;
@@ -501,5 +525,11 @@ class AuthProvider with ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _userStreamSubscription?.cancel();
+    super.dispose();
   }
 }

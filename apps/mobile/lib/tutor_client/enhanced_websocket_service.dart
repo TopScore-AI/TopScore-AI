@@ -6,12 +6,12 @@ import 'package:flutter/foundation.dart';
 
 import 'connection_manager.dart';
 import 'offline_storage.dart';
-import 'audio_playback_queue.dart';
+
+import '../config/api_config.dart';
 
 /// Enhanced WebSocket Service with retry logic, offline support, and audio queue
 class EnhancedWebSocketService {
   WebSocketChannel? _channel;
-  WebSocketChannel? _voiceChannel; // Dedicated channel for Gemini Native Audio
   final StreamController<Map<String, dynamic>> _messageController =
       StreamController.broadcast();
   final StreamController<bool> _isConnectedController =
@@ -30,14 +30,10 @@ class EnhancedWebSocketService {
   final OfflineStorage _offlineStorage = OfflineStorage();
   final OfflineSyncManager _syncManager = OfflineSyncManager();
 
-  // NEW: Audio playback queue for voice responses
-  final AudioPlaybackQueue _audioQueue = AudioPlaybackQueue();
-
   Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
   Stream<bool> get isConnectedStream => _isConnectedController.stream;
   Stream<ConnectionState> get connectionStateStream =>
       _connectionManager.stateStream;
-  Stream<AudioQueueState> get audioStateStream => _audioQueue.stateStream;
 
   bool get isConnected => _isConnected;
   ConnectionState get connectionState => _connectionManager.currentState;
@@ -65,12 +61,7 @@ class EnhancedWebSocketService {
     });
   }
 
-  String get _host {
-    return 'agent.topscoreapp.ai';
-  }
-
-  String get _wsUrl => 'wss://$_host/ws/chat/$sessionId?user_id=$userId';
-  String get _geminiVoiceWsUrl => 'wss://$_host/voice/ws/gemini/$sessionId';
+  String get _wsUrl => ApiConfig.getChatWsUrl(sessionId, userId);
 
   void setThreadId(String newThreadId) => threadId = newThreadId;
   void setSessionId(String newSessionId) => sessionId = newSessionId;
@@ -79,18 +70,24 @@ class EnhancedWebSocketService {
   Future<void> connect() async {
     // Guard: Prevent duplicate connections
     if (_isConnected && _channel != null) {
-      debugPrint('WebSocket: Already connected');
+      if (kDebugMode) {
+        debugPrint('WebSocket: Already connected');
+      }
       return;
     }
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      debugPrint('WebSocket: Max reconnect attempts reached');
+      if (kDebugMode) {
+        debugPrint('WebSocket: Max reconnect attempts reached');
+      }
       _connectionManager.setDisconnected();
       return;
     }
 
     if (!hasInternet) {
-      debugPrint('WebSocket: No internet, will connect when available');
+      if (kDebugMode) {
+        debugPrint('WebSocket: No internet, will connect when available');
+      }
       _connectionManager.setDisconnected();
       return;
     }
@@ -98,34 +95,46 @@ class EnhancedWebSocketService {
     _connectionManager.setConnecting();
 
     try {
-      debugPrint(
-        'WebSocket: Connecting to $_wsUrl (attempt ${_reconnectAttempts + 1})',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          'WebSocket: Connecting to $_wsUrl (attempt ${_reconnectAttempts + 1})',
+        );
+      }
       _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
 
       _channel!.stream.listen(
         (message) {
-          debugPrint(
-            '📥 Raw WS message received: ${message.toString().substring(0, message.toString().length > 150 ? 150 : message.toString().length)}...',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '📥 Raw WS message received: ${message.toString().substring(0, message.toString().length > 150 ? 150 : message.toString().length)}...',
+            );
+          }
           try {
             final data = jsonDecode(message) as Map<String, dynamic>;
             _handleIncomingMessage(data);
           } catch (e) {
-            debugPrint('WebSocket: Error parsing message: $e');
+            if (kDebugMode) {
+              debugPrint('WebSocket: Error parsing message: $e');
+            }
           }
         },
         onError: (error) {
-          debugPrint('WebSocket: Connection error: $error');
+          if (kDebugMode) {
+            debugPrint('WebSocket: Connection error: $error');
+          }
           _handleDisconnection();
         },
         onDone: () {
-          debugPrint('WebSocket: Connection closed');
+          if (kDebugMode) {
+            debugPrint('WebSocket: Connection closed');
+          }
           _handleDisconnection();
         },
       );
     } catch (e) {
-      debugPrint('WebSocket: Failed to connect: $e');
+      if (kDebugMode) {
+        debugPrint('WebSocket: Failed to connect: $e');
+      }
       _isConnected = false;
       _isConnectedController.add(false);
       _connectionManager.setDisconnected();
@@ -135,13 +144,18 @@ class EnhancedWebSocketService {
 
   void _handleIncomingMessage(Map<String, dynamic> data) {
     final type = data['type'];
-    debugPrint(
-      '🔵 WS Service received: type=$type, data=${data.toString().substring(0, data.toString().length > 200 ? 200 : data.toString().length)}',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🔵 WS Service received: type=$type, data=${data.toString().substring(0, data.toString().length > 200 ? 200 : data.toString().length)}',
+      );
+    }
 
     switch (type) {
       case 'connected':
-        debugPrint('WebSocket: Connected - Session ID: ${data['session_id']}');
+        if (kDebugMode) {
+          debugPrint(
+              'WebSocket: Connected - Session ID: ${data['session_id']}');
+        }
         _isConnected = true;
         _reconnectAttempts = 0;
         _isConnectedController.add(true);
@@ -157,22 +171,15 @@ class EnhancedWebSocketService {
         break;
 
       case 'response':
-        // Handle audio in voice responses
-        if (data['audio'] != null) {
-          _audioQueue.enqueueBase64(
-            data['audio'],
-            mimeType: data['audio_mime_type'] ?? 'audio/wav',
-            id: data['message_id'],
-          );
-        }
-
         // Cache the message
         _cacheMessage(data);
         _messageController.add(data);
         break;
 
       default:
-        debugPrint('🔸 WS Service forwarding message type: $type');
+        if (kDebugMode) {
+          debugPrint('🔸 WS Service forwarding message type: $type');
+        }
         _messageController.add(data);
     }
   }
@@ -182,7 +189,6 @@ class EnhancedWebSocketService {
     required String message,
     required String userId,
     String? threadId,
-    String? modelPreference,
     String? fileUrl,
     String? fileType,
     String? audioData,
@@ -200,7 +206,6 @@ class EnhancedWebSocketService {
       "message": message,
       "user_id": userId,
       "thread_id": targetThreadId,
-      "model_preference": modelPreference ?? "smart",
       "data_saver": dataSaver,
       "timestamp": DateTime.now().millisecondsSinceEpoch,
       if (fileUrl != null) 'file_url': fileUrl,
@@ -224,7 +229,9 @@ class EnhancedWebSocketService {
         ),
       );
 
-      debugPrint('Message queued for later: $messageId');
+      if (kDebugMode) {
+        debugPrint('Message queued for later: $messageId');
+      }
 
       // Still emit it locally for UI
       _messageController.add({
@@ -238,13 +245,19 @@ class EnhancedWebSocketService {
 
     try {
       final jsonData = jsonEncode(data);
-      debugPrint(
-        '📤 WS Service sending: ${jsonData.substring(0, jsonData.length > 300 ? 300 : jsonData.length)}...',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '📤 WS Service sending: ${jsonData.substring(0, jsonData.length > 300 ? 300 : jsonData.length)}...',
+        );
+      }
       _channel!.sink.add(jsonData);
-      debugPrint('✅ WS Service message sent successfully');
+      if (kDebugMode) {
+        debugPrint('✅ WS Service message sent successfully');
+      }
     } catch (e) {
-      debugPrint('❌ Error sending message: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error sending message: $e');
+      }
       // Queue if send failed
       await _offlineStorage.savePendingMessage(
         PendingMessage(
@@ -256,135 +269,6 @@ class EnhancedWebSocketService {
           extraData: data,
         ),
       );
-    }
-  }
-
-  /// Connect to Gemini Native Audio WebSocket
-  Future<void> connectVoice() async {
-    if (_voiceChannel != null) return;
-
-    try {
-      debugPrint('Voice WebSocket: Connecting to $_geminiVoiceWsUrl');
-      _voiceChannel = WebSocketChannel.connect(Uri.parse(_geminiVoiceWsUrl));
-
-      _voiceChannel!.stream.listen(
-        (message) {
-          try {
-            final data = jsonDecode(message) as Map<String, dynamic>;
-            _handleIncomingMessage(data);
-          } catch (e) {
-            debugPrint('Voice WebSocket: Error parsing message: $e');
-          }
-        },
-        onError: (error) {
-          debugPrint('Voice WebSocket: Connection error: $error');
-          _voiceChannel = null;
-        },
-        onDone: () {
-          debugPrint('Voice WebSocket: Connection closed');
-          _voiceChannel = null;
-        },
-      );
-    } catch (e) {
-      debugPrint('Voice WebSocket: Failed to connect: $e');
-    }
-  }
-
-  /// Connect to Gemini Native Audio WebSocket
-  Future<void> connectGeminiVoice() async {
-    // Guard: Prevent duplicate voice connections
-    if (_voiceChannel != null) {
-      debugPrint('Voice WebSocket: Already connected');
-      return;
-    }
-
-    try {
-      debugPrint('WebSocket: Connecting to Gemini Voice $_geminiVoiceWsUrl');
-      _voiceChannel = WebSocketChannel.connect(Uri.parse(_geminiVoiceWsUrl));
-
-      _voiceChannel!.stream.listen(
-        (message) {
-          try {
-            final data = jsonDecode(message) as Map<String, dynamic>;
-            _handleIncomingMessage(data);
-          } catch (e) {
-            debugPrint('Voice WebSocket: Error parsing message: $e');
-          }
-        },
-        onError: (error) {
-          debugPrint('Voice WebSocket: Connection error: $error');
-          _voiceChannel = null;
-        },
-        onDone: () {
-          debugPrint('Voice WebSocket: Connection closed');
-          _voiceChannel = null;
-        },
-      );
-    } catch (e) {
-      debugPrint('Voice WebSocket: Failed to connect: $e');
-      _voiceChannel = null;
-    }
-  }
-
-  /// Disconnect Gemini Voice session
-  void disconnectVoice() {
-    if (_voiceChannel != null) {
-      _voiceChannel!.sink.close();
-      _voiceChannel = null;
-      debugPrint('Voice WebSocket: Disconnected');
-    }
-    // Clear audio queue on disconnect
-    _audioQueue.clearQueue();
-  }
-
-  /// Send a raw PCM audio chunk to Gemini Native Audio in real-time.
-  /// The chunk should be 16-bit, 16 kHz, mono PCM (no WAV header).
-  void sendAudio(String base64Audio) {
-    if (_voiceChannel == null) {
-      // Auto-connect if caller forgot to call connectVoice() first
-      connectVoice();
-      // The first chunk may be lost while the WS is opening, but
-      // subsequent chunks will flow once the connection is ready.
-      return;
-    }
-    final data = {
-      "type": "audio",
-      "audio_data": base64Audio,
-      "user_id": userId,
-      "mime_type": "audio/pcm;rate=16000",
-    };
-    _voiceChannel!.sink.add(jsonEncode(data));
-  }
-
-  /// Signal the server that the audio stream has paused/ended so
-  /// Gemini can flush any buffered audio and finalize recognition.
-  void sendAudioStreamEnd() {
-    if (_voiceChannel != null) {
-      _voiceChannel!.sink.add(jsonEncode({"type": "stop"}));
-    }
-  }
-
-  /// Send a JPEG camera frame to Gemini Live for multimodal input.
-  /// [base64Jpeg] should be the base64-encoded bytes of a JPEG image.
-  void sendVideoFrame(String base64Jpeg) {
-    if (_voiceChannel == null) return;
-    final data = {
-      "type": "video",
-      "frame": base64Jpeg,
-    };
-    _voiceChannel!.sink.add(jsonEncode(data));
-  }
-
-  /// Send text message specifically to Voice channel (TTS)
-  void sendVoiceText(String text, {String voice = "Aoede"}) {
-    if (_voiceChannel != null) {
-      final data = {
-        "type": "text",
-        "message": text,
-        "voice": voice,
-        "timestamp": DateTime.now().millisecondsSinceEpoch,
-      };
-      _voiceChannel!.sink.add(jsonEncode(data));
     }
   }
 
@@ -413,7 +297,9 @@ class EnhancedWebSocketService {
     );
 
     if (result.synced > 0) {
-      debugPrint('Synced ${result.synced} pending messages');
+      if (kDebugMode) {
+        debugPrint('Synced ${result.synced} pending messages');
+      }
       _messageController.add({
         'type': 'sync_complete',
         'synced': result.synced,
@@ -451,12 +337,6 @@ class EnhancedWebSocketService {
     return pending.length;
   }
 
-  // Audio queue controls
-  void pauseAudio() => _audioQueue.pause();
-  void resumeAudio() => _audioQueue.resume();
-  void skipAudio() => _audioQueue.skip();
-  void clearAudioQueue() => _audioQueue.clearQueue();
-
   void _sendPong() {
     if (_channel != null && _isConnected) {
       _channel!.sink.add(jsonEncode({'type': 'pong'}));
@@ -470,7 +350,9 @@ class EnhancedWebSocketService {
         try {
           _channel!.sink.add(jsonEncode({'type': 'ping'}));
         } catch (e) {
-          debugPrint('Keep-alive failed: $e');
+          if (kDebugMode) {
+            debugPrint('Keep-alive failed: $e');
+          }
           _handleDisconnection();
         }
       } else {
@@ -483,7 +365,9 @@ class EnhancedWebSocketService {
     _reconnectAttempts++;
     if (_reconnectAttempts < _maxReconnectAttempts) {
       final backoffSeconds = _reconnectAttempts * 2;
-      debugPrint('WebSocket: Retrying in $backoffSeconds seconds...');
+      if (kDebugMode) {
+        debugPrint('WebSocket: Retrying in $backoffSeconds seconds...');
+      }
       _connectionManager.setReconnecting();
       _reconnectTimer?.cancel();
       _reconnectTimer = Timer(Duration(seconds: backoffSeconds), connect);
@@ -506,72 +390,12 @@ class EnhancedWebSocketService {
     connect();
   }
 
-  /// Send audio message using Gemini Native Audio (speech-to-speech)
-  /// This provides end-to-end voice conversation with audio input AND output
-  ///
-  /// The server will respond with:
-  /// - type: 'response'
-  /// - text: The text transcription/response
-  /// - audio: Base64-encoded audio response (to play back)
-  /// - audio_mime_type: MIME type of the audio (usually 'audio/wav')
-  /// - latency: Processing time in seconds
-  void sendGeminiAudioMessage({
-    required String base64Audio,
-    String mimeType = 'audio/webm',
-  }) async {
-    if (_voiceChannel == null) {
-      await connectVoice();
-      if (_voiceChannel == null) {
-        debugPrint('Gemini Voice WS Not connected');
-        return;
-      }
-    }
-
-    final Map<String, dynamic> data = {
-      "type": "audio",
-      "audio_data": base64Audio,
-      "user_id": userId,
-      "mime_type": mimeType,
-    };
-
-    debugPrint('Sending Gemini Audio Payload (${base64Audio.length} chars)');
-    _voiceChannel!.sink.add(jsonEncode(data));
-  }
-
-  /// Send text message for TTS using Gemini Native Audio
-  /// Server will respond with synthesized audio
-  void sendGeminiTextForSpeech({
-    required String text,
-    String voice = 'Aoede',
-  }) async {
-    if (_voiceChannel == null) {
-      await connectVoice();
-      if (_voiceChannel == null) {
-        debugPrint('Gemini Voice WS Not connected');
-        return;
-      }
-    }
-
-    final Map<String, dynamic> data = {
-      "type": "text",
-      "message": text,
-      "voice": voice,
-    };
-
-    debugPrint(
-      'Sending Gemini TTS request: ${text.substring(0, text.length > 50 ? 50 : text.length)}...',
-    );
-    _voiceChannel!.sink.add(jsonEncode(data));
-  }
-
   Future<void> dispose() async {
     _reconnectTimer?.cancel();
     _keepAliveTimer?.cancel();
     _channel?.sink.close();
-    _voiceChannel?.sink.close();
     _messageController.close();
     _isConnectedController.close();
     _connectionManager.dispose();
-    await _audioQueue.dispose();
   }
 }

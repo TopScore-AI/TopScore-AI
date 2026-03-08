@@ -9,6 +9,8 @@ import '../../services/subscription_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../config/app_theme.dart';
 import '../../config/api_config.dart';
+import '../../services/recaptcha_service.dart';
+import 'package:intl/intl.dart';
 import 'paystack_checkout_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -23,6 +25,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  @override
+  void initState() {
+    super.initState();
+    // Load and show reCAPTCHA on subscription page
+    RecaptchaService.loadRecaptchaScript();
+    RecaptchaService.showBadge();
+  }
+
+  @override
+  void dispose() {
+    // Hide reCAPTCHA badge when leaving subscription
+    RecaptchaService.hideBadge();
+    super.dispose();
+  }
+
   // Selected Plan
   final int _selectedAmount = 1000; // KES 1,000
 
@@ -34,6 +51,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     try {
       final auth = context.read<AuthProvider>();
+
+      // Guard: Prevent paying if already active
+      if (auth.hasActiveSubscription) {
+        _showAlreadyActiveAlert();
+        return;
+      }
+
       final user = auth.userModel;
       if (user == null) throw Exception("User not logged in");
 
@@ -42,7 +66,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         email:
             user.email.isNotEmpty ? user.email : "${user.uid}@topscoreapp.ai",
         amount: _selectedAmount * 100, // Backend expects cents
-        callbackUrl: kIsWeb ? null : ApiConfig.paystackCallback,
+        callbackUrl:
+            kIsWeb ? null : '${ApiConfig.paystackCallback}?client=mobile',
       );
 
       if (!mounted) return;
@@ -180,9 +205,29 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
   }
 
+  void _showAlreadyActiveAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Active Subscription'),
+        content: const Text(
+          'You already have an active Premium subscription. '
+          'You can only renew once your current subscription expires.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -229,6 +274,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   const Text('• Image Upload'),
                   const Text('• Graph Generation'),
                   const Text('• Standard document chat'),
+                  const SizedBox(height: 20),
+                  _buildSubscriptionStatus(auth),
                 ],
               ),
             ),
@@ -252,19 +299,32 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
             // Paystack Payment Button
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _initiatePaystackPayment,
+              onPressed: (_isLoading || auth.hasActiveSubscription)
+                  ? null
+                  : _initiatePaystackPayment,
               icon: _isLoading
                   ? const SizedBox.shrink()
-                  : const Icon(Icons.lock, color: Colors.white, size: 20),
+                  : Icon(
+                      auth.hasActiveSubscription
+                          ? Icons.check_circle
+                          : Icons.lock,
+                      color: Colors.white,
+                      size: 20,
+                    ),
               label: _isLoading
                   ? _buildLoading()
-                  : const Text('Pay Securely with Paystack',
-                      style: TextStyle(
+                  : Text(
+                      auth.hasActiveSubscription
+                          ? 'Subscription Active'
+                          : 'Pay Securely with Paystack',
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 16)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF09A5DB),
+                backgroundColor: auth.hasActiveSubscription
+                    ? Colors.green
+                    : const Color(0xFF09A5DB),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -298,6 +358,40 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionStatus(AuthProvider auth) {
+    if (!auth.hasActiveSubscription ||
+        auth.userModel?.subscriptionExpiry == null) {
+      return const SizedBox.shrink();
+    }
+
+    final expiry = auth.userModel!.subscriptionExpiry!;
+    final formattedDate = DateFormat('MMM dd, yyyy').format(expiry);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.info_outline, color: Colors.green, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            'Premium until $formattedDate',
+            style: GoogleFonts.nunito(
+              color: Colors.green[700],
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -47,7 +47,9 @@ class UpdateService {
         );
       }
     } catch (e) {
-      debugPrint('[UpdateService] Initial version capture failed: $e');
+      if (kDebugMode) {
+        debugPrint('[UpdateService] Initial version capture failed: $e');
+      }
     }
   }
 
@@ -62,10 +64,12 @@ class UpdateService {
       final serverVersion = serverData['version'] as String? ?? '';
       final serverTimestamp = serverData['buildTimestamp'] as String? ?? '';
 
-      debugPrint(
-        '[UpdateService] Poll: v$serverVersion @ $serverTimestamp '
-        '(baseline: $_initialBuildTimestamp)',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[UpdateService] Poll: v$serverVersion @ $serverTimestamp '
+          '(baseline: $_initialBuildTimestamp)',
+        );
+      }
 
       // If we haven't captured a baseline yet, store it now
       if (_initialBuildTimestamp == null) {
@@ -101,34 +105,42 @@ class UpdateService {
       queryParameters: {'_': cacheBust.toString()},
     );
 
-    final response = await http.get(
-      uri,
-      headers: const {
-        'cache-control': 'no-cache, no-store',
-        'pragma': 'no-cache',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      debugPrint('[UpdateService] Server returned ${response.statusCode}');
-      return null;
-    }
-
-    final contentType = response.headers['content-type'] ?? '';
-    if (!contentType.contains('application/json') &&
-        !response.body.trim().startsWith('{')) {
-      debugPrint(
-        '[UpdateService] Invalid content type: $contentType. '
-        'Likely HTML error page.',
-      );
-      return null;
-    }
-
     try {
+      final response = await http.get(
+        uri,
+        headers: const {
+          'cache-control': 'no-cache, no-store',
+          'pragma': 'no-cache',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          debugPrint('[UpdateService] Server returned ${response.statusCode}');
+        }
+        return null;
+      }
+
+      final contentType = response.headers['content-type'] ?? '';
+      if (!contentType.contains('application/json') &&
+          !response.body.trim().startsWith('{')) {
+        if (kDebugMode) {
+          debugPrint(
+            '[UpdateService] Invalid content type: $contentType. '
+            'Likely HTML error page.',
+          );
+        }
+        return null;
+      }
+
       final decoded = jsonDecode(response.body);
       if (decoded is Map<String, dynamic>) return decoded;
     } catch (e) {
-      debugPrint('[UpdateService] JSON decode failed: $e');
+      // Silence network errors (connection refused, timeout) to avoid console spam
+      // These are expected when the local dev server is stopped.
+      if (kDebugMode) {
+        // Log sparingly or only on specific error types if needed
+      }
     }
 
     return null;

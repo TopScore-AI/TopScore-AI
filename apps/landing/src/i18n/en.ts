@@ -192,6 +192,8 @@ const en = {
     'faq.6.a': 'The AI Tutor covers Mathematics, Sciences (Biology, Chemistry, Physics), English, Kiswahili, History, Geography, Business Studies, CRE/IRE, and more.',
     'faq.7.q': 'How do I contact support?',
     'faq.7.a': 'You can reach us via the in-app help centre or email support@topscore-ai.com. We typically respond within 24 hours.',
+    'faq.8.q': 'Why does TopScore AI need my Google account information?',
+    'faq.8.a': 'We use your Google account information (such as your email and basic profile) strictly to create and secure your account, personalize your learning dashboard, and sync your study progress across devices. We never share your data without your explicit consent.',
 
     // ── Video Demo ──
     'video.label': '🎥 See It In Action',

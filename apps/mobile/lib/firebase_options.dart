@@ -58,6 +58,7 @@ class DefaultFirebaseOptions {
         appId: dotenv.env['ANDROID_APP_ID']!,
         messagingSenderId: dotenv.env['MESSAGING_SENDER_ID']!,
         projectId: dotenv.env['PROJECT_ID']!,
+        authDomain: dotenv.env['AUTH_DOMAIN'],
         databaseURL: dotenv.env['DATABASE_URL'],
         storageBucket: dotenv.env['STORAGE_BUCKET'],
       );
@@ -67,6 +68,7 @@ class DefaultFirebaseOptions {
         appId: dotenv.env['IOS_APP_ID']!,
         messagingSenderId: dotenv.env['MESSAGING_SENDER_ID']!,
         projectId: dotenv.env['PROJECT_ID']!,
+        authDomain: dotenv.env['AUTH_DOMAIN'],
         databaseURL: dotenv.env['DATABASE_URL'],
         storageBucket: dotenv.env['STORAGE_BUCKET'],
         iosBundleId: dotenv.env['IOS_BUNDLE_ID'],
@@ -77,6 +79,7 @@ class DefaultFirebaseOptions {
         appId: dotenv.env['IOS_APP_ID']!, // Usually shares App ID with iOS
         messagingSenderId: dotenv.env['MESSAGING_SENDER_ID']!,
         projectId: dotenv.env['PROJECT_ID']!,
+        authDomain: dotenv.env['AUTH_DOMAIN'],
         databaseURL: dotenv.env['DATABASE_URL'],
         storageBucket: dotenv.env['STORAGE_BUCKET'],
         iosBundleId: dotenv.env['IOS_BUNDLE_ID'],

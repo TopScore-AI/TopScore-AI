@@ -296,6 +296,9 @@ class _HomeTabState extends State<HomeTab> {
                     children: [
                       _buildHeader(context, displayName, 12),
                       const SizedBox(height: AppTheme.spacingLg),
+                        // Quick Links Section
+                      _buildQuickLinks(context),
+                      const SizedBox(height: AppTheme.spacingLg),
                       const SessionHistoryCarousel(),
                       const SizedBox(height: AppTheme.spacingLg),
                       _buildHeroCard(context),
@@ -317,6 +320,85 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   // ...existing code...
+
+  Widget _buildQuickLinks(BuildContext context) {
+    final theme = Theme.of(context);
+    final quickLinks = [
+      {
+        'label': 'Timetable',
+        'icon': Icons.calendar_today,
+        'route': '/timetable',
+        'color': AppColors.accentTeal,
+      },
+      {
+        'label': 'Resources',
+        'icon': Icons.folder_open,
+        'route': '/resources',
+        'color': AppColors.secondaryViolet,
+      },
+      {
+        'label': 'Notes',
+        'icon': Icons.note,
+        'route': '/notes',
+        'color': AppColors.warning,
+      },
+      {
+        'label': 'Profile',
+        'icon': Icons.person,
+        'route': '/profile',
+        'color': AppColors.secondaryBlue,
+      },
+      {
+        'label': 'Notifications',
+        'icon': Icons.notifications,
+        'route': '/notifications',
+        'color': AppColors.error,
+      },
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
+      child: SizedBox(
+        height: 90,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: quickLinks.length,
+          separatorBuilder: (context, i) => const SizedBox(width: 18),
+          itemBuilder: (context, i) {
+            final link = quickLinks[i];
+            return BounceWrapper(
+              onTap: () => context.push(link['route'] as String),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: (link['color'] as Color).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Icon(
+                      link['icon'] as IconData,
+                      color: link['color'] as Color,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    link['label'] as String,
+                    style: GoogleFonts.nunito(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   Widget _buildSearchResultsSection(BuildContext context) {
     final theme = Theme.of(context);

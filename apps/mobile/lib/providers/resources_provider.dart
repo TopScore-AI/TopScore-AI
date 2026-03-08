@@ -188,9 +188,208 @@ class ResourcesProvider extends ChangeNotifier {
           _recentlyOpened.map((f) => jsonEncode(f.toMap())).toList();
       await _offlineService.setStringList(_recentFilesPrefKey, jsonList);
 
+      // Invalidate recommendations so they refresh next time
+      _recommendations = [];
+      _recommendationsLoaded = false;
+
       notifyListeners();
     } catch (e) {
       debugPrint("Error tracking file open: $e");
     }
+  }
+
+  // ==========================================
+  // Recommendations Based on History
+  // ==========================================
+  List<FirebaseFile> _recommendations = [];
+  bool _recommendationsLoaded = false;
+  bool _recommendationsLoading = false;
+
+  List<FirebaseFile> get recommendations => _recommendations;
+  bool get recommendationsLoaded => _recommendationsLoaded;
+  bool get recommendationsLoading => _recommendationsLoading;
+
+  /// Build file recommendations based on the user's recently opened files.
+  ///
+  /// Strategy:
+  /// 1. Extract subjects and categories from recently opened files
+  /// 2. Query Firestore for files matching those subjects/categories
+  /// 3. Exclude files the user already opened
+  /// 4. Return up to [limit] recommendations
+  Future<void> fetchRecommendations({
+    required UserModel user,
+    int limit = 6,
+  }) async {
+    if (_recommendationsLoading) return;
+    if (_recommendationsLoaded && _recommendations.isNotEmpty) return;
+
+    _recommendationsLoading = true;
+    // Don't notify here to avoid unnecessary rebuilds during load
+
+    try {
+      final recentFiles = _recentlyOpened;
+      final openedPaths = recentFiles.map((f) => f.path).toSet();
+
+      // Extract the subjects and categories the user gravitates toward
+      final subjectCounts = <String, int>{};
+      final categoryCounts = <String, int>{};
+      for (final file in recentFiles) {
+        if (file.subject != null && file.subject!.isNotEmpty) {
+          subjectCounts[file.subject!] =
+              (subjectCounts[file.subject!] ?? 0) + 1;
+        }
+        if (file.category != null && file.category!.isNotEmpty) {
+          categoryCounts[file.category!] =
+              (categoryCounts[file.category!] ?? 0) + 1;
+        }
+      }
+
+      // Sort by frequency — most accessed first
+      final topSubjects = (subjectCounts.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .map((e) => e.key)
+          .take(3)
+          .toList();
+
+      final topCategories = (categoryCounts.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .map((e) => e.key)
+          .take(2)
+          .toList();
+
+      final List<FirebaseFile> candidates = [];
+      final seenPaths = <String>{...openedPaths};
+
+      // Fetch by top subjects
+      for (final subject in topSubjects) {
+        if (candidates.length >= limit * 2) break;
+        final results = await StorageService.filterBySubjectLevel(
+          subject: subject,
+          limit: limit,
+        );
+        for (final f in results) {
+          if (!seenPaths.contains(f.path)) {
+            candidates.add(f);
+            seenPaths.add(f.path);
+          }
+        }
+      }
+
+      // Fetch by top categories if we need more
+      if (candidates.length < limit) {
+        for (final category in topCategories) {
+          if (candidates.length >= limit * 2) break;
+          final collections = ['cbc_files', '844_files'];
+          for (final col in collections) {
+            try {
+              final snapshot = await FirebaseFirestore.instance
+                  .collection(col)
+                  .where('category', isEqualTo: category)
+                  .limit(limit)
+                  .get();
+              for (final doc in snapshot.docs) {
+                final file = FirebaseFile.fromFirestore(doc);
+                if (!seenPaths.contains(file.path)) {
+                  candidates.add(file);
+                  seenPaths.add(file.path);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      // If still no candidates (new user with no history), fall back to
+      // user's grade/curriculum
+      if (candidates.isEmpty) {
+        final curriculum = user.educationLevel ?? user.curriculum;
+        final collectionScope =
+            (curriculum?.toUpperCase().contains('844') == true ||
+                    curriculum?.toUpperCase().contains('KCSE') == true)
+                ? '844_files'
+                : 'cbc_files';
+
+        try {
+          Query query =
+              FirebaseFirestore.instance.collection(collectionScope);
+
+          if (user.grade != null) {
+            query = query.where('grade', isEqualTo: user.grade);
+          }
+
+          final snapshot = await query.limit(limit).get();
+          for (final doc in snapshot.docs) {
+            final file = FirebaseFile.fromFirestore(doc);
+            if (!seenPaths.contains(file.path)) {
+              candidates.add(file);
+              seenPaths.add(file.path);
+            }
+          }
+        } catch (e) {
+          debugPrint("Error fetching fallback recommendations: $e");
+        }
+      }
+
+      // Score and rank candidates
+      candidates.sort((a, b) {
+        int scoreA = _recommendationScore(a, topSubjects, topCategories, user);
+        int scoreB = _recommendationScore(b, topSubjects, topCategories, user);
+        return scoreB.compareTo(scoreA);
+      });
+
+      _recommendations = candidates.take(limit).toList();
+      _recommendationsLoaded = true;
+    } catch (e) {
+      debugPrint("Error fetching recommendations: $e");
+    } finally {
+      _recommendationsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Score a file for recommendation ranking.
+  /// Higher score = more relevant to the user.
+  int _recommendationScore(
+    FirebaseFile file,
+    List<String> topSubjects,
+    List<String> topCategories,
+    UserModel user,
+  ) {
+    int score = 0;
+
+    // Subject match (strongest signal)
+    if (file.subject != null && topSubjects.contains(file.subject)) {
+      score += 10 * (topSubjects.length - topSubjects.indexOf(file.subject!));
+    }
+
+    // Category match
+    if (file.category != null && topCategories.contains(file.category)) {
+      score += 5;
+    }
+
+    // Grade match
+    if (file.grade != null && file.grade == user.grade) {
+      score += 8;
+    }
+
+    // Curriculum match
+    final userCurriculum =
+        (user.educationLevel ?? user.curriculum)?.toUpperCase() ?? '';
+    final fileCurriculum = file.curriculum?.toUpperCase() ?? '';
+    if (userCurriculum.isNotEmpty &&
+        fileCurriculum.isNotEmpty &&
+        fileCurriculum.contains(userCurriculum)) {
+      score += 4;
+    }
+
+    // User's subject list match
+    if (file.subject != null && user.subjects != null) {
+      if (user.subjects!
+          .any((s) => s.toLowerCase() == file.subject!.toLowerCase())) {
+        score += 6;
+      }
+    }
+
+    return score;
   }
 }

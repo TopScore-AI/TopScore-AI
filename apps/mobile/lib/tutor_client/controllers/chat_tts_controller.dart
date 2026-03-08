@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/services.dart';
+import 'package:topscore_ai/shared/utils/markdown_stripper.dart';
 
 class ChatTtsController extends ChangeNotifier {
   final FlutterTts _flutterTts = FlutterTts();
@@ -129,56 +130,5 @@ class ChatTtsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _cleanMarkdown(String text) {
-    var cleaned = text;
-
-    // 1. Remove Fenced Code Blocks (```code```)
-    cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
-
-    // 2. Remove Images (![alt](url))
-    cleaned = cleaned.replaceAll(RegExp(r'!\[.*?\]\(.*?\)'), '');
-
-    // 3. Convert Links ([text](url)) to just text
-    cleaned = cleaned.replaceAllMapped(
-      RegExp(r'\[(.*?)\]\(.*?\)'),
-      (m) => m[1] ?? '',
-    );
-
-    // 4. Remove Horizontal Rules (---, ***)
-    cleaned = cleaned.replaceAll(
-        RegExp(r'^\s*([-*_])\s*(?:\1\s*){2,}$', multiLine: true), '');
-
-    // 5. Remove Table markup (pipes and separators)
-    // Strip separator lines: |---|---|
-    cleaned =
-        cleaned.replaceAll(RegExp(r'^\s*[:\-|\s]+$', multiLine: true), '');
-    // Strip pipes: |
-    cleaned = cleaned.replaceAll('|', ' ');
-
-    // 6. Remove Header markers (#, ##, etc.)
-    cleaned = cleaned.replaceAll(RegExp(r'^#+\s*', multiLine: true), '');
-
-    // 7. Remove Blockquote markers (>)
-    cleaned = cleaned.replaceAll(RegExp(r'^>\s*', multiLine: true), '');
-
-    // 8. Remove List bullets and numbers (-, *, +, 1.)
-    cleaned = cleaned.replaceAll(
-        RegExp(r'^\s*([-*+]|\d+\.)\s+', multiLine: true), ' ');
-
-    // 9. Remove Bold/Italic markers (**, __, *, _)
-    cleaned = cleaned.replaceAll(RegExp(r'(\*\*|__)(.*?)\1'), r'$2');
-    cleaned = cleaned.replaceAll(RegExp(r'(\*|_)(.*?)\1'), r'$2');
-
-    // 10. Remove Inline code markers (`)
-    cleaned = cleaned.replaceAll('`', '');
-
-    // 11. Remove LaTeX/Math markers ($$, $)
-    cleaned = cleaned.replaceAll(r'$$', '').replaceAll(r'$', '');
-
-    // 12. Cleanup extra whitespace
-    cleaned = cleaned.replaceAll(RegExp(r'\n+'), '\n');
-    cleaned = cleaned.replaceAll(RegExp(r'[ \t]+'), ' ');
-
-    return cleaned.trim();
-  }
+  String _cleanMarkdown(String text) => MarkdownStripper.strip(text);
 }

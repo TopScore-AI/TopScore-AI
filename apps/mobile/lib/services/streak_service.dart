@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'widget_data_service.dart';
 
 /// Manages a user's daily learning streak.
 /// Called on app open to update and read streak data.
@@ -27,6 +28,10 @@ class StreakService {
           'lastActiveDate': today.toIso8601String(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Update Widget
+        WidgetDataService.updateStreakWidget(streakCount: 1, dayProgress: 0.1);
+
         return 1;
       }
 
@@ -38,6 +43,10 @@ class StreakService {
       if (lastActiveStr == null) {
         await ref.update(
             {'currentStreak': 1, 'lastActiveDate': today.toIso8601String()});
+
+        // Update Widget
+        WidgetDataService.updateStreakWidget(streakCount: 1, dayProgress: 0.1);
+
         return 1;
       }
 
@@ -59,6 +68,11 @@ class StreakService {
           'lastActiveDate': today.toIso8601String(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Update Widget
+        WidgetDataService.updateStreakWidget(
+            streakCount: newStreak, dayProgress: 1.0);
+
         return newStreak;
       } else {
         // Streak broken — reset
@@ -67,6 +81,10 @@ class StreakService {
           'lastActiveDate': today.toIso8601String(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Update Widget
+        WidgetDataService.updateStreakWidget(streakCount: 1, dayProgress: 0.1);
+
         return 1;
       }
     } catch (e) {

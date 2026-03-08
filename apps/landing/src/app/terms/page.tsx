@@ -102,7 +102,7 @@ export default function TermsPage() {
                 <h2>12. Contact Us</h2>
                 <p>
                     For questions about these terms, please contact us at{' '}
-                    <a href="mailto:legal@topscore-ai.com">legal@topscore-ai.com</a>.
+                    <a href="mailto:legal@topscoreapp.ai">legal@topscore-ai.com</a>.
                 </p>
             </article>
             <Footer />

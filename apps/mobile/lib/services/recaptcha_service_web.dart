@@ -103,4 +103,34 @@ class RecaptchaService {
       return null;
     }
   }
+
+  /// Shows the reCAPTCHA badge if it exists in the DOM.
+  static void showBadge() {
+    if (!kIsWeb) return;
+    try {
+      final badge =
+          web.document.querySelector('.grecaptcha-badge') as web.HTMLElement?;
+      if (badge != null) {
+        badge.style.visibility = 'visible';
+        debugPrint('RecaptchaService: Badge shown');
+      }
+    } catch (e) {
+      debugPrint('RecaptchaService: Error showing badge - $e');
+    }
+  }
+
+  /// Hides the reCAPTCHA badge if it exists in the DOM.
+  static void hideBadge() {
+    if (!kIsWeb) return;
+    try {
+      final badge =
+          web.document.querySelector('.grecaptcha-badge') as web.HTMLElement?;
+      if (badge != null) {
+        badge.style.visibility = 'hidden';
+        debugPrint('RecaptchaService: Badge hidden');
+      }
+    } catch (e) {
+      debugPrint('RecaptchaService: Error hiding badge - $e');
+    }
+  }
 }

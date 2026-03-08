@@ -13,19 +13,20 @@ import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
 
 export const metadata: Metadata = {
+  title: 'TopScore AI — Smart AI Learning platform for Kenyan Students',
+  description:
+    'AI-powered tutoring, CBC & KCSE study resources, past papers, smart study tools, detailed progress tracking, and offline mode. Free to download.',
+  openGraph: {
+    title: 'TopScore AI — Smart AI Learning platform for Kenyan Students',
+    description:
+      'The #1 AI-powered tutoring and study platform for CBC & KCSE. Snap photos, chat with books, and ace your exams. Free to download.',
+    url: 'https://topscoreapp.ai',
+    images: [{ url: '/og-image.png', width: 1200, height: 630 }],
+  },
   alternates: { canonical: 'https://topscoreapp.ai' },
 };
 
-const organizationSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'TopScore AI',
-  url: 'https://topscoreapp.ai',
-  logo: 'https://topscoreapp.ai/logo.png',
-  sameAs: [],
-  description:
-    'AI-powered tutoring and study resources for Kenyan students — CBC, IGCSE & KCSE.',
-};
+
 
 const softwareSchema = {
   '@context': 'https://schema.org',
@@ -47,7 +48,6 @@ const softwareSchema = {
 export default function Home() {
   return (
     <main>
-      <JsonLd data={organizationSchema} />
       <JsonLd data={softwareSchema} />
       <Nav />
       <Hero />

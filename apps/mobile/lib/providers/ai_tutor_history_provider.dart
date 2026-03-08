@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class AiTutorHistoryProvider with ChangeNotifier {
   List<Map<String, dynamic>> _threads = [];
@@ -16,16 +16,6 @@ class AiTutorHistoryProvider with ChangeNotifier {
   int get unreadCount => _unreadThreadIds.length;
   bool get isLoading => _isLoading;
   DateTime? get lastFetchTime => _lastFetchTime;
-
-  String get _backendUrl {
-    if (kIsWeb) {
-      return 'https://agent.topscoreapp.ai';
-    }
-    if (Platform.isAndroid) {
-      return 'https://agent.topscoreapp.ai';
-    }
-    return 'https://agent.topscoreapp.ai';
-  }
 
   Future<void> fetchHistory(
     String userId, {
@@ -53,7 +43,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
     }
 
     try {
-      final uri = Uri.parse('$_backendUrl/api/history/$userId').replace(
+      final uri = Uri.parse(ApiConfig.getHistoryUrl(userId)).replace(
         queryParameters: limit != null ? {'limit': limit.toString()} : null,
       );
       final response = await http.get(uri);
@@ -128,7 +118,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
   Future<bool> deleteThread(String userId, String threadId) async {
     try {
       final response = await http.delete(
-        Uri.parse('$_backendUrl/threads/$threadId'),
+        Uri.parse(ApiConfig.getThreadDeleteUrl(threadId)),
       );
 
       if (response.statusCode == 200) {
@@ -145,7 +135,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
   Future<bool> deleteAllThreads(String userId) async {
     try {
       final response = await http.delete(
-        Uri.parse('$_backendUrl/api/history/$userId/clear'),
+        Uri.parse(ApiConfig.getClearHistoryUrl(userId)),
       );
 
       if (response.statusCode == 200) {

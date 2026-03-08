@@ -39,7 +39,9 @@ class OfflineStorage {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       return jsonList.map((j) => CachedMessage.fromJson(j)).toList();
     } catch (e) {
-      debugPrint('Error loading cached messages: $e');
+      if (kDebugMode) {
+        debugPrint('Error loading cached messages: $e');
+      }
       return [];
     }
   }
@@ -59,7 +61,9 @@ class OfflineStorage {
     final pending = await getPendingMessages();
     pending.add(message);
     await _savePendingMessages(pending);
-    debugPrint('Saved pending message: ${message.id}');
+    if (kDebugMode) {
+      debugPrint('Saved pending message: ${message.id}');
+    }
   }
 
   /// Get all pending messages
@@ -73,7 +77,9 @@ class OfflineStorage {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       return jsonList.map((j) => PendingMessage.fromJson(j)).toList();
     } catch (e) {
-      debugPrint('Error loading pending messages: $e');
+      if (kDebugMode) {
+        debugPrint('Error loading pending messages: $e');
+      }
       return [];
     }
   }
@@ -150,24 +156,24 @@ class CachedMessage {
   });
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'thread_id': threadId,
-    'content': content,
-    'role': role,
-    'timestamp': timestamp.toIso8601String(),
-    'synced': synced,
-    'metadata': metadata,
-  };
+        'id': id,
+        'thread_id': threadId,
+        'content': content,
+        'role': role,
+        'timestamp': timestamp.toIso8601String(),
+        'synced': synced,
+        'metadata': metadata,
+      };
 
   factory CachedMessage.fromJson(Map<String, dynamic> json) => CachedMessage(
-    id: json['id'],
-    threadId: json['thread_id'],
-    content: json['content'],
-    role: json['role'],
-    timestamp: DateTime.parse(json['timestamp']),
-    synced: json['synced'] ?? false,
-    metadata: json['metadata'],
-  );
+        id: json['id'],
+        threadId: json['thread_id'],
+        content: json['content'],
+        role: json['role'],
+        timestamp: DateTime.parse(json['timestamp']),
+        synced: json['synced'] ?? false,
+        metadata: json['metadata'],
+      );
 }
 
 /// A message pending to be sent
@@ -191,34 +197,34 @@ class PendingMessage {
   });
 
   PendingMessage copyWith({int? retryCount}) => PendingMessage(
-    id: id,
-    threadId: threadId,
-    userId: userId,
-    content: content,
-    createdAt: createdAt,
-    retryCount: retryCount ?? this.retryCount,
-    extraData: extraData,
-  );
+        id: id,
+        threadId: threadId,
+        userId: userId,
+        content: content,
+        createdAt: createdAt,
+        retryCount: retryCount ?? this.retryCount,
+        extraData: extraData,
+      );
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'thread_id': threadId,
-    'user_id': userId,
-    'content': content,
-    'created_at': createdAt.toIso8601String(),
-    'retry_count': retryCount,
-    'extra_data': extraData,
-  };
+        'id': id,
+        'thread_id': threadId,
+        'user_id': userId,
+        'content': content,
+        'created_at': createdAt.toIso8601String(),
+        'retry_count': retryCount,
+        'extra_data': extraData,
+      };
 
   factory PendingMessage.fromJson(Map<String, dynamic> json) => PendingMessage(
-    id: json['id'],
-    threadId: json['thread_id'],
-    userId: json['user_id'],
-    content: json['content'],
-    createdAt: DateTime.parse(json['created_at']),
-    retryCount: json['retry_count'] ?? 0,
-    extraData: json['extra_data'],
-  );
+        id: json['id'],
+        threadId: json['thread_id'],
+        userId: json['user_id'],
+        content: json['content'],
+        createdAt: DateTime.parse(json['created_at']),
+        retryCount: json['retry_count'] ?? 0,
+        extraData: json['extra_data'],
+      );
 }
 
 /// Sync manager for offline messages
@@ -261,7 +267,9 @@ class OfflineSyncManager {
             failed++;
           }
         } catch (e) {
-          debugPrint('Failed to sync message ${message.id}: $e');
+          if (kDebugMode) {
+            debugPrint('Failed to sync message ${message.id}: $e');
+          }
           failed++;
         }
       }

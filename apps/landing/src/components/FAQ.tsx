@@ -5,7 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import AnimatedSection from './AnimatedSection';
 import styles from './FAQ.module.css';
 
-const faqCount = 8;
+const faqCount = 9;
 
 
 export default function FAQ() {

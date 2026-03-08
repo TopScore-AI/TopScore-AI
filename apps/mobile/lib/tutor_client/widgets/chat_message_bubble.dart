@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../../constants/colors.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
-import '../../constants/colors.dart';
 import '../../services/clipboard_service.dart';
 import '../../services/haptics_service.dart';
 import '../../widgets/network_aware_image.dart';
@@ -140,8 +142,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDark
-                      ? [const Color(0xFF37393E), const Color(0xFF2B2D31)]
-                      : [const Color(0xFF0B57D0), const Color(0xFF4285F4)],
+                      ? [
+                          AppColors.surfaceVariantDark,
+                          AppColors.surfaceElevatedDark
+                        ]
+                      : [
+                          AppColors.primary,
+                          AppColors.primary.withValues(alpha: 0.85)
+                        ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -208,7 +216,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isDark ? const Color(0xFF1E1F22) : Colors.white,
+                        color: isDark
+                            ? AppColors.surfaceVariantDark
+                            : Colors.white,
                         border: Border.all(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.1)
@@ -405,13 +415,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildSmallActionIcon(
-            Icons.edit_outlined,
+            Icons.edit_rounded,
             widget.onEdit,
             theme,
             tooltip: 'Edit',
           ),
           _buildSmallActionIcon(
-            Icons.copy_all_outlined,
+            Icons.copy_all_rounded,
             widget.onCopy,
             theme,
             tooltip: 'Copy',
@@ -427,6 +437,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       data: _cleanContent(widget.message.text),
       selectable: true,
       softLineBreak: true,
+      onTapLink: (text, href, title) {
+        if (href != null) {
+          launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+        }
+      },
       sizedImageBuilder: (config) {
         if (config.uri.scheme == 'http' || config.uri.scheme == 'https') {
           return ClipRRect(
@@ -505,7 +520,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           backgroundColor: isDark
               ? Colors.white.withValues(alpha: 0.1)
               : Colors.black.withValues(alpha: 0.08),
-          color: isDark ? Colors.tealAccent : Colors.teal.shade800,
+          color: isDark
+              ? AppColors.accentTeal
+              : AppColors.accentTeal.withValues(alpha: 0.8),
         ),
         codeblockPadding: EdgeInsets.zero,
         codeblockDecoration: BoxDecoration(
@@ -529,7 +546,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
             ..._buildTtsControls(theme)
           else
             _buildActionIcon(
-              Icons.volume_up_outlined,
+              Icons.volume_up_rounded,
               () => widget.onSpeak(widget.message.text),
               theme,
               tooltip: 'Read aloud',
@@ -541,13 +558,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           _buildActionIcon(
             widget.message.isBookmarked
                 ? Icons.bookmark_rounded
-                : Icons.bookmark_outline_rounded,
+                : Icons.bookmark_border_rounded,
             widget.onToggleBookmark,
             theme,
             tooltip: 'Bookmark',
             color: widget.message.isBookmarked ? Colors.amber : null,
           ),
-          _buildActionIcon(Icons.share_outlined, widget.onShare, theme,
+          _buildActionIcon(Icons.share_rounded, widget.onShare, theme,
               tooltip: 'Share'),
 
           // Separator
@@ -562,14 +579,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
           // Feedback
           _buildActionIcon(
-            Icons.thumb_up_outlined,
+            Icons.thumb_up_rounded,
             () => widget.onFeedback(1),
             theme,
             isActive: widget.message.feedback == 1,
             color: widget.message.feedback == 1 ? AppColors.accentTeal : null,
           ),
           _buildActionIcon(
-            Icons.thumb_down_outlined,
+            Icons.thumb_down_rounded,
             () => widget.onFeedback(-1),
             theme,
             isActive: widget.message.feedback == -1,
@@ -644,7 +661,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       label: tooltip ?? 'Small action button',
       button: true,
       child: IconButton(
-        icon: Icon(icon, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+        icon: Icon(icon,
+            size: 16,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
         onPressed: onTap,
         tooltip: tooltip,
         constraints: const BoxConstraints(),
@@ -668,7 +687,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           Row(
             children: [
               Icon(
-                Icons.verified_user_outlined,
+                Icons.verified_user_rounded,
                 size: 16,
                 color: theme.primaryColor,
               ),
@@ -697,18 +716,26 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   }
 
   Widget _buildSourceChip(SourceMetadata source, ThemeData theme, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.primaryColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        source.title,
-        style: TextStyle(
-          fontSize: 11,
-          color: theme.primaryColor,
-          fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: () {
+        if (source.url != null && source.url!.isNotEmpty) {
+          launchUrl(Uri.parse(source.url!),
+              mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.primaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          source.title,
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.primaryColor,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );

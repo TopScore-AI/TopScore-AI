@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../constants/colors.dart';
 
 class CollapsedSidebar extends StatelessWidget {
   final bool isDark;
@@ -19,7 +20,7 @@ class CollapsedSidebar extends StatelessWidget {
     return Container(
       width: 60,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0A0A0A) : Colors.white,
+        color: isDark ? AppColors.backgroundDark : Colors.white,
         border: Border(
           right: BorderSide(
             color: isDark
@@ -60,7 +61,7 @@ class CollapsedSidebar extends StatelessWidget {
           // New Chat
           _buildNavIcon(
             context: context,
-            icon: Icons.edit_outlined,
+            icon: Icons.edit_rounded,
             tooltip: 'New Chat',
             theme: theme,
             onTap: onStartNewChat,

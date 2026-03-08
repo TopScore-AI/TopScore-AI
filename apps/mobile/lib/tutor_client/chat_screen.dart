@@ -1,26 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io' show File;
-import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'dart:io' show File, Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
-import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:camera/camera.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
-import 'package:image/image.dart' as img;
 
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
@@ -29,10 +27,11 @@ import 'widgets/chat_input_area.dart';
 import 'widgets/chat_history_sidebar.dart';
 import 'widgets/collapsed_sidebar.dart';
 import 'widgets/empty_state_widget.dart';
-import 'widgets/voice_session_overlay.dart';
 import 'widgets/session_rating_dialog.dart';
 import '../config/app_theme.dart';
+import '../constants/colors.dart';
 
+import '../shared/utils/markdown_stripper.dart';
 import '../models/video_result.dart';
 import '../services/clipboard_service.dart';
 
@@ -43,7 +42,7 @@ import '../providers/tutor_connection_provider.dart';
 import '../providers/ai_tutor_history_provider.dart';
 import '../config/api_config.dart';
 import 'enhanced_websocket_service.dart';
-import 'pcm_recorder.dart';
+import '../screens/voice_chat_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? chatThread;
@@ -63,7 +62,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String get _backendUrl => ApiConfig.baseUrl;
@@ -77,13 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
-  final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
-
-  /// Streams raw PCM 16kHz mono audio for Gemini Live real-time input.
-  final PcmRecorder _pcmRecorder = PcmRecorder();
-  StreamSubscription<Uint8List>? _pcmStreamSub;
-  StreamSubscription<double>? _pcmAmplitudeSub;
   final FlutterTts _flutterTts = FlutterTts();
 
   // Voice message playback state
@@ -93,28 +86,37 @@ class _ChatScreenState extends State<ChatScreen> {
   Duration _audioPosition = Duration.zero;
 
   bool _isTyping = false;
-  bool _isRecording = false;
   // Add this new variable to track cancellation
   bool _userStoppedGeneration = false;
   String? _currentStreamingMessageId;
 
-  // Settings
-  final String _selectedModelKey = 'gemini-2.5-flash';
-
   // Throttling timers for streaming UI updates
   Timer? _chunkUpdateTimer;
   Timer? _scrollDebounceTimer;
-  final Map<String, String> _pendingChunks =
-      {}; // Accumulate content between renders
+  final Map<String, String> _pendingChunks = {};
 
-  // TTS state tracking
+  // TTS state tracking (manual chat bubbles)
   bool _isTtsSpeaking = false;
   bool _isTtsPaused = false;
   String? _speakingMessageId;
 
-  // Streaming
-  final List<String> _tokenQueue = [];
+  // Image Picker instance
+  final ImagePicker _imagePicker = ImagePicker();
+
+  List<Map<String, String>> _dynamicSuggestions = [];
+
   Timer? _typingTimer;
+  Timer? _placeholderTimer;
+  int _currentPlaceholderIndex = 0;
+  final List<String> _placeholderMessages = [
+    'Ask me anything...',
+    'How can I help you today?',
+    'I can help with math, science, and more!',
+    'Try asking for a study plan!',
+    'Need help with a problem? Send a photo!'
+  ];
+
+  // Settings
 
   // WebSocket Subscriptions
   StreamSubscription? _wsMessageSub;
@@ -144,21 +146,20 @@ class _ChatScreenState extends State<ChatScreen> {
   final Map<String, String> _titleCache = {};
 
   // Pagination
-  static const int _initialMessageLimit = 50; // Load last 50 messages initially
-  // bool _hasMoreMessages = false; // Reserved for future load-more feature
+  static const int _initialMessageLimit = 50;
 
   // Message Queuing
   final List<Map<String, dynamic>> _messageQueue = [];
-
-  // Settings
-
-  // Settings - Managed by backend
-  // Removed _availableModels, _selectedModelKey, _tools
 
   final FocusNode _messageFocusNode = FocusNode();
   // Sidebar tri-state: 'expanded' (280px), 'collapsed' (60px icon-only), 'hidden' (0px)
   String _sidebarMode = 'collapsed';
   bool _isSidebarInitialized = false;
+
+  // Speech to text
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechEnabled = false;
+  bool _isRecording = false;
 
   @override
   void didChangeDependencies() {
@@ -173,29 +174,6 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showScrollDownButton = false;
   ChatMessage? _replyingToMessage;
 
-  // Live Voice Mode Variables (UPDATED)
-  // Removed: stt.SpeechToText _speechToText = stt.SpeechToText();
-  bool _isVoiceMode = false;
-  bool _isAiSpeaking = false;
-  bool _receivedServerAudio =
-      false; // Tracks if server sent audio for current response
-  StateSetter? _voiceDialogSetState; // For updating voice dialog UI
-
-  // Voice phase state machine for immersive UI
-  VoicePhase _voicePhase = VoicePhase.listening;
-  double _currentAmplitude = -50.0;
-  String _liveTranscription = '';
-
-  // Camera for immersive voice mode
-  CameraController? _cameraController;
-  bool _showCamera = false;
-  bool _isMuted = false;
-  Timer? _cameraFrameTimer;
-
-  // VAD timers (server-side VAD via Gemini Live API handles speech detection)
-  Timer? _amplitudeTimer;
-  Timer? _vadTimer;
-
   // Attachment Staging
   String? _pendingPreviewData; // Base64 Data URI (For local display ONLY)
   String? _pendingFileUrl; // Firebase Storage URL (For sending to AI)
@@ -203,28 +181,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String? _pendingFileName; // Display name
   bool _isUploading = false; // To show spinner
-
-  // Image Picker instance
-  final ImagePicker _imagePicker = ImagePicker();
-
-  // Search functionality (Removed unused)
-
-  List<Map<String, String>> _dynamicSuggestions = [];
-
-  // Flashcards (Removed unused)
-
-  // Dynamic placeholder messages
-
-  // Dynamic placeholder messages
-  final List<String> _placeholderMessages = [
-    'Ask me anything...',
-    'What would you like to learn today?',
-    'Need help with homework?',
-    'Ask a question...',
-    'How can I help you?',
-  ];
-  int _currentPlaceholderIndex = 0;
-  Timer? _placeholderTimer;
 
   // Chat folders/tags (TODO: implement folder filtering UI)
   // String? _currentFolder;
@@ -253,6 +209,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -267,6 +224,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // 1. Initial Logic
       _initTts();
+      _initSpeech(); // Initialize speech-to-text
       _fetchBookmarks();
       _startPlaceholderRotation();
 
@@ -343,14 +301,22 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       },
     );
-
-    _initLiveVoice();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Graceful cleanup: stop generation if still streaming
+    if (_isTyping || _currentStreamingMessageId != null) {
+      _stopGeneration();
+    }
+
     _wsMessageSub?.cancel();
     _wsConnectionSub?.cancel();
+    _childAddedSub?.cancel();
+    _childChangedSub?.cancel();
+    _childRemovedSub?.cancel();
     _chunkUpdateTimer?.cancel();
     _scrollDebounceTimer?.cancel();
     _textController.dispose();
@@ -358,15 +324,39 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageFocusNode.dispose();
     _typingTimer?.cancel();
     _placeholderTimer?.cancel();
-    _audioRecorder.dispose();
     _audioPlayer.dispose();
-    _pcmStreamSub?.cancel();
-    _pcmAmplitudeSub?.cancel();
-    _pcmRecorder.dispose();
     _flutterTts.stop();
-    _disposeVoiceCamera();
+    _speechToText.stop();
     removePasteHandler();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When the app is closed, backgrounded, or detached:
+    // stop any pending generation and discard incomplete responses.
+    if (state == AppLifecycleState.detached ||
+        state == AppLifecycleState.paused) {
+      if (_isTyping || _currentStreamingMessageId != null) {
+        developer.log(
+          'App lifecycle: $state — stopping generation and cleaning up',
+          name: 'ChatScreen',
+        );
+        _stopGeneration();
+
+        // Remove the incomplete AI message if it was still streaming
+        if (_messages.isNotEmpty && !_messages.last.isUser) {
+          final lastMsg = _messages.last;
+          if (lastMsg.text.isEmpty || lastMsg.text.trim().isEmpty) {
+            _messages.removeLast();
+          }
+        }
+
+        // Clear the message queue
+        _messageQueue.clear();
+      }
+    }
   }
 
   // --- Scroll Listener for Smart Scroll Button ---
@@ -495,16 +485,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _speakingMessageId = null;
         });
       }
-
-      // If in Live Voice Mode, automatically restart listening after AI finishes speaking
-      if (_isVoiceMode && mounted) {
-        setState(() {
-          _isAiSpeaking = false;
-          // _statusMessage = "Listening...";
-        });
-        _voiceDialogSetState?.call(() {});
-        Future.delayed(const Duration(milliseconds: 500), _startListening);
-      }
     });
 
     _flutterTts.setCancelHandler(() {
@@ -534,133 +514,90 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> _initVoiceCamera() async {
-    if (kIsWeb) return; // Camera not supported on web for voice mode
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
-      // Prefer front camera for face-to-face feel
-      final frontCamera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
-      _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.medium,
-        enableAudio: false, // Audio handled by AudioRecorder
-      );
-      await _cameraController!.initialize();
-      if (mounted) {
-        setState(() => _showCamera = true);
-        _voiceDialogSetState?.call(() {});
-      }
-
-      // Start periodic camera frame capture (~1 FPS) and send to Gemini
-      _startCameraFrameCapture();
-    } catch (e) {
-      developer.log('Camera init error (non-fatal): $e', name: 'ChatScreen');
-      // Camera is optional — voice mode works without it
-    }
-  }
-
-  /// Capture a camera frame, blur detected faces for privacy, and send
-  /// the processed JPEG to the Gemini Live session as video context.
-  void _startCameraFrameCapture() {
-    _cameraFrameTimer?.cancel();
-    _cameraFrameTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _captureAndSendFrame(),
-    );
-  }
-
-  Future<void> _captureAndSendFrame() async {
-    if (_cameraController == null ||
-        !_cameraController!.value.isInitialized ||
-        !_isVoiceMode) {
+  /// Initialize Speech-to-Text
+  Future<void> _initSpeech() async {
+    if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Speech-to-text is not officially supported or stable on these platforms
+      // for this package, or requires specific browser permissions for web.
+      // We'll disable it for now.
+      setState(() {
+        _speechEnabled = false;
+      });
       return;
     }
 
-    try {
-      final xFile = await _cameraController!.takePicture();
-      final bytes = await xFile.readAsBytes();
-
-      // Process in an isolate-friendly way to avoid jank
-      final processed = await compute(_blurFacesInImage, bytes);
-
-      if (_isVoiceMode && mounted) {
-        final b64 = base64Encode(processed);
-        _wsService.sendVideoFrame(b64);
-      }
-    } catch (e) {
-      developer.log('Frame capture error: $e', name: 'ChatScreen');
+    _speechEnabled = await _speechToText.initialize(
+      onError: (errorNotification) {
+        developer.log('Speech recognition error: ${errorNotification.errorMsg}',
+            name: 'ChatScreen');
+        if (mounted) {
+          setState(() {
+            _isRecording = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Speech recognition error: ${errorNotification.errorMsg}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+      onStatus: (status) {
+        developer.log('Speech recognition status: $status', name: 'ChatScreen');
+        if (mounted) {
+          setState(() {
+            _isRecording = _speechToText.isListening;
+          });
+        }
+      },
+    );
+    if (mounted) {
+      setState(() {});
     }
   }
 
-  /// Static function that runs in a compute isolate.
-  /// Decodes JPEG, applies a heavy Gaussian blur to the entire image for
-  /// privacy (obscures faces, text on screen, etc.), then re-encodes as
-  /// JPEG.  A full-frame blur is used instead of per-face detection
-  /// because ML Kit cannot run in an isolate, and blurring everything
-  /// is the most reliable privacy guarantee.
-  static Uint8List _blurFacesInImage(Uint8List jpegBytes) {
-    var decoded = img.decodeJpg(jpegBytes);
-    if (decoded == null) return jpegBytes;
-
-    // Downscale to 640px wide for efficiency and additional privacy
-    if (decoded.width > 640) {
-      decoded = img.copyResize(decoded, width: 640);
+  /// Toggle speech recognition (start/stop)
+  Future<void> _toggleDictation() async {
+    if (!_speechEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Speech recognition not available or permission denied.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
 
-    // Apply Gaussian blur — radius 10 obscures facial features while
-    // keeping scene-level context (room, objects, gestures) visible.
-    final blurred = img.gaussianBlur(decoded, radius: 10);
-
-    return Uint8List.fromList(img.encodeJpg(blurred, quality: 70));
-  }
-
-  void _disposeVoiceCamera() {
-    _cameraFrameTimer?.cancel();
-    _cameraFrameTimer = null;
-    _cameraController?.dispose();
-    _cameraController = null;
-    _showCamera = false;
-  }
-
-  Future<void> _initLiveVoice() async {
-    // TTS completion handler for loop-back logic in voice mode
-    // This ensures continuous conversation: speak -> listen -> speak -> ...
-    _flutterTts.setCompletionHandler(() {
-      if (mounted) {
-        setState(() {
-          _isAiSpeaking = false;
-          _isTtsSpeaking = false;
-          _voicePhase = VoicePhase.listening;
-          _liveTranscription = '';
-          // _statusMessage = null;
-        });
-        _voiceDialogSetState?.call(() {});
-      }
-
-      // If still in Voice Mode and AI finished speaking, auto-listen again
-      if (_isVoiceMode && mounted) {
-        _voiceDialogSetState?.call(() {});
-        Future.delayed(const Duration(milliseconds: 500), _startListening);
-      }
-    });
-
-    // Global audio player completion handler for Gemini audio responses
-    _audioPlayer.onPlayerComplete.listen((event) {
-      if (mounted && _isVoiceMode) {
-        setState(() {
-          _isAiSpeaking = false;
-          _voicePhase = VoicePhase.listening;
-          _liveTranscription = '';
-        });
-        _voiceDialogSetState?.call(() {});
-        // Auto-listen after AI finishes speaking
-        Future.delayed(const Duration(milliseconds: 300), _startListening);
-      }
-    });
+    if (_isRecording) {
+      await _speechToText.stop();
+      setState(() {
+        _isRecording = false;
+      });
+    } else {
+      // Clear text field before starting new dictation
+      _textController.clear();
+      setState(() {
+        _isRecording = true;
+      });
+      await _speechToText.listen(
+        onResult: (SpeechRecognitionResult result) {
+          if (mounted) {
+            setState(() {
+              _textController.text = result.recognizedWords;
+            });
+          }
+        },
+        listenFor: const Duration(minutes: 1), // Listen for up to 1 minute
+        pauseFor:
+            const Duration(seconds: 3), // Pause if no speech for 3 seconds
+        listenOptions: SpeechListenOptions(
+          partialResults: true,
+        ),
+        localeId: 'en_US',
+      );
+    }
   }
 
   Future<void> _saveLastThreadId(String threadId) async {
@@ -1033,7 +970,6 @@ class _ChatScreenState extends State<ChatScreen> {
         // Create temporary AI message placeholder
         if (messageId != null) {
           _currentStreamingMessageId = messageId;
-          _receivedServerAudio = false; // Reset for new response
 
           // Check if we already have this message (temporary or permanent)
           final exists = _messages.any((m) => m.id == messageId);
@@ -1060,88 +996,12 @@ class _ChatScreenState extends State<ChatScreen> {
         break;
 
       case 'tool_start':
-        // Don't show technical "Using tools..." message to users
-        break;
-
-      case 'audio':
-        // Server-generated TTS audio - use this instead of client-side TTS
-        final audioUrl = data['url'] ?? data['audio_url'];
-        if (audioUrl != null && _isVoiceMode) {
-          _receivedServerAudio = true; // Mark that we received server audio
-          _playAudioResponse(audioUrl);
-        }
-        break;
-
-      case 'transcription':
-        // User's speech transcribed by Gemini's built-in STT.
-        // Only update the phase — do NOT show transcription text or call
-        // _sendMessage() because Gemini Live already processes audio
-        // end-to-end and will respond with native audio + text via
-        // the 'response' event.
-        final transcribedText = data['content'] as String? ?? '';
-        if (transcribedText.isNotEmpty && _isVoiceMode) {
-          setState(() {
-            _voicePhase = VoicePhase.thinking;
-          });
-          _voiceDialogSetState?.call(() {});
-        }
-        break;
-
-      case 'connected':
-        developer.log(
-          'WebSocket connected: ${data['session_id']}',
-          name: 'ChatScreen',
-        );
-        // Check if this is a Gemini Native Audio connection
-        if (data['mode'] == 'gemini_native_audio') {
-          developer.log(
-            'Connected to Gemini Native Audio: ${data['model']}',
-            name: 'ChatScreen',
-          );
-        }
-        break;
-
-      // Gemini Native Audio: Speech-to-speech response with text AND audio
-      case 'response':
-        final responseText = data['text'] as String? ?? '';
-        final responseAudio = data['audio'] as String?; // Base64 encoded audio
-        final audioMimeType = data['audio_mime_type'] as String? ?? 'audio/wav';
-        final latency = data['latency'];
-
-        developer.log(
-          'Gemini response: ${responseText.length} chars, audio: ${responseAudio != null}, latency: $latency',
-          name: 'ChatScreen',
-        );
-
-        if (responseText.isNotEmpty && _isVoiceMode) {
-          // Update phase only — no transcription text shown
-          setState(() {
-            _voicePhase = VoicePhase.responding;
-          });
-          _voiceDialogSetState?.call(() {});
-
-          // Play the audio response if available
-          if (responseAudio != null && responseAudio.isNotEmpty) {
-            _receivedServerAudio = true;
-            _playGeminiAudioResponse(responseAudio, audioMimeType);
-          } else {
-            // Fallback to client-side TTS if no audio in response
-            _speakInVoiceMode(responseText);
-          }
-        }
-        break;
+      // Don't show technical "Using tools..." message to users
 
       // Gemini Native Audio: TTS-only response
-      case 'speech':
-        final speechAudio = data['audio'] as String?;
-        final speechMimeType =
-            data['audio_mime_type'] as String? ?? 'audio/wav';
-
-        if (speechAudio != null && _isVoiceMode) {
-          _receivedServerAudio = true;
-          _playGeminiAudioResponse(speechAudio, speechMimeType);
-        }
-        break;
+      // case 'speech': // Removed
+      // case 'audio': // Removed
+      //   break; // Removed
 
       case 'title_updated':
         final updatedThreadId = data['thread_id'] ?? _wsService.threadId;
@@ -1293,7 +1153,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
         // Mark temporary message as complete (streaming finished)
         // Firebase will have the final version soon
-        String? completedMessageText;
         final targetId = messageId ?? _currentStreamingMessageId;
 
         if (targetId != null) {
@@ -1307,12 +1166,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 isComplete: true,
                 isTemporary: false, // Mark as permanent when streaming ends
               );
-              completedMessageText = _messages[index].text;
             } else {
               // Fallback if already marked permanent
               final permIndex = _messages.indexWhere((m) => m.id == targetId);
               if (permIndex != -1) {
-                completedMessageText = _messages[permIndex].text;
+                // No action needed, it's already permanent
               }
             }
 
@@ -1324,22 +1182,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   text: content,
                   isTemporary: false, // Mark as permanent
                 );
-                completedMessageText = content;
               }
             }
           });
-        }
-
-        // VOICE MODE: Speak the AI response aloud using TTS (fallback)
-        // This creates the full voice loop: user speaks -> AI responds -> speak -> listen
-        if (_isVoiceMode && !_receivedServerAudio) {
-          if (completedMessageText != null &&
-              completedMessageText!.isNotEmpty) {
-            _speakInVoiceMode(completedMessageText!);
-          } else {
-            // If AI yielded no text, still return to listening to keep the loop alive
-            Future.delayed(const Duration(milliseconds: 500), _startListening);
-          }
         }
 
         _finalizeTurn();
@@ -1377,23 +1222,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // Gemini Live: User interrupted the model mid-response
       case 'interrupted':
-        developer.log('Voice: User interrupted model response', name: 'ChatScreen');
-        if (_isVoiceMode) {
-          // Stop any audio playback immediately
-          _audioPlayer.stop();
-          setState(() {
-            _isAiSpeaking = false;
-            _voicePhase = VoicePhase.listening;
-          });
-          _voiceDialogSetState?.call(() {});
-          // Resume listening for next utterance
-          Future.delayed(const Duration(milliseconds: 300), _startListening);
-        }
+        developer.log('Interrupted', name: 'ChatScreen');
         break;
 
-      // Gemini Live: Turn finished – model is done speaking
       case 'turn_complete':
-        developer.log('Voice: Turn complete', name: 'ChatScreen');
+        developer.log('Turn complete', name: 'ChatScreen');
+        break;
+
+      case 'response':
+        // Cache the message
         break;
 
       case 'error':
@@ -1469,14 +1306,19 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _currentStreamingMessageId = null;
         _isTyping = false; // STOP LOADING
-        // _statusMessage = null;
+      });
+
+      // Auto-refresh the chat title after the AI responds.
+      // The backend generates a title after the first exchange;
+      // give it a moment then fetch the updated title.
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _refreshCurrentTitle();
       });
 
       // Check for queued messages
       if (_messageQueue.isNotEmpty) {
         final nextMessage = _messageQueue.removeAt(0);
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final settings = Provider.of<SettingsProvider>(context, listen: false);
 
         setState(() {
           _isTyping = true;
@@ -1488,10 +1330,50 @@ class _ChatScreenState extends State<ChatScreen> {
           userId: authProvider.userModel?.uid ?? 'anon',
           fileUrl: nextMessage['fileUrl'],
           fileType: nextMessage['fileType'] ?? 'image',
-          modelPreference: 'auto',
-          dataSaver: settings.isLiteMode,
         );
       }
+    }
+  }
+
+  /// Refresh the current thread's title from the backend
+  /// and update both the top bar and the sidebar entry.
+  Future<void> _refreshCurrentTitle() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.userModel?.uid;
+      if (userId == null) return;
+
+      final currentThreadId = _wsService.threadId;
+      final url = Uri.parse(
+        '${ApiConfig.baseUrl}/api/history/$userId?limit=20',
+      );
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final threads = data['threads'] as List? ?? [];
+
+        // Find the current thread and update the title
+        for (final t in threads) {
+          if (t['thread_id'] == currentThreadId) {
+            final newTitle = t['title'] ?? 'New Chat';
+            if (newTitle != _currentTitle && mounted) {
+              setState(() {
+                _currentTitle = newTitle;
+                // Also update the sidebar entry
+                final idx = _threads.indexWhere(
+                  (th) => th['thread_id'] == currentThreadId,
+                );
+                if (idx != -1) {
+                  _threads[idx]['title'] = newTitle;
+                }
+              });
+            }
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      developer.log('Title refresh error: $e', name: 'ChatScreen');
     }
   }
 
@@ -1564,8 +1446,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // NEW: Method to stop generation
   void _stopGeneration() {
-    _typingTimer?.cancel();
-    _tokenQueue.clear();
     setState(() {
       _isTyping = false;
       _currentStreamingMessageId = null;
@@ -1647,8 +1527,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
       _isTyping = true;
-      // _statusMessage = _isVoiceMode ? "Thinking..." : "Connecting...";
-      if (_isVoiceMode) _voiceDialogSetState?.call(() {});
+      // _statusMessage = "Connecting...";
 
       _textController.clear();
       _replyingToMessage = null; // Clear reply state
@@ -1689,10 +1568,13 @@ class _ChatScreenState extends State<ChatScreen> {
         userId: authProvider.userModel?.uid ?? 'anon',
         fileUrl: fileUrlToSend,
         fileType: fileTypeToSend,
-        modelPreference: 'auto',
+        extraData: {
+          // No model preference here
+          if (_replyingToMessage != null) 'reply_to_id': _replyingToMessage!.id,
+          if (_replyingToMessage != null)
+            'reply_to_text': _replyingToMessage!.text,
+        },
         dataSaver: settings.isLiteMode,
-        replyToId: _replyingToMessage?.id,
-        replyToText: _replyingToMessage?.text,
       );
     } catch (e) {
       _addSystemMessage("Failed to send: $e");
@@ -1965,36 +1847,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String _cleanMarkdown(String text) {
-    // 1. Remove Images completely: ![Alt](url)
-    var cleaned = text.replaceAll(RegExp(r'!\[.*?\]\(.*?\)'), '');
-
-    // 2. Replace Links with text: [Link Text](url) -> Link Text
-    cleaned = cleaned.replaceAllMapped(
-      RegExp(r'\[(.*?)\]\(.*?\)'),
-      (m) => m[1] ?? '',
-    );
-
-    // 3. Remove Headers: # Header -> Header
-    cleaned = cleaned.replaceAll(RegExp(r'^#+\s*', multiLine: true), '');
-
-    // 4. Remove Bold/Italic: **text** or __text__ -> text
-    cleaned = cleaned.replaceAll(RegExp(r'(\*\*|__)(.*?)\1'), r'$2');
-
-    // 5. Remove Single Asterisk/Underscore: *text* or _text_ -> text
-    cleaned = cleaned.replaceAll(RegExp(r'(\*|_)(.*?)\1'), r'$2');
-
-    // 6. Remove Code Backticks: `text` -> text
-    cleaned = cleaned.replaceAll('`', '');
-
-    // 7. Remove Blockquotes: > text -> text
-    cleaned = cleaned.replaceAll(RegExp(r'^>\s*', multiLine: true), '');
-
-    // 8. Remove LaTeX delimiters: $$ or $ -> (empty)
-    cleaned = cleaned.replaceAll(r'$$', '').replaceAll(r'$', '');
-
-    return cleaned.trim();
-  }
+  String _cleanMarkdown(String text) => MarkdownStripper.strip(text);
 
   Future<void> _speak(String text, {String? messageId}) async {
     // Clean the text before speaking
@@ -2005,38 +1858,6 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       await _flutterTts.speak(textToSpeak);
     }
-  }
-
-  /// Speak AI response aloud during live voice mode
-  /// This is the key method that enables the voice conversation loop:
-  /// user speaks -> transcribe -> AI response -> speak response -> listen again
-  Future<void> _speakInVoiceMode(String text) async {
-    if (!_isVoiceMode) return;
-
-    // Clean markdown/formatting for natural speech
-    final cleanedText = _cleanMarkdown(text);
-    if (cleanedText.isEmpty) {
-      // If nothing to speak, go back to listening
-      Future.delayed(const Duration(milliseconds: 300), _startListening);
-      return;
-    }
-
-    // Update UI to show AI is speaking
-    setState(() {
-      _isAiSpeaking = true;
-      _isTtsSpeaking = true;
-      _voicePhase = VoicePhase.responding;
-    });
-    _voiceDialogSetState?.call(() {});
-
-    // Haptic feedback to indicate AI is responding
-    if (!kIsWeb) {
-      HapticFeedback.lightImpact();
-    }
-
-    // Speak the response - the completion handler in _initLiveVoice
-    // will automatically restart listening when TTS finishes
-    await _flutterTts.speak(cleanedText);
   }
 
   Future<void> _pauseTts() async {
@@ -2356,7 +2177,6 @@ class _ChatScreenState extends State<ChatScreen> {
               context,
               listen: false,
             ).userModel!.uid,
-            modelPreference: _selectedModelKey,
           );
         }
       }
@@ -2433,263 +2253,6 @@ class _ChatScreenState extends State<ChatScreen> {
         const SnackBar(content: Text('All chats deleted')),
       );
     }
-  }
-
-  Future<void> _startListening() async {
-    if (!_isVoiceMode || _isAiSpeaking || _isRecording || _isMuted) return;
-
-    try {
-      if (await _pcmRecorder.hasPermission()) {
-        setState(() {
-          _voicePhase = VoicePhase.listening;
-          _currentAmplitude = -50.0;
-          _liveTranscription = '';
-        });
-        _voiceDialogSetState?.call(() {});
-
-        // Start streaming PCM 16kHz mono directly to Gemini via WebSocket.
-        // Gemini's built-in VAD detects speech start/end — no client-side
-        // silence timer needed.  Each chunk is sent in real-time so the
-        // model can begin processing before the user finishes speaking.
-        await _pcmRecorder.start();
-
-        // Forward every PCM chunk to the voice WebSocket
-        _pcmStreamSub?.cancel();
-        _pcmStreamSub = _pcmRecorder.audioStream.listen((chunk) {
-          final b64 = base64Encode(chunk);
-          _wsService.sendAudio(b64);
-        });
-
-        // Forward amplitude for the pulsing orb visualisation
-        _pcmAmplitudeSub?.cancel();
-        _pcmAmplitudeSub = _pcmRecorder.amplitudeStream.listen((norm) {
-          if (mounted) {
-            // Convert 0-1 normalised back to dBFS-like range for the orb
-            final dbLike = (norm * 60) - 60; // 0.0→-60, 1.0→0
-            setState(() => _currentAmplitude = dbLike);
-            _voiceDialogSetState?.call(() {});
-          }
-        });
-
-        setState(() => _isRecording = true);
-        _voiceDialogSetState?.call(() {});
-
-        // Haptic feedback for recording start
-        if (!kIsWeb) {
-          HapticFeedback.selectionClick();
-        }
-
-        developer.log('🎤 Streaming PCM to Gemini Live', name: 'ChatScreen');
-      } else {
-        // Permission denied
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Microphone permission is required for voice mode'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        _stopLiveVoice();
-      }
-    } catch (e) {
-      developer.log('Error starting PCM stream: $e', name: 'ChatScreen');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Voice mode error: ${e.toString()}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-      _stopLiveVoice();
-    }
-  }
-
-  /// Stop the PCM stream.  Because we use Gemini's server-side VAD,
-  /// this is only called when the user explicitly exits voice mode or
-  /// the model interrupts.  No file I/O or Groq transcription needed.
-  Future<void> _stopListeningAndSend() async {
-    _pcmStreamSub?.cancel();
-    _pcmStreamSub = null;
-    _pcmAmplitudeSub?.cancel();
-    _pcmAmplitudeSub = null;
-
-    await _pcmRecorder.stop();
-
-    setState(() {
-      _isRecording = false;
-      _voicePhase = VoicePhase.thinking;
-    });
-    _voiceDialogSetState?.call(() {});
-
-    developer.log('🎤 PCM stream stopped', name: 'ChatScreen');
-  }
-
-  Future<void> _playAudioResponse(String url) async {
-    if (!_isVoiceMode) return;
-
-    // Reset UI for Overlay to update
-    setState(() {
-      _isAiSpeaking = true;
-      _voicePhase = VoicePhase.responding;
-    });
-    _voiceDialogSetState?.call(() {});
-
-    // Haptic feedback for engagement
-    if (!kIsWeb) {
-      HapticFeedback.lightImpact();
-    }
-
-    try {
-      await _audioPlayer.play(UrlSource(url));
-      // Completion handled by global _audioPlayer.onPlayerComplete in _initLiveVoice()
-    } catch (e) {
-      developer.log("Audio play error: $e");
-      setState(() {
-        _isAiSpeaking = false;
-        _voicePhase = VoicePhase.listening;
-      });
-      _voiceDialogSetState?.call(() {});
-      // Retry listening after error
-      Future.delayed(const Duration(milliseconds: 500), _startListening);
-    }
-  }
-
-  /// Play base64-encoded audio from Gemini Native Audio response
-  /// This is used for speech-to-speech conversation where server sends audio directly
-  Future<void> _playGeminiAudioResponse(
-    String base64Audio,
-    String mimeType,
-  ) async {
-    if (!_isVoiceMode) return;
-
-    // Reset UI for Overlay to update
-    setState(() {
-      _isAiSpeaking = true;
-      _voicePhase = VoicePhase.responding;
-    });
-    _voiceDialogSetState?.call(() {});
-
-    // Haptic feedback for engagement
-    if (!kIsWeb) {
-      HapticFeedback.lightImpact();
-    }
-
-    try {
-      // Decode base64 audio
-      final audioBytes = base64Decode(base64Audio);
-
-      // Write to temp file for playback
-      String? tempPath;
-      if (!kIsWeb) {
-        final tempDir = await getTemporaryDirectory();
-        final extension = mimeType.contains('wav')
-            ? 'wav'
-            : mimeType.contains('mp3')
-                ? 'mp3'
-                : mimeType.contains('aac')
-                    ? 'm4a'
-                    : 'wav';
-        tempPath =
-            '${tempDir.path}/gemini_response_${DateTime.now().millisecondsSinceEpoch}.$extension';
-        final file = File(tempPath);
-        await file.writeAsBytes(audioBytes);
-
-        await _audioPlayer.play(DeviceFileSource(tempPath));
-      } else {
-        // For web, create a data URL
-        final dataUrl = 'data:$mimeType;base64,$base64Audio';
-        await _audioPlayer.play(UrlSource(dataUrl));
-      }
-
-      developer.log(
-        'Playing Gemini audio response (${audioBytes.length} bytes, $mimeType)',
-        name: 'ChatScreen',
-      );
-
-      // Audio playback has started. The completion is handled by the globally
-      // registered _audioPlayer.onPlayerComplete listener in initState, which
-      // will also automatically call _startListening() to bounce back cleanly.
-    } catch (e) {
-      developer.log("Gemini audio play error: $e", name: 'ChatScreen');
-      setState(() {
-        _isAiSpeaking = false;
-        _voicePhase = VoicePhase.listening;
-      });
-      _voiceDialogSetState?.call(() {});
-      // Retry listening after error
-      Future.delayed(const Duration(milliseconds: 500), _startListening);
-    }
-  }
-
-  // NOTE: REMOVED _speakBuffer as it is no longer used for HQ Audio mode
-  // Kept _speak for manual button clicks
-
-  void _stopLiveVoice() {
-    // Cancel all timers
-    _amplitudeTimer?.cancel();
-    _vadTimer?.cancel();
-    _cameraFrameTimer?.cancel();
-    _cameraFrameTimer = null;
-
-    // Stop PCM streaming
-    _pcmStreamSub?.cancel();
-    _pcmStreamSub = null;
-    _pcmAmplitudeSub?.cancel();
-    _pcmAmplitudeSub = null;
-    _pcmRecorder.stop();
-
-    // Stop TTS if speaking
-    _flutterTts.stop();
-
-    // Stop legacy audio recorder and playback
-    _audioRecorder.stop();
-    _audioPlayer.stop();
-
-    // Disconnect voice channel
-    _wsService.disconnectVoice();
-
-    // Dispose camera
-    _disposeVoiceCamera();
-
-    // Reset all voice mode state
-    setState(() {
-      _isVoiceMode = false;
-      _isAiSpeaking = false;
-      _isRecording = false;
-      _isTtsSpeaking = false;
-      _isTtsPaused = false;
-      _voicePhase = VoicePhase.listening;
-      _currentAmplitude = -50.0;
-      _liveTranscription = '';
-      _showCamera = false;
-      _isMuted = false;
-    });
-  }
-
-  /// Toggle microphone mute in live voice mode.
-  void _toggleMute() {
-    if (!_isVoiceMode) return;
-
-    setState(() => _isMuted = !_isMuted);
-
-    if (_isMuted) {
-      // Pause PCM streaming — stop sending audio chunks
-      _pcmStreamSub?.cancel();
-      _pcmStreamSub = null;
-      _pcmAmplitudeSub?.cancel();
-      _pcmAmplitudeSub = null;
-      _pcmRecorder.stop();
-      setState(() {
-        _isRecording = false;
-        _currentAmplitude = -50.0;
-      });
-    } else {
-      // Resume listening
-      _startListening();
-    }
-    _voiceDialogSetState?.call(() {});
   }
 
   // Search Messages - Unused, cleanup
@@ -2865,21 +2428,21 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: Colors.transparent, // Transparent to show gradient
           extendBodyBehindAppBar: true,
           drawer: isDesktop ? null : _buildMobileDrawer(theme, isDark),
-          appBar: isDesktop ? null : _buildMobileAppBar(theme, isDark),
+          appBar: _buildMobileAppBar(theme, isDark),
           body: Container(
             decoration: BoxDecoration(
               color: isDark
-                  ? const Color(0xFF000000)
+                  ? AppColors.backgroundDark
                   : theme.scaffoldBackgroundColor,
               gradient: isDark
-                  ? const RadialGradient(
+                  ? RadialGradient(
                       center: Alignment.topCenter,
                       radius: 2.5,
                       colors: [
-                        Color(0xFF181835), // Deep Blue/Purple glow
-                        Color(0xFF0A0A14), // Very Dark Blue (almost black)
+                        AppColors.surfaceDark,
+                        AppColors.backgroundDark,
                       ],
-                      stops: [0.0, 1.0],
+                      stops: const [0.0, 1.0],
                     )
                   : null,
             ),
@@ -2909,8 +2472,13 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
+      automaticallyImplyLeading: false,
       leading: IconButton(
-        icon: Icon(Icons.menu, color: isDark ? Colors.white : Colors.black87),
+        icon: Icon(
+          Icons.menu_rounded,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+        ),
+        tooltip: 'Chat history',
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
       title: Text(
@@ -2920,9 +2488,20 @@ class _ChatScreenState extends State<ChatScreen> {
         style: GoogleFonts.outfit(
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: isDark ? Colors.white : Colors.black87,
+          color: theme.colorScheme.onSurface,
         ),
       ),
+      actions: [
+        IconButton(
+          icon: Icon(
+            Icons.edit_square,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+          tooltip: 'New Chat',
+          onPressed: () => _startNewChat(closeDrawer: false),
+        ),
+        const SizedBox(width: 4),
+      ],
     );
   }
 
@@ -3098,115 +2677,16 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  /// Start live voice mode - full conversation mode
-  Future<void> _startLiveVoiceMode() async {
-    if (!await _audioRecorder.hasPermission()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission is required for voice mode'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isVoiceMode = true;
-      _voicePhase = VoicePhase.listening;
-      _currentAmplitude = -50.0;
-      _liveTranscription = '';
-    });
-
-    // Connect the Gemini voice WebSocket BEFORE streaming begins
-    await _wsService.connectVoice();
-
-    // Initialize camera in background (non-blocking)
-    _initVoiceCamera();
-
-    // Auto-start listening after overlay renders
-    Future.delayed(const Duration(milliseconds: 600), _startListening);
-
-    // Show voice mode overlay
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            _voiceDialogSetState = setState;
-            return VoiceSessionOverlay(
-              phase: _voicePhase,
-              transcription: _liveTranscription,
-              amplitude: _currentAmplitude,
-              cameraController: _cameraController,
-              showCamera: _showCamera,
-              isMuted: _isMuted,
-              onMuteToggle: () {
-                _toggleMute();
-                // Also refresh the dialog's local state
-                setState(() {});
-              },
-              onClose: () {
-                _stopLiveVoice();
-                Navigator.pop(context);
-              },
-              onInterrupt: () {
-                if (_isAiSpeaking) {
-                  _flutterTts.stop();
-                  _audioPlayer.stop();
-                  setState(() {
-                    _isAiSpeaking = false;
-                    _voicePhase = VoicePhase.listening;
-                    _liveTranscription = '';
-                  });
-                  _startListening();
-                }
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
   Widget _buildMainChatArea(ThemeData theme) {
     final authProvider = Provider.of<AuthProvider>(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isDesktop = MediaQuery.of(context).size.width > 700;
 
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 850),
         child: Column(
           children: [
-            // Desktop-only title bar (mobile uses AppBar)
-            if (isDesktop)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _currentTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.outfit(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              const SizedBox(height: 8),
+            const SizedBox(height: 8),
             // Messages area
             Expanded(
               child: Stack(
@@ -3338,20 +2818,23 @@ class _ChatScreenState extends State<ChatScreen> {
       isUploading: _isUploading,
       isTyping: _isTyping,
       isGenerating: _isTyping || _currentStreamingMessageId != null,
-      isRecording: _isRecording,
       suggestions: _dynamicSuggestions,
       placeholderMessages: _placeholderMessages,
       onSendMessage: _sendMessage,
       onSendMessageWithText: _sendMessage,
       onShowAttachmentMenu: () => _showAttachmentMenu(theme, isDark),
-
+      isRecording: _isRecording,
+      onToggleRecording: _toggleDictation,
+      onLiveVoice: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const VoiceChatScreen()),
+        );
+      },
       onPaste: _handlePaste, // New explicit handler for generic paste
       onStopGeneration: _stopGeneration,
-      onStopListeningAndSend: _stopListeningAndSend,
-      onStartLiveVoiceMode: _startLiveVoiceMode,
       onClearPendingAttachment: _clearPendingAttachment,
       onShuffleQuestions: () {}, // Not used
-      onDictation: () {}, // Not used
       replyingToMessage: _replyingToMessage,
       onCancelReply: () => setState(() => _replyingToMessage = null),
     );

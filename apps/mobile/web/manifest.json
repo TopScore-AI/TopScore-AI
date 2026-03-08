@@ -5,8 +5,8 @@
     "start_url": ".",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#hexcode",
-    "theme_color": "#hexcode",
+    "background_color": "#F9FAFB",
+    "theme_color": "#2B4E9A",
     "description": "Kenya's #1 AI-powered learning platform. Get 24/7 AI tutoring, chat with past papers, generate flashcards, and ace your KCSE & CBC exams.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
@@ -25,7 +25,7 @@
             "label": "TopScore AI Home Screen"
         },
         {
-            "src": "icons/Icon-192.png",
+            "src": "icons/icon-192.png",
             "sizes": "192x192",
             "type": "image/png",
             "form_factor": "narrow",
@@ -40,7 +40,7 @@
             "url": "/ai-tutor",
             "icons": [
                 {
-                    "src": "icons/Icon-192.png",
+                    "src": "icons/icon-192.png",
                     "sizes": "192x192"
                 }
             ]
@@ -52,7 +52,7 @@
             "url": "/library",
             "icons": [
                 {
-                    "src": "icons/Icon-192.png",
+                    "src": "icons/icon-192.png",
                     "sizes": "192x192"
                 }
             ]
@@ -64,7 +64,7 @@
             "url": "/tools",
             "icons": [
                 {
-                    "src": "icons/Icon-192.png",
+                    "src": "icons/icon-192.png",
                     "sizes": "192x192"
                 }
             ]
@@ -72,7 +72,7 @@
     ],
     "icons": [
         {
-            "src": "icons/Icon-192.png",
+            "src": "icons/icon-192.png",
             "sizes": "192x192",
             "type": "image/png"
         },

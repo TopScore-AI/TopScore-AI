@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 
 // --- IMPORT YOUR TOOL SCREENS HERE ---
 import 'calculator_screen.dart';
@@ -97,10 +98,22 @@ class ToolsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: theme.colorScheme.onSurface),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              // Navigate to Home tab specifically
+              context.go('/home');
+            }
+          },
+        ),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
+        actions: const [], // Added actions property as an empty list
         title: Text(
           "Smart Toolkit",
           style: GoogleFonts.nunito(
@@ -307,7 +320,10 @@ class ToolsScreen extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.nunito(
                 fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.5),
               ),
             ),
           ],

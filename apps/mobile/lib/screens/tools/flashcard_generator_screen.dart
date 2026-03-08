@@ -6,6 +6,8 @@ import '../../providers/auth_provider.dart';
 import '../../services/ai_service.dart';
 import '../../models/flashcard_model.dart';
 
+import '../../services/offline_service.dart';
+
 class FlashcardGeneratorScreen extends StatefulWidget {
   const FlashcardGeneratorScreen({super.key});
 
@@ -20,6 +22,7 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
   final AIService _aiService = AIService();
 
   bool _isLoading = false;
+  bool _isSaving = false;
   FlashcardSet? _flashcardSet;
   int _cardAmount = 5;
   String _educationLevel = 'High School';
@@ -100,6 +103,31 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
     });
   }
 
+  Future<void> _saveForOffline() async {
+    if (_flashcardSet == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await OfflineService().saveFlashcardSet(_flashcardSet!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Saved for offline study!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error saving: $e")),
+        );
+      }
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -117,12 +145,23 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: theme.colorScheme.onSurface),
         actions: [
-          if (_flashcardSet != null)
+          if (_flashcardSet != null) ...[
+            IconButton(
+              onPressed: _isSaving ? null : _saveForOffline,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_for_offline_outlined),
+              tooltip: 'Save for Offline',
+            ),
             IconButton(
               onPressed: _reset,
               icon: const Icon(Icons.refresh),
               tooltip: 'Start Over',
             ),
+          ],
         ],
       ),
       body: _flashcardSet == null

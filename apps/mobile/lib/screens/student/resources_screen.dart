@@ -11,9 +11,12 @@ import '../../config/app_theme.dart';
 import '../../constants/colors.dart';
 import '../../widgets/resources/resource_file_card.dart';
 import '../../widgets/resources/resource_states.dart';
+import '../../widgets/resources/recommended_files_section.dart';
 
 class ResourcesScreen extends StatefulWidget {
-  const ResourcesScreen({super.key});
+  const ResourcesScreen({super.key, this.initialCategory});
+
+  final String? initialCategory;
 
   @override
   State<ResourcesScreen> createState() => _ResourcesScreenState();
@@ -36,12 +39,21 @@ class _ResourcesScreenState extends State<ResourcesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
+    final initialIndex = widget.initialCategory != null
+        ? _categories.indexWhere((c) =>
+            c.toLowerCase() == widget.initialCategory!.toLowerCase())
+        : -1;
+    _tabController = TabController(
+      length: _categories.length,
+      vsync: this,
+      initialIndex: initialIndex >= 0 ? initialIndex : 0,
+    );
     _tabController.addListener(_handleTabChange);
 
     // Initial fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchInitial();
+      _fetchRecommendations();
     });
   }
 
@@ -50,6 +62,15 @@ class _ResourcesScreenState extends State<ResourcesScreen>
       final category = _categories[_tabController.index];
       context.read<ResourcesProvider>().setCategory(category);
       _fetchInitial();
+    }
+  }
+
+  void _fetchRecommendations() {
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.userModel != null) {
+      context
+          .read<ResourcesProvider>()
+          .fetchRecommendations(user: authProvider.userModel!);
     }
   }
 
@@ -252,6 +273,9 @@ class _ResourcesScreenState extends State<ResourcesScreen>
         }
 
         final files = provider.files;
+        final showRecommendations = provider.searchQuery.isEmpty &&
+            (provider.recommendations.isNotEmpty ||
+                provider.recommendationsLoading);
 
         return RefreshIndicator(
           onRefresh: () async => _fetchInitial(isRefresh: true),
@@ -265,27 +289,44 @@ class _ResourcesScreenState extends State<ResourcesScreen>
               }
               return false;
             },
-            child: ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: files.length + (provider.hasMore ? 1 : 0),
-            separatorBuilder: (_, __) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              if (index == files.length) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(strokeWidth: 2),
+            child: CustomScrollView(
+              slivers: [
+                // Recommendations section (only when not searching)
+                if (showRecommendations)
+                  SliverToBoxAdapter(
+                    child: RecommendedFilesSection(
+                      recommendations: provider.recommendations,
+                      isLoading: provider.recommendationsLoading,
+                      onFileTap: _openFile,
+                    ),
                   ),
-                );
-              }
+                // Main file list
+                SliverPadding(
+                  padding: const EdgeInsets.all(20),
+                  sliver: SliverList.separated(
+                    itemCount: files.length + (provider.hasMore ? 1 : 0),
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      if (index == files.length) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      }
 
-              final file = files[index];
-              return ResourceFileCard(
-                file: file,
-                onTap: () => _openFile(file),
-              );
-            },
-          ),
+                      final file = files[index];
+                      return ResourceFileCard(
+                        file: file,
+                        onTap: () => _openFile(file),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../constants/colors.dart';
 
 class EmptyStateWidget extends StatefulWidget {
   final bool isDark;
@@ -38,12 +39,12 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
               end: Alignment.bottomRight,
               colors: widget.isDark
                   ? const [
-                      Color(0xFF0A0A0A),
-                      Color(0xFF16213E),
+                      AppColors.backgroundDark,
+                      AppColors.surfaceDark,
                     ]
                   : const [
-                      Color(0xFFF8F9FA),
-                      Color(0xFFE9ECEF),
+                      AppColors.background,
+                      AppColors.surfaceVariant,
                     ],
             ),
           ),
@@ -79,14 +80,14 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
                           colors: widget.isDark
-                              ? [const Color(0xFF9B72CB), const Color(0xFFD96570)]
-                              : [const Color(0xFF4285F4), const Color(0xFF9B72CB)],
+                              ? [AppColors.accentTeal, AppColors.primary]
+                              : [AppColors.primary, AppColors.accentTeal],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF9B72CB).withValues(alpha: 0.3),
+                            color: AppColors.primary.withValues(alpha: 0.3),
                             blurRadius: 20,
                             offset: const Offset(0, 6),
                           ),
@@ -107,12 +108,12 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
                     shaderCallback: (bounds) => LinearGradient(
                       colors: widget.isDark
                           ? [
-                              const Color(0xFF9B72CB),
-                              const Color(0xFFD96570),
+                              AppColors.accentTeal,
+                              AppColors.primary,
                             ]
                           : [
-                              const Color(0xFF4285F4),
-                              const Color(0xFF9B72CB),
+                              AppColors.primary,
+                              AppColors.accentTeal,
                             ],
                     ).createShader(bounds),
                     child: Text(
@@ -139,8 +140,8 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
                       fontSize: isCompact ? 16 : 18,
                       fontWeight: FontWeight.w400,
                       color: widget.isDark
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : const Color(0xFF4A4A4A),
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondary,
                       height: 1.4,
                     ),
                     textAlign: TextAlign.center,
@@ -184,12 +185,14 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
         },
         borderRadius: BorderRadius.circular(24),
         hoverColor: widget.isDark
-            ? const Color(0xFF4285F4).withValues(alpha: 0.1)
-            : const Color(0xFF4285F4).withValues(alpha: 0.05),
+            ? AppColors.primary.withValues(alpha: 0.1)
+            : AppColors.primary.withValues(alpha: 0.05),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: widget.isDark ? const Color(0xFF1E1F22) : Colors.white,
+            color: widget.isDark
+                ? AppColors.surfaceVariantDark
+                : AppColors.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: widget.isDark
@@ -217,9 +220,7 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: widget.isDark
-                      ? Colors.white.withValues(alpha: 0.9)
-                      : const Color(0xFF2C2C2C),
+                  color: widget.isDark ? AppColors.textDark : AppColors.text,
                 ),
               ),
             ],

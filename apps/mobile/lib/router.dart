@@ -10,6 +10,8 @@ import 'screens/student/resources_screen.dart';
 import 'screens/tools/tools_screen.dart';
 import 'screens/profile_screen.dart' as profile_page;
 import 'screens/pdf_viewer_screen.dart';
+import 'screens/notifications/notification_inbox_screen.dart';
+import 'screens/library/offline_library_screen.dart';
 
 // Deferred imports for heavy screens (code splitting)
 import 'tutor_client/chat_screen.dart' deferred as chat;
@@ -82,7 +84,16 @@ final GoRouter router = GoRouter(
           routes: [
             GoRoute(
               path: '/library',
-              builder: (context, state) => const ResourcesScreen(),
+              builder: (context, state) {
+                final category = state.uri.queryParameters['category'];
+                return ResourcesScreen(initialCategory: category);
+              },
+              routes: [
+                GoRoute(
+                  path: 'offline',
+                  builder: (context, state) => const OfflineLibraryScreen(),
+                ),
+              ],
             ),
           ],
         ),
@@ -224,6 +235,11 @@ final GoRouter router = GoRouter(
           },
         );
       },
+    ),
+    // Notifications
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationInboxScreen(),
     ),
   ],
   redirect: (context, state) {

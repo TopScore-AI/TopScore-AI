@@ -29,12 +29,15 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Load reCAPTCHA script only on auth pages
+    // Load and show reCAPTCHA script only on auth pages
     RecaptchaService.loadRecaptchaScript();
+    RecaptchaService.showBadge();
   }
 
   @override
   void dispose() {
+    // Hide reCAPTCHA badge when leaving auth
+    RecaptchaService.hideBadge();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();

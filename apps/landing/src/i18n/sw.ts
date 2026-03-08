@@ -194,6 +194,8 @@ const sw: Record<TranslationKey, string> = {
     'faq.6.a': 'Mwalimu AI anafundisha Hesabu, Sayansi (Biolojia, Kemia, Fizikia), Kiingereza, Kiswahili, Historia, Jiografia, Biashara, CRE/IRE, na zaidi.',
     'faq.7.q': 'Ninawezaje kuwasiliana na msaada?',
     'faq.7.a': 'Unaweza kutufikia kupitia kituo cha msaada kwenye programu au barua pepe support@topscore-ai.com. Kawaida tunajibu ndani ya masaa 24.',
+    'faq.8.q': 'Kwa nini TopScore AI inahitaji maelezo ya akaunti yangu ya Google?',
+    'faq.8.a': 'Tunatumia maelezo ya akaunti yako ya Google (kama vile barua pepe na wasifu wako wa msingi) kwa ajili tu ya kuunda na kulinda akaunti yako, kubinafsisha dashibodi yako ya kujifunza, na kusawazisha maendeleo yako ya masomo kwenye vifaa vyote. Hatushiriki kamwe data yako bila idhini yako wazi.',
 
     // ── Video Demo ──
     'video.label': '🎥 Ione Ikifanya Kazi',

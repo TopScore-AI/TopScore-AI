@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     openGraph: {
         title: 'Features — TopScore AI',
         description: 'AI Tutor, resource library, streaks, study reports, offline mode, and global search — all in one app.',
-        url: 'https://topscore-ai.com/features',
+        url: 'https://topscoreapp.ai/features',
         images: [{ url: '/og-image.png', width: 1200, height: 630 }],
     },
     alternates: { canonical: 'https://topscoreapp.ai/features' },

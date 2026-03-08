@@ -7,6 +7,7 @@ import '../providers/resources_provider.dart';
 import '../providers/ai_tutor_history_provider.dart';
 import '../models/firebase_file.dart';
 import '../config/app_theme.dart';
+import '../shared/utils/markdown_stripper.dart';
 import 'bounce_wrapper.dart';
 
 class SessionHistoryCarousel extends StatelessWidget {
@@ -52,7 +53,8 @@ class SessionHistoryCarousel extends StatelessWidget {
                   color: Colors.teal.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.history_rounded, size: 18, color: Colors.teal),
+                child: const Icon(Icons.history_rounded,
+                    size: 18, color: Colors.teal),
               ),
               const SizedBox(width: 10),
               Text(
@@ -154,7 +156,7 @@ class SessionHistoryCarousel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    chat['title'] ?? 'AI Tutor Chat',
+                    MarkdownStripper.strip(chat['title'] ?? 'AI Tutor Chat'),
                     style: GoogleFonts.nunito(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,

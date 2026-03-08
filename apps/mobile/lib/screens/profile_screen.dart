@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -27,7 +28,17 @@ class ProfileScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: theme.colorScheme.onSurface),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
         centerTitle: true,
         title: Text(
           "Profile",

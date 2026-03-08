@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../constants/colors.dart';
+import '../../shared/utils/markdown_stripper.dart';
 
 class ChatHistorySidebar extends StatelessWidget {
   final bool isDark;
@@ -39,8 +39,6 @@ class ChatHistorySidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final authProvider = Provider.of<AuthProvider>(context);
-    final isSwahili = authProvider.userModel?.preferredLanguage == 'sw';
 
     final filteredThreads = threads.where((thread) {
       final title = (thread['title'] as String? ?? 'New Chat').toLowerCase();
@@ -50,7 +48,7 @@ class ChatHistorySidebar extends StatelessWidget {
 
     return Container(
       width: 320, // typical sidebar width — Grok-ish
-      color: isDark ? const Color(0xFF0A0A0B) : const Color(0xFFFAFAFC),
+      color: isDark ? AppColors.backgroundDark : AppColors.background,
       child: Column(
         children: [
           // Header area — minimal, logo optional or just New Chat
@@ -58,6 +56,45 @@ class ChatHistorySidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
             child: Row(
               children: [
+                // New Chat button with icon + text
+                InkWell(
+                  onTap: onStartNewChat,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit_outlined,
+                            size: 18,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.7)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'New chat',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 IconButton(
                   icon: Icon(Icons.close_rounded,
@@ -67,28 +104,6 @@ class ChatHistorySidebar extends StatelessWidget {
                   tooltip: 'Close',
                 ),
               ],
-            ),
-          ),
-
-          // New Chat button — Grok places this prominently at top
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: FilledButton.icon(
-              onPressed: () => onStartNewChat(closeDrawer: false),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: Text(
-                isSwahili ? "Mazungumzo Mapya" : "New Chat",
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor:
-                    theme.colorScheme.primary.withValues(alpha: 0.12),
-                foregroundColor: theme.colorScheme.primary,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999)),
-              ),
             ),
           ),
 
@@ -174,7 +189,7 @@ class ChatHistorySidebar extends StatelessWidget {
                     ),
                   );
                 },
-                icon: const Icon(Icons.delete_sweep_outlined,
+                icon: const Icon(Icons.delete_sweep_rounded,
                     size: 20, color: Colors.redAccent),
                 label: const Text(
                   "Delete All",
@@ -267,7 +282,8 @@ class ChatHistorySidebar extends StatelessWidget {
 
   Widget _buildThreadTile(dynamic thread, ThemeData theme) {
     final isSelected = thread['thread_id'] == currentThreadId;
-    final title = thread['title'] as String? ?? 'New Chat';
+    final rawTitle = thread['title'] as String? ?? 'New Chat';
+    final title = MarkdownStripper.strip(rawTitle);
 
     return Material(
       color: isSelected
@@ -313,7 +329,7 @@ class ChatHistorySidebar extends StatelessWidget {
             PopupMenuItem(
               value: 'rename',
               child: const ListTile(
-                leading: Icon(Icons.edit_outlined, size: 20),
+                leading: Icon(Icons.edit_rounded, size: 20),
                 title: Text('Rename'),
                 dense: true,
               ),
@@ -321,7 +337,7 @@ class ChatHistorySidebar extends StatelessWidget {
             PopupMenuItem(
               value: 'delete',
               child: const ListTile(
-                leading: Icon(Icons.delete_outline,
+                leading: Icon(Icons.delete_rounded,
                     size: 20, color: Colors.redAccent),
                 title:
                     Text('Delete', style: TextStyle(color: Colors.redAccent)),

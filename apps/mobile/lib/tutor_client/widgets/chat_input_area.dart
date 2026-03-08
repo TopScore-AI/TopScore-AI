@@ -4,9 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import '../../services/subscription_service.dart';
-import '../../constants/colors.dart';
-import '../../screens/subscription/subscription_screen.dart';
 import '../message_model.dart';
 
 class ChatInputArea extends StatefulWidget {
@@ -18,7 +15,6 @@ class ChatInputArea extends StatefulWidget {
   final bool isUploading;
   final bool isTyping;
   final bool isGenerating;
-  final bool isRecording;
   final List<Map<String, String>> suggestions;
   final List<String> placeholderMessages;
   final VoidCallback onSendMessage;
@@ -26,11 +22,11 @@ class ChatInputArea extends StatefulWidget {
   final VoidCallback onShowAttachmentMenu;
   final VoidCallback onPaste;
   final VoidCallback onStopGeneration;
-  final VoidCallback onStopListeningAndSend;
-  final VoidCallback onStartLiveVoiceMode;
   final VoidCallback onClearPendingAttachment;
   final VoidCallback onShuffleQuestions;
-  final VoidCallback onDictation;
+  final bool isRecording;
+  final VoidCallback onToggleRecording;
+  final VoidCallback onLiveVoice;
   final ChatMessage? replyingToMessage;
   final VoidCallback? onCancelReply;
 
@@ -44,7 +40,6 @@ class ChatInputArea extends StatefulWidget {
     required this.isUploading,
     required this.isTyping,
     required this.isGenerating,
-    required this.isRecording,
     required this.suggestions,
     required this.placeholderMessages,
     required this.onSendMessage,
@@ -52,11 +47,11 @@ class ChatInputArea extends StatefulWidget {
     required this.onShowAttachmentMenu,
     required this.onPaste,
     required this.onStopGeneration,
-    required this.onStopListeningAndSend,
-    required this.onStartLiveVoiceMode,
     required this.onClearPendingAttachment,
     required this.onShuffleQuestions,
-    required this.onDictation,
+    required this.isRecording,
+    required this.onToggleRecording,
+    required this.onLiveVoice,
     this.replyingToMessage,
     this.onCancelReply,
   });
@@ -135,9 +130,6 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(28),
-                    border: widget.isRecording
-                        ? Border.all(color: Colors.redAccent, width: 2)
-                        : null,
                     boxShadow: [
                       BoxShadow(
                         color: theme.primaryColor
@@ -152,56 +144,36 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Attachment button (left inside pill)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.2)
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: (isDark ? Colors.white : Colors.black)
+                                .withValues(alpha: 0.15),
+                          ),
+                          boxShadow: isDark
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  )
+                                ]
+                              : null,
+                        ),
                         child: IconButton(
-                          icon: const Icon(Icons.add_rounded, size: 24),
-                          color: isDark ? Colors.white : Colors.black,
-                          tooltip: 'Add attachment',
-                          onPressed: () async {
-                            final isPremium = await SubscriptionService()
-                                .isSessionPremiumOrTrial();
-                            if (isPremium) {
-                              widget.onShowAttachmentMenu();
-                            } else {
-                              if (!context.mounted) return;
-                              showDialog(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                  title: const Text('Pro Feature'),
-                                  content: const Text(
-                                    'File & image uploads require Pro. Upgrade to unlock.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        Navigator.pop(ctx);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                const SubscriptionScreen(),
-                                          ),
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.googleBlue,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      child: const Text('Upgrade'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                          },
+                          icon: Icon(
+                            Icons.add_rounded,
+                            size: 22,
+                            color:
+                                isDark ? Colors.white : theme.iconTheme.color,
+                          ),
+                          tooltip: 'Attach file',
+                          onPressed: widget.onShowAttachmentMenu,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -220,9 +192,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                           minLines: 1,
                           maxLines: 6,
                           decoration: InputDecoration(
-                            hintText: widget.isRecording
-                                ? "Listening…"
-                                : _effectiveHint,
+                            hintText: _effectiveHint,
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
@@ -249,29 +219,13 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Mic button (Dictation)
-                            IconButton(
-                              icon: Icon(
-                                widget.isRecording
-                                    ? Icons.mic_off_rounded
-                                    : Icons.mic_rounded,
-                                size: 22,
-                              ),
-                              color: widget.isRecording
-                                  ? Colors.redAccent
-                                  : isDark
-                                      ? Colors.white
-                                      : Colors.black,
-                              tooltip: widget.isRecording
-                                  ? 'Stop & send'
-                                  : 'Voice input',
-                              onPressed: widget.isRecording
-                                  ? widget.onStopListeningAndSend
-                                  : widget.onDictation,
-                              visualDensity: VisualDensity.compact,
-                            ),
+                            // Mic button
+                            if (!widget.isGenerating &&
+                                widget.textController.text.trim().isEmpty &&
+                                widget.pendingFileUrl == null)
+                              _buildMicButton(theme, isDark),
 
-                            // Send or Live Voice Mode button
+                            // Send button
                             _buildPillActionButton(theme, isDark),
                           ],
                         ),
@@ -360,48 +314,88 @@ class _ChatInputAreaState extends State<ChatInputArea> {
     );
   }
 
+  Widget _buildMicButton(ThemeData theme, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: widget.isRecording
+            ? Colors.red.withValues(alpha: 0.15)
+            : (isDark
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.transparent),
+        border: Border.all(
+          color: widget.isRecording
+              ? Colors.red.withValues(alpha: 0.5)
+              : (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15),
+        ),
+      ),
+      child: IconButton(
+        icon: Icon(
+          widget.isRecording ? Icons.stop_rounded : Icons.mic_none_rounded,
+          size: 22,
+          color: widget.isRecording
+              ? Colors.red
+              : (isDark ? Colors.white : theme.primaryColor),
+        ),
+        onPressed: widget.onToggleRecording,
+        tooltip: widget.isRecording ? 'Stop recording' : 'Voice input',
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
   Widget _buildPillActionButton(ThemeData theme, bool isDark) {
     final hasContent = widget.textController.text.trim().isNotEmpty ||
         widget.pendingFileUrl != null;
 
-    final iconColor = isDark ? Colors.white : Colors.black;
+    final iconColor = isDark ? Colors.white : theme.iconTheme.color;
+
+    String? tooltip;
+    IconData? icon;
+    VoidCallback? onPressed;
 
     if (widget.isGenerating) {
-      return IconButton(
-        icon: Icon(Icons.stop_rounded, size: 22, color: iconColor),
-        onPressed: widget.onStopGeneration,
-        tooltip: 'Stop generation',
-        visualDensity: VisualDensity.compact,
-      );
+      icon = Icons.stop_rounded;
+      tooltip = 'Stop generation';
+      onPressed = widget.onStopGeneration;
+    } else if (hasContent) {
+      icon = Icons.arrow_upward_rounded;
+      tooltip = 'Send message';
+      onPressed = widget.onSendMessage;
+    } else {
+      // Default state: Live Voice
+      icon = Icons.graphic_eq_rounded; // Waveform-like icon
+      tooltip = 'Live Voice';
+      onPressed = widget.onLiveVoice;
     }
 
-    if (hasContent) {
-      return IconButton(
-        icon: Icon(
-          Icons.arrow_upward_rounded,
-          size: 22,
-          color: iconColor,
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color:
+            isDark ? Colors.black.withValues(alpha: 0.2) : Colors.transparent,
+        border: Border.all(
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15),
         ),
-        tooltip: 'Send message',
-        onPressed: widget.onSendMessage,
-        visualDensity: VisualDensity.compact,
-      );
-    }
-
-    // fallback — Live Voice Mode
-    return IconButton(
-      icon: Icon(
-        Icons.graphic_eq_rounded,
-        size: 22,
-        color: iconColor,
+        boxShadow: isDark
+            ? [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                )
+              ]
+            : null,
       ),
-      tooltip: 'Live Voice Mode',
-      onPressed: widget.onStartLiveVoiceMode,
-      visualDensity: VisualDensity.compact,
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: iconColor),
+        onPressed: onPressed,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
-
-  // Remove the old circle button builders since we are using compact icons inside the pill
 
   Widget _buildReplyPreview(ThemeData theme, bool isDark) {
     return Container(
@@ -441,11 +435,6 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                   widget.replyingToMessage!.text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: (isDark ? Colors.white : Colors.black)
-                        .withValues(alpha: 0.6),
-                  ),
                 ),
               ],
             ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -37,42 +37,62 @@ import 'widgets/app_error_widget.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
-  debugPrint('[TOPSCORE] 1. Starting main()');
+  if (kDebugMode) {
+    debugPrint('[TOPSCORE] 1. Starting main()');
+  }
   WidgetsFlutterBinding.ensureInitialized();
 
   // Enable clean URLs for web (removes # from URLs)
   usePathUrlStrategy();
-  debugPrint(
-    '[TOPSCORE] 2. WidgetsFlutterBinding initialized & URL strategy set',
-  );
+  if (kDebugMode) {
+    debugPrint(
+      '[TOPSCORE] 2. WidgetsFlutterBinding initialized & URL strategy set',
+    );
+  }
 
   // Load environment variables with error handling
   try {
-    debugPrint('[TOPSCORE] 3. Loading dotenv...');
+    if (kDebugMode) {
+      debugPrint('[TOPSCORE] 3. Loading dotenv...');
+    }
     // On web, dotenv loading might fail, but we don't need it since Firebase config is hardcoded
     if (!kIsWeb) {
       await dotenv.load(fileName: ".env");
     }
-    debugPrint('[TOPSCORE] 4. Dotenv loaded successfully');
+    if (kDebugMode) {
+      debugPrint('[TOPSCORE] 4. Dotenv loaded successfully');
+    }
   } catch (e) {
-    debugPrint('[TOPSCORE] 4. Dotenv load error (continuing anyway): $e');
+    if (kDebugMode) {
+      debugPrint('[TOPSCORE] 4. Dotenv load error (continuing anyway): $e');
+    }
   }
 
   // Initialize Firebase with error handling
   try {
-    debugPrint('[TOPSCORE] 5. Checking Firebase apps...');
+    if (kDebugMode) {
+      debugPrint('[TOPSCORE] 5. Checking Firebase apps...');
+    }
     if (Firebase.apps.isEmpty) {
-      debugPrint('[TOPSCORE] 6. Initializing Firebase...');
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 6. Initializing Firebase...');
+      }
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      debugPrint('[TOPSCORE] 7. Firebase initialized successfully');
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 7. Firebase initialized successfully');
+      }
 
       // Initialize Analytics
       AnalyticsService.instance.enableDebugMode();
-      debugPrint('[TOPSCORE] 7b. Analytics initialized');
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 7b. Analytics initialized');
+      }
     } else {
-      debugPrint('[TOPSCORE] 6-7. Firebase already initialized');
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 6-7. Firebase already initialized');
+      }
     }
   } catch (e, stackTrace) {
     debugPrint('[TOPSCORE] 7. Firebase init error: $e');
@@ -89,7 +109,9 @@ void main() async {
       debugPrint("Firestore persistence error: $e");
     }
   }
-  debugPrint('[TOPSCORE] 8. Firestore settings done (skipped on web)');
+  if (kDebugMode) {
+    debugPrint('[TOPSCORE] 8. Firestore settings done (skipped on web)');
+  }
 
   // Init Notifications (skip on web to avoid blocking)
   if (!kIsWeb) {
@@ -101,7 +123,9 @@ void main() async {
       debugPrint("Notification Init Error: $e");
     }
   }
-  debugPrint('[TOPSCORE] 9. Notifications done (skipped on web)');
+  if (kDebugMode) {
+    debugPrint('[TOPSCORE] 9. Notifications done (skipped on web)');
+  }
 
   // Init Offline Storage (Initializes SharedPreferences on web, Hive on mobile)
   try {
@@ -109,9 +133,10 @@ void main() async {
   } catch (e) {
     debugPrint("Offline Init Error: $e");
   }
-  debugPrint('[TOPSCORE] 10. Offline storage done');
-
-  debugPrint('[TOPSCORE] 11. Calling runApp()...');
+  if (kDebugMode) {
+    debugPrint('[TOPSCORE] 10. Offline storage done');
+    debugPrint('[TOPSCORE] 11. Calling runApp()...');
+  }
 
   // Global error handler for uncaught Flutter widget errors
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -122,7 +147,9 @@ void main() async {
       (FlutterErrorDetails details) => AppErrorWidget(details: details);
 
   runApp(const MyApp());
-  debugPrint('[TOPSCORE] 12. runApp() called');
+  if (kDebugMode) {
+    debugPrint('[TOPSCORE] 12. runApp() called');
+  }
 }
 
 Future<void> setupInteractedMessage() async {
@@ -211,6 +238,25 @@ class _MyAppState extends State<MyApp> {
       });
 
       _tutorConnectionProvider.updateUserId(user.uid);
+
+      // Sync FCM token for push notifications
+      _syncFCMToken(user.uid);
+    }
+  }
+
+  Future<void> _syncFCMToken(String uid) async {
+    try {
+      if (kIsWeb) return; // Optional: handle web push if needed later
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'fcmToken': token,
+          'lastTokenSync': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('[FCM] Token synced for user: $uid');
+      }
+    } catch (e) {
+      debugPrint('[FCM] Error syncing token: $e');
     }
   }
 

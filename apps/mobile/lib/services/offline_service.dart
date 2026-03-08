@@ -2,6 +2,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/resource_model.dart';
+import '../models/flashcard_model.dart';
+import '../models/quiz_model.dart';
 
 class OfflineService {
   // Singleton Pattern
@@ -12,10 +14,14 @@ class OfflineService {
   static const String _resourceBoxName = 'offline_resources';
   static const String _settingsBoxName = 'app_settings';
   static const String _progressBoxName = 'user_progress';
+  static const String _flashcardBoxName = 'offline_flashcards';
+  static const String _quizBoxName = 'offline_quizzes';
 
   late Box _resourceBox;
   late Box _settingsBox;
   late Box _progressBox;
+  late Box _flashcardBox;
+  late Box _quizBox;
   late SharedPreferences _prefs;
 
   bool _isInitialized = false;
@@ -36,6 +42,8 @@ class OfflineService {
         _resourceBox = await Hive.openBox(_resourceBoxName);
         _settingsBox = await Hive.openBox(_settingsBoxName);
         _progressBox = await Hive.openBox(_progressBoxName);
+        _flashcardBox = await Hive.openBox(_flashcardBoxName);
+        _quizBox = await Hive.openBox(_quizBoxName);
         debugPrint("✅ Hive Storage Initialized");
       }
 
@@ -113,6 +121,83 @@ class OfflineService {
   Future<void> clearAllResources() async {
     if (kIsWeb) return;
     await _resourceBox.clear();
+    await _flashcardBox.clear();
+    await _quizBox.clear();
+  }
+
+  // ==========================================
+  // 🗃️ FLASHCARD & QUIZ PERSISTENCE
+  // ==========================================
+
+  /// Save a flashcard set for offline access
+  Future<void> saveFlashcardSet(FlashcardSet flashcardSet) async {
+    if (kIsWeb) return;
+    try {
+      final id = _generateId(flashcardSet.title, flashcardSet.topic);
+      await _flashcardBox.put(id, flashcardSet.toJson());
+      debugPrint("✅ Flashcard set saved: $id");
+    } catch (e) {
+      debugPrint("❌ Error saving flashcard set: $e");
+    }
+  }
+
+  /// Get all saved flashcard sets
+  List<FlashcardSet> getSavedFlashcardSets() {
+    if (!_isInitialized || kIsWeb) return [];
+    try {
+      return _flashcardBox.values.map((data) {
+        final map = Map<String, dynamic>.from(data as Map);
+        return FlashcardSet.fromJson(map);
+      }).toList();
+    } catch (e) {
+      debugPrint("❌ Error retrieving saved flashcards: $e");
+      return [];
+    }
+  }
+
+  /// Delete a saved flashcard set
+  Future<void> deleteFlashcardSet(String title, String topic) async {
+    if (kIsWeb) return;
+    final id = _generateId(title, topic);
+    await _flashcardBox.delete(id);
+  }
+
+  /// Save a quiz for offline access
+  Future<void> saveQuiz(Quiz quiz) async {
+    if (kIsWeb) return;
+    try {
+      final id = _generateId(quiz.title, quiz.topic);
+      await _quizBox.put(id, quiz.toJson());
+      debugPrint("✅ Quiz saved: $id");
+    } catch (e) {
+      debugPrint("❌ Error saving quiz: $e");
+    }
+  }
+
+  /// Get all saved quizzes
+  List<Quiz> getSavedQuizzes() {
+    if (!_isInitialized || kIsWeb) return [];
+    try {
+      return _quizBox.values.map((data) {
+        final map = Map<String, dynamic>.from(data as Map);
+        return Quiz.fromJson(map);
+      }).toList();
+    } catch (e) {
+      debugPrint("❌ Error retrieving saved quizzes: $e");
+      return [];
+    }
+  }
+
+  /// Delete a saved quiz
+  Future<void> deleteQuiz(String title, String topic) async {
+    if (kIsWeb) return;
+    final id = _generateId(title, topic);
+    await _quizBox.delete(id);
+  }
+
+  String _generateId(String title, String topic) {
+    return '${title.replaceAll(' ', '_')}_${topic.replaceAll(' ', '_')}'
+        .toLowerCase();
   }
 
   // ==========================================

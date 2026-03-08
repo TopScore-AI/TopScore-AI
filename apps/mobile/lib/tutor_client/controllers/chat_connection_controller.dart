@@ -102,14 +102,12 @@ class ChatConnectionController extends ChangeNotifier {
     required String userId,
     String? fileUrl,
     String? fileType,
-    String? modelPreference,
   }) {
     _wsService.sendMessage(
       message: message,
       userId: userId,
       fileUrl: fileUrl,
       fileType: fileType,
-      modelPreference: modelPreference,
     );
   }
 

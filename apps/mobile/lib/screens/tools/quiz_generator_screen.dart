@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ai_service.dart';
 import '../../models/quiz_model.dart';
+import '../../services/offline_service.dart';
 
 class QuizGeneratorScreen extends StatefulWidget {
   const QuizGeneratorScreen({super.key});
@@ -21,6 +22,7 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
   String _selectedDifficulty = 'Medium';
   int _questionCount = 5;
   bool _isLoading = false;
+  bool _isSaving = false;
   Quiz? _generatedQuiz;
 
   // Quiz taking state
@@ -153,6 +155,31 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
     });
   }
 
+  Future<void> _saveForOffline() async {
+    if (_generatedQuiz == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await OfflineService().saveQuiz(_generatedQuiz!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Quiz saved for offline review!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error saving quiz: $e")),
+        );
+      }
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -168,12 +195,23 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          if (_generatedQuiz != null)
+          if (_generatedQuiz != null) ...[
+            IconButton(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_for_offline_outlined),
+              onPressed: _isSaving ? null : _saveForOffline,
+              tooltip: 'Save for Offline',
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _resetQuiz,
               tooltip: 'New Quiz',
             ),
+          ],
         ],
       ),
       body: _isLoading

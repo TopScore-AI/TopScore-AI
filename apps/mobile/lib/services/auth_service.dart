@@ -92,9 +92,21 @@ class AuthService {
     try {
       if (kIsWeb) {
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
-        final UserCredential userCredential =
-            await _auth.signInWithPopup(googleProvider);
-        return userCredential.user;
+        try {
+          final UserCredential userCredential =
+              await _auth.signInWithPopup(googleProvider);
+          return userCredential.user;
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'popup-closed-by-user' ||
+              e.code == 'cancelled-by-user') {
+            debugPrint(
+                'Popup was closed or cancelled. Falling back to redirect...');
+            await _auth.signInWithRedirect(googleProvider);
+            // After redirect, the page will reload and we won't return anything here.
+            return null;
+          }
+          rethrow;
+        }
       } else {
         await _ensureGoogleSignInInitialized();
 
@@ -129,6 +141,13 @@ class AuthService {
 
         return userCredential.user;
       }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth Error (${e.code}): ${e.message}');
+      if (e.code == 'popup-closed-by-user') {
+        debugPrint(
+            'The auth popup was closed before completion. Please try again and ensure popups are allowed.');
+      }
+      rethrow;
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         debugPrint('Google Sign In: User cancelled');
@@ -183,6 +202,15 @@ class AuthService {
     }
   }
 
+  Stream<UserModel?> userProfileStream(String uid) {
+    return _firestore.collection('users').doc(uid).snapshots().map((doc) {
+      if (doc.exists && doc.data() != null) {
+        return UserModel.fromMap(doc.data() as Map<String, dynamic>, uid);
+      }
+      return null;
+    });
+  }
+
   Future<UserModel?> getUserProfile(String uid) async {
     try {
       DocumentSnapshot doc =
@@ -213,5 +241,12 @@ class AuthService {
     if (user != null && !user.emailVerified) {
       await user.sendEmailVerification();
     }
+  }
+
+  Future<UserCredential?> getRedirectResult() async {
+    if (kIsWeb) {
+      return await _auth.getRedirectResult();
+    }
+    return null;
   }
 }

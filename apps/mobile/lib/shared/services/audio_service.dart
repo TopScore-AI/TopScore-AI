@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:universal_io/io.dart';
 import 'package:http/http.dart' as http;
+import 'package:topscore_ai/shared/utils/markdown_stripper.dart';
 
 /// Shared audio service for recording, playback, and TTS
 /// Extracted from duplicate implementations in chat screens
@@ -51,7 +52,10 @@ class AudioService {
   }
 
   Future<void> speak(String text) async {
-    await _flutterTts.speak(text);
+    final cleanedText = MarkdownStripper.strip(text);
+    if (cleanedText.isNotEmpty) {
+      await _flutterTts.speak(cleanedText);
+    }
   }
 
   Future<void> stopSpeaking() async {
