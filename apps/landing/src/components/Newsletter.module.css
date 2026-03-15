@@ -14,12 +14,12 @@
     transform: translate(-50%, -50%);
     width: 600px;
     height: 600px;
-    background: radial-gradient(circle, rgba(30, 58, 138, 0.06) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
     pointer-events: none;
 }
 
 :global(.dark) .wrapper::before {
-    background: radial-gradient(circle, rgba(59, 108, 245, 0.08) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
 }
 
 .inner {
@@ -34,8 +34,8 @@
     font-weight: 700;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: var(--primary);
-    background: rgba(30, 58, 138, 0.2);
+    color: var(--primary-raw);
+    background: rgba(99, 102, 241, 0.1);
     padding: 6px 14px;
     border-radius: 50px;
     margin-bottom: 16px;
@@ -47,10 +47,13 @@
     font-weight: 900;
     margin-bottom: 12px;
     line-height: 1.2;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .sub {
-    font-size: 15px;
+    font-size: 16px;
     color: var(--text-muted);
     margin-bottom: 32px;
 }
@@ -64,18 +67,19 @@
 
 .input {
     flex: 1;
-    padding: 14px 18px;
+    padding: 14px 24px;
     border-radius: 50px;
     border: 1px solid var(--border);
     background: var(--bg-card);
     color: var(--text);
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
 }
 
 .input:focus {
-    border-color: var(--primary);
+    border-color: var(--primary-raw);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
 .input::placeholder {
@@ -83,21 +87,22 @@
 }
 
 .btn {
-    padding: 14px 28px;
+    padding: 14px 32px;
     border-radius: 50px;
     border: none;
     background: var(--gradient);
     color: #fff;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
-    transition: opacity 0.2s, transform 0.2s;
+    transition: all 0.2s;
 }
 
 .btn:hover {
     opacity: 0.9;
     transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
 }
 
 .btn:disabled {
@@ -108,12 +113,12 @@
 
 .success {
     padding: 24px;
-    background: rgba(21, 128, 61, 0.08);
-    border: 1px solid rgba(21, 128, 61, 0.2);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
-    border-radius: 20px;
-    color: var(--secondary);
+    border-radius: 24px;
+    color: #059669;
     font-weight: 700;
     font-size: 16px;
     animation: successIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;

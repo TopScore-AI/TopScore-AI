@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../tutor_client/enhanced_websocket_service.dart';
+import 'ai_tutor_history_provider.dart';
 
 class TutorConnectionProvider with ChangeNotifier {
   EnhancedWebSocketService? _wsService;
@@ -10,7 +11,13 @@ class TutorConnectionProvider with ChangeNotifier {
   bool get isConnected => _wsService?.isConnected ?? false;
   bool get isInitialized => _isInitialized;
 
-  /// Initialize or update the connection for a specific user
+  // ignore: unused_field
+  AiTutorHistoryProvider? _historyProvider;
+
+  void attachHistoryProvider(AiTutorHistoryProvider provider) {
+    _historyProvider = provider;
+  }
+
   void updateUserId(String? userId) {
     if (userId == _currentUserId) return;
 

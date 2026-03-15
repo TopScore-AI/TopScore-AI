@@ -1,32 +1,35 @@
 import type { Metadata } from 'next';
+import dynamic from 'next/dynamic';
 import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
 import TrustedBy from '@/components/TrustedBy';
 import Features from '@/components/Features';
-import Screenshots from '@/components/Screenshots';
-import HowItWorks from '@/components/HowItWorks';
-import Testimonials from '@/components/Testimonials';
-import FAQ from '@/components/FAQ';
-import Newsletter from '@/components/Newsletter';
-import CtaBanner from '@/components/CtaBanner';
-import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
 
+const Screenshots = dynamic(() => import('@/components/Screenshots'));
+const HowItWorks = dynamic(() => import('@/components/HowItWorks'));
+const VideoGallery = dynamic(() => import('@/components/VideoGallery'));
+const Pricing = dynamic(() => import('@/components/Pricing'));
+const Testimonials = dynamic(() => import('@/components/Testimonials'));
+const FAQ = dynamic(() => import('@/components/FAQ'));
+const Contact = dynamic(() => import('@/components/Contact'));
+const Newsletter = dynamic(() => import('@/components/Newsletter'));
+const CtaBanner = dynamic(() => import('@/components/CtaBanner'));
+const Footer = dynamic(() => import('@/components/Footer'));
+
 export const metadata: Metadata = {
-  title: 'TopScore AI — Smart AI Learning platform for Kenyan Students',
+  title: 'TopScore AI — The #1 Smart Learning App for Kenyan Students',
   description:
-    'AI-powered tutoring, CBC & KCSE study resources, past papers, smart study tools, detailed progress tracking, and offline mode. Free to download.',
+    'Experience vibrant, playful, and intelligent AI-powered tutoring, CBC & KCSE study resources, smart tools, detailed tracking, and offline modes. Upgrade your learning journey today.',
   openGraph: {
-    title: 'TopScore AI — Smart AI Learning platform for Kenyan Students',
+    title: 'TopScore AI — The #1 Smart Learning App for Kenyan Students',
     description:
-      'The #1 AI-powered tutoring and study platform for CBC & KCSE. Snap photos, chat with books, and ace your exams. Free to download.',
+      'Experience vibrant, playful, and intelligent AI-powered tutoring, CBC & KCSE study resources. Snap photos, chat with books, and ace your exams. Free to download with Premium options.',
     url: 'https://topscoreapp.ai',
     images: [{ url: '/og-image.png', width: 1200, height: 630 }],
   },
   alternates: { canonical: 'https://topscoreapp.ai' },
 };
-
-
 
 const softwareSchema = {
   '@context': 'https://schema.org',
@@ -53,13 +56,17 @@ export default function Home() {
       <Hero />
       <TrustedBy />
       <Features />
-      <Screenshots />
       <HowItWorks />
+      <VideoGallery />
+      <Screenshots />
+      <Pricing />
       <Testimonials />
       <FAQ />
+      <Contact />
       <Newsletter />
       <CtaBanner />
       <Footer />
     </main>
   );
 }
+

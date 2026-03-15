@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/resource_model.dart';
 import '../models/user_model.dart';
 import '../models/support_ticket_model.dart';
+import '../models/survey_model.dart';
 
 /// Result returned from paginated queries.
 class PaginatedResult<T> {
@@ -194,6 +195,11 @@ class FirestoreService {
   // Support Tickets
   Future<void> createSupportTicket(SupportTicket ticket) async {
     await _firestore.collection('support_tickets').add(ticket.toMap());
+  }
+
+  // Survey & Testimonials
+  Future<void> createSurveyResponse(SurveyResponse response) async {
+    await _firestore.collection('surveys').add(response.toMap());
   }
 
   Stream<List<SupportTicket>> getUserSupportTickets(String userId) {

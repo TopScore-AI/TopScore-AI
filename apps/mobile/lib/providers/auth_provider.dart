@@ -324,7 +324,7 @@ class AuthProvider with ChangeNotifier {
     });
   }
 
-  Future<void> _ensureUserProfile(User user) async {
+  Future<void> _ensureUserProfile(User user, {String role = 'student'}) async {
     final existing = await _authService.getUserProfile(user.uid);
     if (existing != null) {
       _userModel = existing;
@@ -334,7 +334,7 @@ class AuthProvider with ChangeNotifier {
         email: user.email ?? '',
         displayName: user.displayName ?? 'New User',
         photoURL: user.photoURL,
-        role: 'student',
+        role: role,
         grade: null,
         schoolName: '',
       );
@@ -416,6 +416,7 @@ class AuthProvider with ChangeNotifier {
     String email,
     String password, {
     String? displayName,
+    String role = 'student',
   }) async {
     try {
       _setLoading(true);
@@ -434,8 +435,8 @@ class AuthProvider with ChangeNotifier {
           debugPrint('[AUTH] Error sending initial verification: $e');
         }
 
-        // Create profile immediately
-        await _ensureUserProfile(_authService.currentUser ?? user);
+        // Create profile immediately with selected role
+        await _ensureUserProfile(_authService.currentUser ?? user, role: role);
 
         // Require verification (return false to signals caller to handle or wait for redirect)
         _requiresEmailVerification = true;

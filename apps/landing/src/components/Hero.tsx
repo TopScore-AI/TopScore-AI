@@ -50,20 +50,21 @@ export default function Hero() {
             <div className={styles.content}>
                 <AnimatedSection animation="fadeUp" delay="0s">
                     <div className={styles.badge}>
-                        <span>🇰🇪</span> {t('hero.badge')}
+                        <span>🚀</span> {t('hero.badgeVibrant')}
                     </div>
                 </AnimatedSection>
 
                 <AnimatedSection animation="fadeUp" delay="0.1s">
                     <h1 className={styles.h1}>
-                        {t('hero.h1a')}<span className={styles.grad}>{t('hero.h1Grad')}</span><br />
-                        {t('hero.h1b')}
+                        {t('hero.h1Vibrant').split('{grad}')[0]}
+                        <span className={styles.grad}>{t('hero.h1Grad')}</span>
+                        {t('hero.h1Vibrant').split('{grad}')[1]}
                     </h1>
                 </AnimatedSection>
 
                 <AnimatedSection animation="fadeUp" delay="0.2s">
                     <p className={styles.sub}>
-                        {t('hero.sub')}
+                        {t('hero.subVibrant')}
                     </p>
                 </AnimatedSection>
 
@@ -71,12 +72,12 @@ export default function Hero() {
                     <div className={styles.actions}>
                         <Button asChild size="lg" className={styles.btnPrimary}>
                             <a href="https://app.topscoreapp.ai">
-                                {t('hero.cta')}
+                                {t('hero.ctaVibrant')}
                             </a>
                         </Button>
                         <Button asChild variant="outline" size="lg" className={styles.btnSecondary}>
-                            <a href="/features">
-                                {t('hero.explore')}
+                            <a href="#tutorials">
+                                {t('hero.exploreVibrant')}
                             </a>
                         </Button>
                     </div>

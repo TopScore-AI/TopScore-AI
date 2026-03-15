@@ -1,10 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:seo/seo.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -232,6 +233,7 @@ class _MyAppState extends State<MyApp> {
     _resourcesProvider = ResourcesProvider();
     _aiTutorHistoryProvider = AiTutorHistoryProvider();
     _tutorConnectionProvider = TutorConnectionProvider();
+    _tutorConnectionProvider.attachHistoryProvider(_aiTutorHistoryProvider);
     _router = createRouter(_authProvider);
 
     // Start auth initialization immediately so GoRouter redirect
@@ -357,7 +359,10 @@ class _MyAppState extends State<MyApp> {
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {
-          return MaterialApp.router(
+          return SeoController(
+            enabled: true,
+            tree: WidgetTree(context: context),
+            child: MaterialApp.router(
             title: 'TopScore AI',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
@@ -392,9 +397,14 @@ class _MyAppState extends State<MyApp> {
                 ),
               );
             },
-          );
+          ));
         },
       ),
     );
   }
 }
+
+
+
+
+

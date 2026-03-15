@@ -1,14 +1,17 @@
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:camera/camera.dart';
 import '../config/api_config.dart';
+import '../shared/services/gemini_live_service.dart';
+import '../shared/services/audio_service.dart';
+import '../shared/utils/face_blur_utils.dart';
 
 class VoiceChatScreen extends StatefulWidget {
   const VoiceChatScreen({super.key});
@@ -19,12 +22,25 @@ class VoiceChatScreen extends StatefulWidget {
 
 class _VoiceChatScreenState extends State<VoiceChatScreen>
     with TickerProviderStateMixin {
-  Room? _room;
+  StreamSubscription<Uint8List>? _audioStreamSub;
+  StreamSubscription? _amplitudeSub;
+  final GeminiLiveService _geminiService = GeminiLiveService();
+  final AudioService _audioService = AudioService();
+  
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  bool _isMultimodal = false;
+  Timer? _videoCaptureTimer;
+
   bool _isConnected = false;
   bool _isConnecting = false;
   bool _isMuted = false;
   double _localAudioLevel = 0.0;
   double _remoteAudioLevel = 0.0;
+  
+  String _lastAIResponse = "Listening...";
+  String _lastUserMessage = "";
+  late AnimationController _bgController;
 
   // Siri-like animation controllers
   late AnimationController _pulseController;
@@ -33,6 +49,8 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _bgController = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat(reverse: true);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -43,152 +61,202 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat();
 
+    _setupGeminiListeners();
+
     // Automatically start the service
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _connect();
     });
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _waveController.dispose();
-    _room?.disconnect();
-    _room?.dispose();
-    super.dispose();
+  void _setupGeminiListeners() {
+    _geminiService.statusStream.listen((status) {
+      if (mounted) {
+        setState(() {
+          _isConnected = status == GeminiLiveStatus.setupComplete;
+          _isConnecting = status == GeminiLiveStatus.connecting || status == GeminiLiveStatus.connected;
+        });
+        
+        if (status == GeminiLiveStatus.error) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Gemini Live connection error"), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
+    });
+
+    _geminiService.audioStream.listen((base64Audio) {
+      _audioService.playAudioFromBase64('data:audio/pcm;base64,$base64Audio');
+      if (mounted) {
+        setState(() {
+          _remoteAudioLevel = 0.8; // Mock level for visualizer when AI speaks
+        });
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) setState(() => _remoteAudioLevel = 0.0);
+        });
+      }
+    });
+
+        _geminiService.interruptionStream.listen((_) {
+      _audioService.stop();
+      if (mounted) {
+        setState(() {
+          _remoteAudioLevel = 0.0;
+          _lastAIResponse = "(Interrupted)";
+        });
+      }
+    });
+
+    _geminiService.transcriptionStream.listen((data) {
+      if (mounted) {
+        setState(() {
+          if (data['type'] == 'output') {
+            _lastAIResponse = data['text'];
+          } else if (data['type'] == 'input') {
+            _lastUserMessage = data['text'];
+          }
+        });
+      }
+    });
   }
 
-  String _tokenServerUrl(String userId) =>
-      ApiConfig.getGeminiLiveTokenUrl(userId);
+  @override
+  void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _bgController.dispose();
+    _pulseController.dispose();
+    _waveController.dispose();
+    _videoCaptureTimer?.cancel();
+    _cameraController?.dispose();
+    _amplitudeSub?.cancel();
+    _audioStreamSub?.cancel();
+    _geminiService.dispose();
+    _audioService.dispose();
+    super.dispose();
+  }
 
   Future<void> _connect() async {
     if (_isConnecting || _isConnected) return;
 
-    setState(() {
-      _isConnecting = true;
-    });
+    setState(() => _isConnecting = true);
 
-    // 1. Ask for mic permissions
-    var status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      developer.log("Microphone permission denied", name: "VoiceChatScreen");
+    var micStatus = await Permission.microphone.request();
+    if (micStatus != PermissionStatus.granted) {
       if (mounted) {
         setState(() => _isConnecting = false);
-
-        if (kIsWeb) {
-          _showWebMicPermissionGuide();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Microphone permission is required for TopScore AI Voice",
-              ),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Microphone permission is required")),
+        );
       }
       return;
     }
 
     try {
-      // 2. Get Token from backend (secret stays server-side, client connects directly to LiveKit)
       final userId = FirebaseAuth.instance.currentUser?.uid ?? 'guest_user';
-      final response = await http.get(Uri.parse(_tokenServerUrl(userId)));
-      if (response.statusCode != 200) {
-        throw Exception("Server error: ${response.body}");
-      }
+      final response = await http.get(Uri.parse(ApiConfig.getGeminiLiveTokenUrl(userId)));
+      
+      if (response.statusCode != 200) throw Exception("Failed to get token");
 
       final data = jsonDecode(response.body);
-      final String token = data['token'];
-      final String url = data['url'];
+      await _geminiService.connect(data['url'], data['token'], data['system_instruction'] ?? 'You are a helpful AI tutor.');
 
-      // 3. Connect to LiveKit
-      final room = Room(
-        roomOptions: const RoomOptions(
-          adaptiveStream: true,
-          dynacast: true,
-        ),
-      );
-
-      await room.connect(url, token);
-
-      // Listen for remote tracks (AI response)
-      room.createListener().on<TrackSubscribedEvent>((event) {
-        if (event.track is RemoteAudioTrack) {
-          event.track.start();
-          developer.log("Subscribed to remote audio track",
-              name: "VoiceChatScreen");
+      final audioStream = await _audioService.startPcmStream();
+      _audioStreamSub = audioStream?.listen((data) {
+        if (!_isMuted && _isConnected) {
+          final base64Pcm = base64Encode(data);
+          _geminiService.sendAudio(base64Pcm);
         }
       });
 
-      // Start audio playback for the room
-      await room.startAudio();
-
-      // Listen for active speakers (VAD)
-      room.createListener().on<ActiveSpeakersChangedEvent>((event) {
-        if (mounted) {
+      _amplitudeSub = _audioService.onAmplitudeChanged.listen((amp) {
+        if (mounted && !_isMuted) {
           setState(() {
-            // Reset levels
-            _localAudioLevel = 0.0;
-            _remoteAudioLevel = 0.0;
-
-            for (var participant in event.speakers) {
-              if (participant is LocalParticipant) {
-                _localAudioLevel = participant.audioLevel;
-              } else {
-                // Take the loudest remote speaker for the visualizer
-                _remoteAudioLevel =
-                    math.max(_remoteAudioLevel, participant.audioLevel);
-              }
+            final minDb = -50.0;
+            if (amp.current < minDb) {
+              _localAudioLevel = 0.0;
+            } else {
+              _localAudioLevel = 1.0 - (amp.current / minDb);
             }
           });
+        } else if (mounted && _isMuted && _localAudioLevel > 0) {
+          setState(() => _localAudioLevel = 0.0);
         }
       });
-
-      // 4. Turn on Mic
-      await room.localParticipant?.setMicrophoneEnabled(true);
-
-      if (mounted) {
-        setState(() {
-          _room = room;
-          _isConnected = true;
-          _isConnecting = false;
-          _isMuted = false;
-        });
-        // Haptic feedback for connection
-        HapticFeedback.mediumImpact();
-      }
+      
+      HapticFeedback.mediumImpact();
     } catch (e) {
       developer.log("Connection failed: $e", name: "VoiceChatScreen");
       if (mounted) {
         setState(() => _isConnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Connection failed: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
       }
     }
   }
 
+  Future<void> _toggleCamera() async {
+    if (_isMultimodal) {
+      _stopVideoStreaming();
+    } else {
+      await _startVideoStreaming();
+    }
+  }
+
+  Future<void> _startVideoStreaming() async {
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) return;
+
+    _cameraController = CameraController(
+      cameras.first,
+      ResolutionPreset.low,
+      enableAudio: false,
+    );
+
+    try {
+      await _cameraController!.initialize();
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _isMultimodal = true;
+        });
+        
+        _videoCaptureTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+          if (_isMultimodal && _isCameraInitialized && _isConnected) {
+            try {
+              final image = await _cameraController!.takePicture();
+              final base64Image = await FaceBlurUtils.processAndBlurFaces(image.path);
+              _geminiService.sendVideoFrame(base64Image);
+            } catch (e) {
+              developer.log("Error capturing frame: $e");
+            }
+          }
+        });
+      }
+    } catch (e) {
+      developer.log("Camera init failed: $e");
+    }
+  }
+
+  void _stopVideoStreaming() {
+    _videoCaptureTimer?.cancel();
+    _cameraController?.dispose();
+    if (mounted) {
+      setState(() {
+        _isCameraInitialized = false;
+        _isMultimodal = false;
+      });
+    }
+  }
+
   Future<void> _toggleMute() async {
-    if (_room == null) return;
-    final newMute = !_isMuted;
-    await _room!.localParticipant?.setMicrophoneEnabled(!newMute);
-    setState(() {
-      _isMuted = newMute;
-    });
+    setState(() => _isMuted = !_isMuted);
     HapticFeedback.lightImpact();
   }
 
   Future<void> _disconnect() async {
-    await _room?.disconnect();
+    _amplitudeSub?.cancel();
+    _audioStreamSub?.cancel();
+    await _audioService.stopPcmStream();
+    await _geminiService.disconnect();
     if (mounted) {
-      setState(() {
-        _isConnected = false;
-        _isConnecting = false;
-      });
       Navigator.of(context).pop();
     }
     HapticFeedback.heavyImpact();
@@ -202,10 +270,15 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
         value: SystemUiOverlayStyle.light,
         child: Stack(
           children: [
-            // Immersive background
             _buildBackground(),
+            if (_isMultimodal && _isCameraInitialized)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.3,
+                  child: CameraPreview(_cameraController!),
+                ),
+              ),
 
-            // Content
             SafeArea(
               child: Column(
                 children: [
@@ -214,6 +287,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                   _buildVisualizer(),
                   const Spacer(),
                   _buildStatusText(),
+
                   const SizedBox(height: 40),
                   _buildControls(),
                   const SizedBox(height: 40),
@@ -227,50 +301,31 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
   }
 
   Widget _buildBackground() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF03001C), // Deep dark blue
-            Color(0xFF0C134F), // Midnight blue
-            Color(0xFF1D267D), // Dark purple hint
-            Colors.black,
-          ],
-          stops: [0.0, 0.4, 0.8, 1.0],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Subtle glowing orb top right
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blueAccent.withValues(alpha: 0.1),
+    return AnimatedBuilder(
+      animation: _bgController,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment(
+                math.cos(_bgController.value * math.pi * 2),
+                math.sin(_bgController.value * math.pi * 2),
               ),
+              end: Alignment(
+                math.cos((_bgController.value + 0.5) * math.pi * 2),
+                math.sin((_bgController.value + 0.5) * math.pi * 2),
+              ),
+              colors: [
+                const Color(0xFF03001C),
+                Color.lerp(const Color(0xFF0C134F), const Color(0xFF1D267D), _bgController.value) ?? const Color(0xFF0C134F),
+                Color.lerp(const Color(0xFF1D267D), const Color(0xFF5C469C), _bgController.value) ?? const Color(0xFF1D267D),
+                Colors.black,
+              ],
+              stops: const [0.0, 0.4, 0.8, 1.0],
             ),
           ),
-          // Subtle glowing orb bottom left
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -284,8 +339,14 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close, color: Colors.white70, size: 28),
           ),
-          const SizedBox(width: 48), // Spacer to keep icon left
-          const SizedBox(width: 48), // Spacer for center alignment
+          IconButton(
+            onPressed: _toggleCamera,
+            icon: Icon(
+              _isMultimodal ? Icons.videocam : Icons.videocam_off,
+              color: _isMultimodal ? Colors.blueAccent : Colors.white70,
+              size: 28,
+            ),
+          ),
         ],
       ),
     );
@@ -298,7 +359,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
           CircularProgressIndicator(color: Colors.blueAccent),
           SizedBox(height: 20),
           Text(
-            "Initializing Session...",
+            "Waking up TopScore AI...",
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
         ],
@@ -312,7 +373,6 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
           return Stack(
             alignment: Alignment.center,
             children: [
-              // Outer glow
               Container(
                 width: 200 + (20 * _pulseController.value),
                 height: 200 + (20 * _pulseController.value),
@@ -328,7 +388,6 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
                   ),
                 ),
               ),
-              // Siri-like orb
               CustomPaint(
                 size: const Size(160, 160),
                 painter: SiriOrbPainter(
@@ -351,15 +410,51 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
         ? "Connecting..."
         : (_isMuted
             ? "Muted"
-            : (_remoteAudioLevel > 0.05 ? "Speaking..." : "Listening..."));
-    return Text(
-      status,
-      style: TextStyle(
-        color:
-            _isMuted ? Colors.redAccent : Colors.white.withValues(alpha: 0.8),
-        fontSize: 22,
-        fontWeight: FontWeight.w300,
-        letterSpacing: 2.0,
+            : (_remoteAudioLevel > 0.05 ? "TopScore AI" : "Listening..."));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              status,
+              key: ValueKey(status),
+              style: TextStyle(
+                color: _isMuted ? Colors.redAccent : Colors.white.withValues(alpha: 0.8),
+                fontSize: 24,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 2.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_lastUserMessage.isNotEmpty)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(
+                '"$_lastUserMessage"',
+                key: ValueKey(_lastUserMessage),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+              ),
+            ),
+          if (_lastUserMessage.isNotEmpty) const SizedBox(height: 12),
+          if (_lastAIResponse != "Listening..." && _lastAIResponse != "(Interrupted)")
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(
+                _lastAIResponse,
+                key: ValueKey(_lastAIResponse),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white60, fontSize: 15, fontStyle: FontStyle.italic),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -368,15 +463,12 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        // Mute Toggle
         _buildGlassControlButton(
           onPressed: _toggleMute,
           icon: _isMuted ? Icons.mic_off : Icons.mic,
           color: _isMuted ? Colors.redAccent : Colors.white,
           label: _isMuted ? "Unmute" : "Mute",
         ),
-
-        // End Session
         _buildGlassControlButton(
           onPressed: _disconnect,
           icon: Icons.call_end,
@@ -384,16 +476,11 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
           label: "End",
           isLarge: true,
         ),
-
-        // Refresh/Re-connect (hidden if connected)
-        Opacity(
-          opacity: _isConnected ? 0.3 : 1.0,
-          child: _buildGlassControlButton(
-            onPressed: _isConnected ? null : _connect,
-            icon: Icons.refresh,
-            color: Colors.white,
-            label: "Retry",
-          ),
+        _buildGlassControlButton(
+          onPressed: _toggleCamera,
+          icon: _isMultimodal ? Icons.videocam : Icons.videocam_off,
+          color: _isMultimodal ? Colors.blueAccent : Colors.white,
+          label: _isMultimodal ? "Vision ON" : "Vision OFF",
         ),
       ],
     );
@@ -435,41 +522,6 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
       ],
     );
   }
-
-  void _showWebMicPermissionGuide() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.mic_off, color: Colors.orange),
-            SizedBox(width: 12),
-            Text("Microphone Restricted"),
-          ],
-        ),
-        content: const Text(
-          "Your browser is blocking microphone access. To use live voice:\n\n"
-          "1. Click the lock icon 🔒 next to the web address.\n"
-          "2. Toggle the Microphone switch to \"Allow\".\n"
-          "3. Refresh the page to start chatting!",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Got it"),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _connect();
-            },
-            child: const Text("Try Again"),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class SiriOrbPainter extends CustomPainter {
@@ -492,10 +544,8 @@ class SiriOrbPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final baseRadius = size.width * 0.4;
 
-    // Draw multiple layers
     for (int i = 0; i < 3; i++) {
       final paint = Paint()..style = PaintingStyle.fill;
-
       double layerOpacity = 0.4 - (i * 0.1);
       Color baseColor = isMuted
           ? Colors.redAccent
@@ -504,25 +554,17 @@ class SiriOrbPainter extends CustomPainter {
               : (i == 1 ? const Color(0xFF5C469C) : const Color(0xFF1D267D)));
 
       paint.color = baseColor.withValues(alpha: layerOpacity);
-
-      double layerPulse =
-          math.sin((wave * 2 * math.pi) + (i * math.pi / 2)) * 10;
-
-      // Scale based on audio levels (VAD)
-      double levelScale =
-          1.0 + (localAudioLevel * 2.0) + (remoteAudioLevel * 1.5);
+      double layerPulse = math.sin((wave * 2 * math.pi) + (i * math.pi / 2)) * 10;
+      double levelScale = 1.0 + (localAudioLevel * 2.0) + (remoteAudioLevel * 1.5);
       double radius = (baseRadius + (pulse * 5) + layerPulse) * levelScale;
-
       canvas.drawCircle(center, radius, paint);
     }
 
-    // Core glow
     final corePaint = Paint()
       ..shader = RadialGradient(
         colors: [
           Colors.white.withValues(alpha: 0.8),
-          (isMuted ? Colors.redAccent : Colors.blueAccent)
-              .withValues(alpha: 0.2),
+          (isMuted ? Colors.redAccent : Colors.blueAccent).withValues(alpha: 0.2),
         ],
       ).createShader(Rect.fromCircle(center: center, radius: baseRadius * 0.5));
 
@@ -530,10 +572,15 @@ class SiriOrbPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant SiriOrbPainter oldDelegate) =>
-      oldDelegate.pulse != pulse ||
-      oldDelegate.wave != wave ||
-      oldDelegate.isMuted != isMuted ||
-      oldDelegate.localAudioLevel != localAudioLevel ||
-      oldDelegate.remoteAudioLevel != remoteAudioLevel;
+  bool shouldRepaint(covariant SiriOrbPainter oldDelegate) => true;
 }
+
+
+
+
+
+
+
+
+
+

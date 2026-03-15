@@ -16,7 +16,7 @@ class ApiConfig {
   }
 
   static String getGeminiLiveTokenUrl(String userId) =>
-      '$baseUrl/livekit/token?user_id=$userId';
+      '$baseUrl/gemini/token?user_id=$userId';
 
   static String get wsUrl {
     final base = baseUrl;

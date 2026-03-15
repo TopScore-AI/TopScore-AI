@@ -9,12 +9,17 @@ const en = {
 
     // ── Hero ──
     'hero.badge': 'Built for Kenyan Students — CBC & 8-4-4',
+    'hero.badgeVibrant': '🚀 Join thousands of Kenyan students scoring straight A\'s!',
     'hero.h1a': 'Your ',
-    'hero.h1Grad': 'AI-Powered',
+    'hero.h1Grad': 'for CBC & KCSE',
     'hero.h1b': 'Learning Companion',
+    'hero.h1Vibrant': 'Your AI Super-Tutor {grad} is Here!',
     'hero.sub': 'TopScore AI combines an intelligent tutor, a full resource library, and powerful study tools into one beautiful app — helping students from Grade 1 through Form 4 excel every day.',
+    'hero.subVibrant': 'Snap a photo of your homework, chat with your digital study buddy, and download past papers instantly. Learning has never been this fun!',
     'hero.cta': '📱 Try TopScore AI',
+    'hero.ctaVibrant': 'Start Learning Free',
     'hero.explore': 'Explore Features →',
+    'hero.exploreVibrant': 'See How It Works',
     'hero.stat.resources': 'Study Resources',
     'hero.stat.tutor': 'AI Tutor Access',
     'hero.stat.tools': 'Smart Study Tools',

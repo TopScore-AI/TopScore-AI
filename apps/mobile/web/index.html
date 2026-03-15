@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" dir="ltr">
 
 <head>
@@ -79,9 +79,7 @@
         crossorigin="anonymous" referrerpolicy="no-referrer" media="print" onload="this.media='all'" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" media="print"
         onload="this.media='all'">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
+    
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" defer></script>
     <script
@@ -214,15 +212,7 @@
             <p><a href="https://app.topscoreapp.ai/">Visit TopScore AI</a></p>
         </div>
     </noscript>
-    <script>    // Aggressively unregister all service workers on every load to disable caching
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (registrations) {
-        for (let registration of registrations) {
-          console.log('Unregistering Service Worker to prevent caching:', registration.scope);
-          registration.unregister();
-        }
-      });
-    }
+    <script>    // Allow default Flutter Service Worker caching for instant loads
 
     // Function to hide splash screen
     function hideSplash() {
@@ -257,19 +247,7 @@
       }, 12000);
     });
 
-    // Global error listener to detect asset loading failures
-    window.addEventListener('error', function (e) {
-      // Ignore GA/GTM and other external scripts if they fail
-      const src = e.target && (e.target.src || e.target.href);
-      if (src && !src.includes('google-analytics') && !src.includes('googletagmanager')) {
-        console.warn('Asset load failed:', src);
-        // Only trigger SW clear for internal assets (same origin or assets folder)
-        if (src.includes(window.location.origin) || src.includes('assets/')) {
-          console.log('Marking service worker for cleanup on next reload.');
-          document.cookie = "clear_sw=true; path=/; max-age=60";
-        }
-      }
-    }, true);  </script>
+      </script>
     <script src="flutter_bootstrap.js" async></script>
 </body>
 

@@ -11,12 +11,17 @@ const sw: Record<TranslationKey, string> = {
 
     // ── Hero ──
     'hero.badge': 'Imetengenezwa kwa Wanafunzi wa Kenya — CBC & 8-4-4',
+    'hero.badgeVibrant': '🚀 Jiunge na maelfu ya wanafunzi wa Kenya wanaopata Alama A!',
     'hero.h1a': 'Mwenza Wako wa ',
     'hero.h1Grad': 'Kujifunza kwa AI',
     'hero.h1b': 'Kila Wakati',
+    'hero.h1Vibrant': 'Mwalimu Wako Mkuu wa AI {grad} Yupo Hapa!',
     'hero.sub': 'TopScore AI inachanganya mwalimu mwerevu wa AI, maktaba kamili ya masomo, na zana bora za kusoma katika programu moja nzuri — ikisaidia wanafunzi kutoka Darasa la 1 hadi Kidato cha 4 kufaulu kila siku.',
+    'hero.subVibrant': 'Piga picha ya kazi yako ya nyumbani, ongea na rafiki yako wa masomo wa kidijitali, na pakua mitihani iliyopita mara moja. Kujifunza hakujawahi kuwa kufurahisha hivi!',
     'hero.cta': '📱 Jaribu TopScore AI',
+    'hero.ctaVibrant': 'Anza Kujifunza Bure',
     'hero.explore': 'Gundua Vipengele →',
+    'hero.exploreVibrant': 'Ona Inavyofanya Kazi',
     'hero.stat.resources': 'Rasilimali za Masomo',
     'hero.stat.tutor': 'Ufikiaji wa Mwalimu AI',
     'hero.stat.tools': 'Zana Bora za Kusoma',

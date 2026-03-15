@@ -12,6 +12,7 @@ import 'science_lab_screen.dart';
 import 'periodic_table_screen.dart';
 import '../files_screen.dart'; // Corrected path for sibling of parent
 import '../../utils/responsive_layout.dart';
+import '../../widgets/glass_card.dart';
 
 class ToolCardData {
   final String title;
@@ -138,24 +139,14 @@ class ToolsScreen extends StatelessWidget {
               child: CenterContent(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
-                  child: Container(
-                    width: double.infinity,
+                  child: GlassCard(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF2E3192).withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    borderRadius: 20,
                     child: Row(
                       children: [
                         Expanded(
@@ -225,8 +216,6 @@ class ToolsScreen extends StatelessWidget {
   }
 
   Widget _buildToolCard(BuildContext context, ToolCardData tool) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: () {
         Widget? targetScreen;
@@ -268,25 +257,8 @@ class ToolsScreen extends StatelessWidget {
           );
         }
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+      child: GlassCard(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1F22) : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : tool.color.withValues(alpha: 0.12),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: tool.color.withValues(alpha: isDark ? 0.08 : 0.1),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

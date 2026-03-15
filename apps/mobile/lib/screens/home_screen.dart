@@ -1,10 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:seo/seo.dart';
 
 import '../constants/colors.dart';
 import '../config/app_theme.dart';
@@ -111,7 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const HomeTab();
+    return Seo.head(
+      tags: const [
+        MetaTag(name: 'title', content: 'TopScore AI - #1 AI Tutor for KCSE & CBC | Ace Your Exams'),
+        MetaTag(name: 'description', content: 'The #1 AI-powered tutoring and study platform for CBC & KCSE. Snap photos, chat with books, and ace your exams. Free to download.'),
+      ],
+      child: const HomeTab(),
+    );
   }
 }
 
@@ -304,7 +311,24 @@ class _HomeTabState extends State<HomeTab> {
   @override
   Widget build(BuildContext context) {
     final user = context.select<AuthProvider, UserModel?>((auth) => auth.userModel);
-    final displayName = user?.displayName.split(' ')[0] ?? 'Student';
+    
+    // Determine the role label for default display name
+    final String roleLabel;
+    switch (user?.role) {
+      case 'teacher':
+        roleLabel = 'Teacher';
+        break;
+      case 'parent':
+        roleLabel = 'Parent';
+        break;
+      default:
+        roleLabel = 'Student';
+    }
+    
+    final displayName = user?.displayName.isNotEmpty == true 
+        ? user!.displayName.split(' ')[0] 
+        : roleLabel;
+        
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -1251,3 +1275,5 @@ class _ReusableSearchBarState extends State<_ReusableSearchBar> {
     );
   }
 }
+
+

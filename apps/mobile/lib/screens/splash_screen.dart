@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:seo/seo.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/strings.dart';
@@ -50,13 +51,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
-      return const Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SizedBox.shrink(),
+      return Seo.head(
+        tags: const [
+          MetaTag(name: 'title', content: 'TopScore AI - Loading...'),
+        ],
+        child: const Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SizedBox.shrink(),
+        ),
       );
     }
 
-    return Scaffold(
+    return Seo.head(
+      tags: const [
+        MetaTag(name: 'title', content: 'TopScore AI - Loading...'),
+      ],
+      child: Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -181,7 +191,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 }
+

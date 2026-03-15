@@ -10,6 +10,7 @@ import 'screens/profile_screen.dart' as profile_page;
 import 'screens/pdf_viewer_screen.dart';
 import 'screens/notifications/notification_inbox_screen.dart';
 import 'screens/library/offline_library_screen.dart';
+import 'screens/support/survey_screen.dart';
 
 // Deferred imports for heavy screens (code splitting)
 import 'tutor_client/chat_screen.dart' deferred as chat;
@@ -234,6 +235,10 @@ GoRouter createRouter(AuthProvider authProvider) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationInboxScreen(),
+      ),
+      GoRoute(
+        path: '/survey',
+        builder: (context, state) => const SurveyScreen(),
       ),
 
       // ── Auth routes ──

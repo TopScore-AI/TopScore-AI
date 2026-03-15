@@ -23,18 +23,18 @@
   --radius: 0.5rem;
 
   /* Semantic tokens used across module.css files */
-  --bg: #f0f4ff;
-  --text: #0d1a40;
-  --text-muted: #4a5578;
-  --text-dim: #7a8aab;
+  --bg: #f8fafc;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #64748b;
   --bg-card: #ffffff;
-  --bg-card2: #f0f4ff;
-  --glow: 0 0 40px rgba(30, 58, 138, 0.08);
-  --primary-raw: #1e3a8a;
-  --secondary-raw: #15803d;
-  --accent-raw: #b91c1c;
-  --gradient: linear-gradient(135deg, #1e3a8a 0%, #15803d 100%);
-  --gradient2: linear-gradient(135deg, #b91c1c 0%, #1e3a8a 100%);
+  --bg-card2: #f1f5f9;
+  --glow: 0 0 40px rgba(99, 102, 241, 0.15);
+  --primary-raw: #6366f1; /* Indigo 500 */
+  --secondary-raw: #f59e0b; /* Amber 500 */
+  --accent-raw: #ec4899; /* Pink 500 */
+  --gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --gradient2: linear-gradient(135deg, #ec4899 0%, #f59e0b 100%);
 }
 
 .dark {
@@ -58,13 +58,13 @@
   --input: 217.2 32.6% 17.5%;
   --ring: 226 64% 43%;
 
-  --bg: #05080f;
-  --text: #e8eeff;
-  --text-muted: #8a9bc0;
-  --text-dim: #506080;
-  --bg-card: rgba(255, 255, 255, 0.04);
-  --bg-card2: rgba(255, 255, 255, 0.06);
-  --glow: 0 0 40px rgba(59, 108, 245, 0.12);
+  --bg: #0f172a; /* Slate 900 */
+  --text: #f8fafc; /* Slate 50 */
+  --text-muted: #94a3b8; /* Slate 400 */
+  --text-dim: #64748b; /* Slate 500 */
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card2: rgba(255, 255, 255, 0.05);
+  --glow: 0 0 40px rgba(99, 102, 241, 0.2);
 }
 
 *,

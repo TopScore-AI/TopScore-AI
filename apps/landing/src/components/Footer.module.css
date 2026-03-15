@@ -33,6 +33,7 @@
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    font-weight: 900;
 }
 
 .logo img {
@@ -48,21 +49,22 @@
 
 .storeBadges {
     display: flex;
-    gap: 10px;
-    margin-top: 4px;
+    gap: 12px;
+    margin-top: 8px;
 }
 
 .storeBadges a {
     display: inline-flex;
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--border);
-    transition: transform 0.2s, border-color 0.2s;
+    transition: all 0.2s;
 }
 
 .storeBadges a:hover {
-    transform: translateY(-2px);
-    border-color: var(--primary);
+    transform: translateY(-4px);
+    border-color: var(--primary-raw);
+    box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.2);
 }
 
 /* ── Link columns ── */
@@ -75,27 +77,28 @@
 .colTitle {
     font-family: var(--font-display);
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--text);
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 .linkCol ul {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .linkCol a {
     font-size: 14px;
     color: var(--text-muted);
-    transition: color 0.2s;
+    transition: all 0.2s;
 }
 
 .linkCol a:hover {
-    color: var(--primary);
+    color: var(--primary-raw);
+    padding-left: 4px;
 }
 
 /* ── Bottom bar ── */

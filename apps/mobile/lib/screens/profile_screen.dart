@@ -173,6 +173,15 @@ class ProfileScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const TermsOfUseScreen()),
               ),
             ),
+            const SizedBox(height: 12),
+            _buildSettingsTile(
+              context,
+              icon: FontAwesomeIcons.heartCircleCheck,
+              title: "Share Feedback",
+              subtitle: "Tell us how we're doing",
+              iconColor: Colors.pinkAccent,
+              onTap: () => context.push('/survey'),
+            ),
 
             const SizedBox(height: 40),
 

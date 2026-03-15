@@ -1618,13 +1618,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final settings = Provider.of<SettingsProvider>(context, listen: false);
 
+      final userModel = authProvider.userModel;
+
       _wsService.sendMessage(
         message: messageText,
-        userId: authProvider.userModel?.uid ?? 'anon',
+        userId: userModel?.uid ?? 'anon',
         fileUrl: fileUrlToSend,
         fileType: fileTypeToSend,
         extraData: {
-          // No model preference here
+          'user_role': userModel?.role ?? 'student',
+          'user_interests': userModel?.interests ?? [],
+          'user_grade': userModel?.grade,
+          'user_curriculum': userModel?.curriculum,
           if (_replyingToMessage != null) 'reply_to_id': _replyingToMessage!.id,
           if (_replyingToMessage != null)
             'reply_to_text': _replyingToMessage!.text,

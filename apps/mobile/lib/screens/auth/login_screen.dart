@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _confirmPasswordController = TextEditingController();
   final _nameController = TextEditingController();
   bool _isRegister = false;
+  String _selectedRole = 'student';
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSubmitting = false;
@@ -303,7 +304,52 @@ class _LoginScreenState extends State<LoginScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            
+            // --- 🚀 ROLE SELECTION ---
+            Text(
+              "I am a:",
+              style: GoogleFonts.quicksand(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment<String>(
+                  value: 'student',
+                  label: Text('Student'),
+                  icon: Icon(Icons.school_outlined),
+                ),
+                ButtonSegment<String>(
+                  value: 'teacher',
+                  label: Text('Teacher'),
+                  icon: Icon(Icons.history_edu_outlined),
+                ),
+                ButtonSegment<String>(
+                  value: 'parent',
+                  label: Text('Parent'),
+                  icon: Icon(Icons.family_restroom_outlined),
+                ),
+              ],
+              selected: {_selectedRole},
+              onSelectionChanged: (newSelection) {
+                setState(() {
+                  _selectedRole = newSelection.first;
+                });
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.comfortable,
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
 
           TextFormField(
@@ -566,6 +612,7 @@ class _LoginScreenState extends State<LoginScreen> {
           email,
           password,
           displayName: _nameController.text.trim(),
+          role: _selectedRole,
         );
       } else {
         success = await authProvider.signInWithEmail(email, password);

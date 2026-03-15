@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:seo/seo.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +12,7 @@ import 'student/resources_screen.dart';
 import 'tools/tools_screen.dart';
 import 'support/support_screen.dart';
 import 'subscription/subscription_screen.dart';
+import '../widgets/glass_card.dart';
 import 'package:topscore_ai/models/user_model.dart' as user_model;
 import 'profile_screen.dart' as profile_page;
 
@@ -25,13 +27,17 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
-    final user =
-        widget.viewAsUser ?? Provider.of<AuthProvider>(context).userModel;
+    final user = widget.viewAsUser ?? Provider.of<AuthProvider>(context).userModel;
     final displayName = user?.displayName.split(' ')[0] ?? 'Student';
     final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return Scaffold(
+    return Seo.head(
+      tags: const [
+        MetaTag(name: 'title', content: 'TopScore AI Dashboard | Track Your Learning Progress'),
+        MetaTag(name: 'description', content: 'Track your KCSE and CBC learning progress, view leaderboards, and access your study streaks on TopScore AI.'),
+      ],
+      child: Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: RefreshIndicator(
         onRefresh: () async {
@@ -73,7 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
                 title: Text(
-                  "Hello, $displayName 👋",
+                  "Hello, $displayName ðŸ‘‹",
                   style: GoogleFonts.nunito(
                     color: theme.colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
@@ -197,7 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -212,18 +218,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+      child: GlassCard(
+        padding: EdgeInsets.zero,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -259,30 +255,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           MaterialPageRoute(builder: (context) => const SubscriptionScreen()),
         );
       },
-      child: Container(
+      child: GlassCard(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              theme.colorScheme.primary,
-              theme.colorScheme.primary.withRed(100), // Slightly warmer purple
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.primary.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primary.withValues(alpha: 0.8),
+            theme.colorScheme.primary.withRed(100).withValues(alpha: 0.7),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: 24,
         child: Row(
           children: [
             Container(
@@ -332,3 +315,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
+
+

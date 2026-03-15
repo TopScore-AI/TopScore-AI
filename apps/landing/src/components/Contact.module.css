@@ -1,0 +1,167 @@
+.contact {
+    padding: 8rem 0;
+    background: var(--bg);
+}
+
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 4rem;
+}
+
+.title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    color: var(--text);
+}
+
+.subtitle {
+    font-size: 1.25rem;
+    color: var(--text-muted);
+}
+
+.content {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 4rem;
+    align-items: start;
+}
+
+.infoBox {
+    background: var(--gradient);
+    border-radius: 1.5rem;
+    padding: 2.5rem;
+    color: white;
+    box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.4);
+}
+
+.infoTitle {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.infoText {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+}
+
+.contactMethods {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.method {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.iconWrapper {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.75rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon {
+    color: white;
+}
+
+.methodLabel {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 0.25rem;
+}
+
+.methodLink {
+    font-weight: 600;
+    color: white;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.methodLink:hover {
+    opacity: 0.8;
+}
+
+.methodText {
+    font-weight: 600;
+    color: white;
+}
+
+.form {
+    background: var(--bg-card);
+    padding: 2.5rem;
+    border-radius: 1.5rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.formGroup {
+    margin-bottom: 1.5rem;
+}
+
+.label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+}
+
+.input, .textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input:focus, .textarea:focus {
+    outline: none;
+    border-color: var(--primary-raw);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.textarea {
+    resize: vertical;
+}
+
+.submitBtn {
+    width: 100%;
+    background: var(--primary-raw);
+    color: white;
+    font-weight: 600;
+}
+
+.submitBtn:hover {
+    background: var(--primary-raw);
+    opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+    .contact {
+        padding: 4rem 0;
+    }
+    .content {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    .title {
+        font-size: 2rem;
+    }
+}
