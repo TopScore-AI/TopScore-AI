@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
@@ -61,31 +62,42 @@ class FirebaseFile {
 
   /// Create from Firestore document (new behavior)
   factory FirebaseFile.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return FirebaseFile(
-      id: doc.id,
-      name: data['name'] ?? data['title'] ?? 'Unknown',
-      path: data['path'] ?? data['storagePath'] ?? '',
-      fileNameLower: data['fileNameLower'] ??
-          (data['name'] ?? data['title'] ?? '').toLowerCase(),
-      subject: data['subject'],
-      grade: data['grade'] ?? data['level'],
-      curriculum: data['curriculum'],
-      category: data['category'],
-      type: data['type'] ??
-          (data['path'] ?? data['storagePath'] ?? '')
-              .split('.')
-              .last
-              .toLowerCase(),
-      size: data['size'] ?? data['fileSize'],
-      downloadUrl: data['downloadUrl'],
-      uploadedAt: (data['uploadedAt'] as Timestamp?)?.toDate() ??
-          (data['createdAt'] as Timestamp?)?.toDate(),
-      tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
-      snapshot: doc,
-      strand: data['strand'],
-      subStrand: data['subStrand'] ?? data['sub_strand'],
-    );
+    try {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      return FirebaseFile(
+        id: doc.id,
+        name: data['name'] ?? data['title'] ?? 'Unknown',
+        path: data['path'] ?? data['storagePath'] ?? '',
+        fileNameLower: data['fileNameLower'] ??
+            (data['name'] ?? data['title'] ?? '').toString().toLowerCase(),
+        subject: data['subject']?.toString(),
+        grade: _safeParseInt(data['grade'] ?? data['level']),
+        curriculum: data['curriculum']?.toString(),
+        category: data['category']?.toString(),
+        type: data['type']?.toString() ??
+            (data['path'] ?? data['storagePath'] ?? '')
+                .toString()
+                .split('.')
+                .last
+                .toLowerCase(),
+        size: _safeParseInt(data['size'] ?? data['fileSize']),
+        downloadUrl: data['downloadUrl']?.toString(),
+        uploadedAt: _safeParseDateTime(data['uploadedAt'] ?? data['createdAt']),
+        tags: _safeParseList(data['tags']),
+        snapshot: doc,
+        strand: data['strand']?.toString(),
+        subStrand: (data['subStrand'] ?? data['sub_strand'])?.toString(),
+      );
+    } catch (e) {
+      debugPrint('Error parsing FirebaseFile from Firestore (${doc.id}): $e');
+      // Return a minimal valid object instead of crashing
+      return FirebaseFile(
+        id: doc.id,
+        name: 'Error parsing file',
+        path: '',
+        snapshot: doc,
+      );
+    }
   }
 
   /// Convert to Firestore document map (for writing)
@@ -144,13 +156,36 @@ class FirebaseFile {
       type: map['type'] ?? 'pdf',
       size: map['size'],
       downloadUrl: map['downloadUrl'],
-      uploadedAt: map['uploadedAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['uploadedAt'])
-          : null,
+      uploadedAt: _safeParseDateTime(map['uploadedAt']),
       tags: map['tags'] != null ? List<String>.from(map['tags']) : null,
       strand: map['strand'],
       subStrand: map['subStrand'],
     );
+  }
+
+  /// Safely converts dynamic Firestore values (Timestamp, String, or int) to DateTime
+  static DateTime? _safeParseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    return null;
+  }
+
+  static int? _safeParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
+  static List<String>? _safeParseList(dynamic value) {
+    if (value == null) return null;
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return null;
   }
 
   /// Extract metadata from storage path

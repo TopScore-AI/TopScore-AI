@@ -258,6 +258,25 @@ class StorageService {
           debugPrint('Search subject query error ($collectionName): $e');
         }
       }
+      // Strategy 4: Name prefix match (Capitalized)
+      if (resultsMap.length < limit) {
+        try {
+          final capitalizedSearchTerm = searchTerm.isEmpty 
+              ? "" 
+              : searchTerm[0].toUpperCase() + searchTerm.substring(1);
+          final nameQuery = buildBaseQuery(collectionName)
+              .where('name', isGreaterThanOrEqualTo: capitalizedSearchTerm)
+              .where('name', isLessThanOrEqualTo: '$capitalizedSearchTerm\uf8ff')
+              .limit(limit);
+          final snapshot = await nameQuery.get();
+          for (final doc in snapshot.docs) {
+            resultsMap.putIfAbsent(
+                doc.id, () => FirebaseFile.fromFirestore(doc));
+          }
+        } catch (e) {
+          debugPrint('Search name query error ($collectionName): $e');
+        }
+      }
     }
 
     if (collectionScope == 'cbc_files') {

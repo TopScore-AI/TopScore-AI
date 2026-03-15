@@ -95,12 +95,20 @@ class EnhancedWebSocketService {
     _connectionManager.setConnecting();
 
     try {
+      final url = _wsUrl;
+      if (url.isEmpty || !url.startsWith('ws')) {
+        debugPrint('WebSocket: Invalid URL: $url');
+        _connectionManager.setDisconnected();
+        return;
+      }
+
       if (kDebugMode) {
         debugPrint(
-          'WebSocket: Connecting to $_wsUrl (attempt ${_reconnectAttempts + 1})',
+          'WebSocket: Connecting to $url (attempt ${_reconnectAttempts + 1})',
         );
       }
-      _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
+      
+      _channel = WebSocketChannel.connect(Uri.parse(url));
 
       _channel!.stream.listen(
         (message) {
@@ -133,7 +141,7 @@ class EnhancedWebSocketService {
       );
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('WebSocket: Failed to connect: $e');
+        debugPrint('WebSocket: Failed to connect Exception: $e');
       }
       _isConnected = false;
       _isConnectedController.add(false);

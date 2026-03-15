@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:go_router/go_router.dart';
@@ -11,9 +10,10 @@ import '../constants/colors.dart';
 import '../config/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/resources_provider.dart';
+import '../models/user_model.dart';
 import '../providers/notification_provider.dart';
 import '../providers/connectivity_provider.dart';
-import '../services/onboarding_tooltip_service.dart';
+import '../providers/ai_tutor_history_provider.dart';
 
 import '../widgets/interest_update_sheet.dart';
 import '../widgets/animated_search_bar.dart';
@@ -25,6 +25,7 @@ import 'notifications/notification_inbox_screen.dart';
 import '../models/firebase_file.dart';
 import '../services/storage_service.dart';
 import '../widgets/session_history_carousel.dart';
+import '../widgets/glass_card.dart';
 
 // Feature Items removed as they are now redundant with the Nav Bar.
 
@@ -47,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
         listen: false,
       );
       resourcesProvider.loadRecentlyOpened();
-      OnboardingTooltipService().init();
       _checkMissingInterests();
       _setupConnectivityListener();
     });
@@ -126,13 +126,20 @@ class _HomeTabState extends State<HomeTab> {
   static List<FirebaseFile>? _cachedAllFiles;
   List<FirebaseFile> _allFiles = [];
   List<FirebaseFile> _filteredFiles = [];
+  List<Map<String, dynamic>> _filteredThreads = [];
   bool _isLoadingFiles = true;
   bool _isSearching = false;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _loadFiles();
+  }
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadFiles() async {
@@ -168,52 +175,94 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  Future<void> _filterFiles(String query) async {
-    if (query.trim().isEmpty) {
+  Future<void> _performSearch(String query) async {
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isEmpty) {
       setState(() {
         _filteredFiles = List.from(_allFiles);
+        _filteredThreads = [];
         _isSearching = false;
+        _isLoadingFiles = false;
       });
       return;
     }
 
-    setState(() => _isSearching = true);
+    setState(() {
+      _isSearching = true;
+      _isLoadingFiles = true;
+    });
+
+    final lowerQuery = trimmedQuery.toLowerCase();
+
+    // 1. Immediate Local Search (Fast)
+    final localFiles = _allFiles.where((file) {
+      return file.name.toLowerCase().contains(lowerQuery) ||
+          file.path.toLowerCase().contains(lowerQuery) ||
+          (file.subject?.toLowerCase().contains(lowerQuery) ?? false) ||
+          (file.tags?.any((tag) => tag.toLowerCase().contains(lowerQuery)) ?? false);
+    }).toList();
+
+    final historyProvider = Provider.of<AiTutorHistoryProvider>(context, listen: false);
+    final localThreads = historyProvider.threads.where((thread) {
+      final title = (thread['title'] as String?)?.toLowerCase() ?? '';
+      return title.contains(lowerQuery);
+    }).toList();
+
+    // Show local results immediately while waiting for remote
+    if (mounted) {
+      setState(() {
+        _filteredFiles = localFiles;
+        _filteredThreads = localThreads;
+        _isLoadingFiles = true; // Still loading remote
+      });
+    }
 
     try {
+      // 2. Remote Search (Comprehensive)
       final user = Provider.of<AuthProvider>(context, listen: false).userModel;
-      final results = await StorageService.searchFiles(
-        query,
+      final remoteFiles = await StorageService.searchFiles(
+        trimmedQuery,
         grade: user?.grade,
         curriculum: user?.curriculum,
-      );
-      if (mounted) {
-        setState(() {
-          _filteredFiles = results;
-        });
+      ).timeout(const Duration(seconds: 8));
+
+      if (!mounted) return;
+
+      // Merge results, avoiding duplicates by path
+      final Map<String, FirebaseFile> mergedMap = {};
+      for (var f in localFiles) {
+        mergedMap[f.path] = f;
       }
+      for (var f in remoteFiles) {
+        mergedMap[f.path] = f;
+      }
+
+      setState(() {
+        _filteredFiles = mergedMap.values.toList();
+        _filteredThreads = localThreads; // Threads are already local
+        _isLoadingFiles = false;
+      });
     } catch (e) {
-      final lowerQuery = query.toLowerCase();
+      debugPrint('Search error: $e');
       if (mounted) {
         setState(() {
-          _filteredFiles = _allFiles.where((file) {
-            return file.name.toLowerCase().contains(lowerQuery) ||
-                file.path.toLowerCase().contains(lowerQuery);
-          }).toList();
+          // Keep local results on error
+          _isLoadingFiles = false;
         });
       }
     }
   }
 
   Future<void> _openFile(BuildContext context, FirebaseFile file) async {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator.adaptive()),
     );
 
     try {
-      String url = '';
-      if (file.ref != null) {
+      String url = file.downloadUrl ?? '';
+      if (url.isEmpty && file.ref != null) {
         url = await file.ref!.getDownloadURL();
       }
 
@@ -254,63 +303,312 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context).userModel;
+    final user = context.select<AuthProvider, UserModel?>((auth) => auth.userModel);
     final displayName = user?.displayName.split(' ')[0] ?? 'Student';
     final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
-        child: Column(
-          children: [
-            AnimatedSearchBar(
-              onSearchChanged: _filterFiles,
-              hintText: 'Search files, notes, topics...',
-              margin: const EdgeInsets.fromLTRB(
-                AppTheme.spacingMd,
-                AppTheme.spacingMd,
-                AppTheme.spacingMd,
-                AppTheme.spacingSm,
-              ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {
-                  await _loadFiles();
-                  if (context.mounted) {
-                    final resourcesProvider = Provider.of<ResourcesProvider>(
-                      context,
-                      listen: false,
-                    );
-                    await resourcesProvider.loadRecentlyOpened();
-                  }
-                },
-                color: AppColors.accentTeal,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacingMd,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _loadFiles();
+            if (context.mounted) {
+              final resourcesProvider = Provider.of<ResourcesProvider>(
+                context,
+                listen: false,
+              );
+              await resourcesProvider.loadRecentlyOpened();
+            }
+          },
+          color: AppColors.accentTeal,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: AnimatedSearchBar(
+                  onSearchChanged: _performSearch,
+                  hintText: 'Search files, topics, chats...',
+                  margin: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingSm,
                   ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+                sliver: SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeader(context, displayName, 12),
                       const SizedBox(height: AppTheme.spacingLg),
-                        // Quick Links Section
+                      _buildAiTutorHero(context),
+                      const SizedBox(height: AppTheme.spacingLg),
                       _buildQuickLinks(context),
                       const SizedBox(height: AppTheme.spacingLg),
-                      const SessionHistoryCarousel(),
+                      const RepaintBoundary(child: SessionHistoryCarousel()),
                       const SizedBox(height: AppTheme.spacingLg),
-                      _buildHeroCard(context),
+                      RepaintBoundary(child: _buildHeroCard(context)),
                       const SizedBox(height: AppTheme.spacingLg),
                       if (_isSearching)
-                        _buildSearchResultsSection(context)
-                      else ...[
-                        const SizedBox(height: AppTheme.spacingXl),
-                      ],
+                        _buildSliverSearchResultsHeader(context)
+                      else
+                        const SizedBox(height: AppTheme.spacingLg),
                     ],
                   ),
                 ),
+              ),
+              if (_isSearching)
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMd),
+                  sliver: _buildSliverSearchResults(context),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: AppTheme.spacing2xl)),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80), // Adjust for bottom nav
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            context.push('/ai-tutor');
+          },
+          label: Text(
+            "Ask AI Tutor",
+            style: GoogleFonts.quicksand(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+          icon: const Icon(Icons.auto_awesome_rounded),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 8,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliverSearchResultsHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final totalResults = _filteredFiles.length + _filteredThreads.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.spacingMd),
+      child: Row(
+        children: [
+          Text(
+            "Search Results",
+            style: GoogleFonts.quicksand(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacingSm),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingSm,
+              vertical: AppTheme.spacingXs,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.kidBlue.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            ),
+            child: Text(
+              '$totalResults',
+              style: GoogleFonts.quicksand(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.kidBlue,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliverSearchResults(BuildContext context) {
+    if (_isLoadingFiles) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
+          child: SkeletonList(itemCount: 5),
+        ),
+      );
+    }
+
+    if (_filteredFiles.isEmpty && _filteredThreads.isEmpty) {
+      return SliverToBoxAdapter(child: _buildNoResults(context));
+    }
+
+    return SliverList(
+      delegate: SliverChildListDelegate([
+        if (_filteredFiles.isNotEmpty) ...[
+          _buildSearchSectionHeader(context, "Library Files", Icons.folder_outlined),
+          const SizedBox(height: AppTheme.spacingMd),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 400,
+              mainAxisExtent: 90,
+              mainAxisSpacing: AppTheme.spacingMd,
+              crossAxisSpacing: AppTheme.spacingMd,
+            ),
+            itemCount: _filteredFiles.length,
+            itemBuilder: (context, index) => _buildFileCard(context, _filteredFiles[index]),
+          ),
+          const SizedBox(height: AppTheme.spacingLg),
+        ],
+        if (_filteredThreads.isNotEmpty) ...[
+          _buildSearchSectionHeader(context, "AI Tutor Chats", Icons.chat_bubble_outline),
+          const SizedBox(height: AppTheme.spacingMd),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredThreads.length,
+            separatorBuilder: (context, index) => const SizedBox(height: AppTheme.spacingMd),
+            itemBuilder: (context, index) => _buildChatCard(context, _filteredThreads[index]),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildSearchSectionHeader(BuildContext context, String title, IconData icon) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: theme.colorScheme.primary),
+        const SizedBox(width: AppTheme.spacingSm),
+        Text(
+          title.toUpperCase(),
+          style: GoogleFonts.quicksand(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: theme.colorScheme.primary.withValues(alpha: 0.8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatCard(BuildContext context, Map<String, dynamic> thread) {
+    final theme = Theme.of(context);
+    final title = thread['title'] ?? 'New Chat';
+    final model = thread['model'] ?? 'AI Tutor';
+
+    return BounceWrapper(
+      onTap: () => _openChat(context, thread),
+      child: EnhancedCard(
+        isGlass: true,
+        padding: const EdgeInsets.all(AppTheme.spacingMd),
+        margin: EdgeInsets.zero,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.kidPurple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.chat_bubble_outline,
+                color: AppColors.kidPurple,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacingMd),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.quicksand(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    model,
+                    style: GoogleFonts.quicksand(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: theme.hintColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: theme.iconTheme.color?.withValues(alpha: 0.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openChat(BuildContext context, Map<String, dynamic> thread) {
+    context.push('/ai-tutor', extra: {'thread_id': thread['thread_id']});
+  }
+
+  Widget _buildNoResults(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacing2xl),
+      child: Center(
+        child: Column(
+          children: [
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: AppTheme.durationSlow,
+              curve: Curves.elasticOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Container(
+                    padding: const EdgeInsets.all(AppTheme.spacingXl),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.search_off,
+                      size: 60,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: AppTheme.spacingLg),
+            Text(
+              "No files found",
+              style: GoogleFonts.nunito(
+                fontSize: 20,
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSm),
+            Text(
+              "Try a different search term",
+              style: GoogleFonts.nunito(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -400,116 +698,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildSearchResultsSection(BuildContext context) {
-    final theme = Theme.of(context);
-    if (_isLoadingFiles) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppTheme.spacingMd),
-        child: SkeletonList(itemCount: 5),
-      );
-    }
-
-    if (_filteredFiles.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppTheme.spacing2xl),
-        child: Center(
-          child: Column(
-            children: [
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.0, end: 1.0),
-                duration: AppTheme.durationSlow,
-                curve: Curves.elasticOut,
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
-                    child: Container(
-                      padding: const EdgeInsets.all(AppTheme.spacingXl),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.search_off,
-                        size: 60,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: AppTheme.spacingLg),
-              Text(
-                "No files found",
-                style: GoogleFonts.nunito(
-                  fontSize: 20,
-                  color: theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppTheme.spacingSm),
-              Text(
-                "Try a different search term",
-                style: GoogleFonts.nunito(
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              "Search Results",
-              style: GoogleFonts.nunito(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(width: AppTheme.spacingSm),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.spacingSm,
-                vertical: AppTheme.spacingXs,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.accentTeal.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
-              child: Text(
-                '${_filteredFiles.length}',
-                style: GoogleFonts.nunito(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.accentTeal,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppTheme.spacingMd),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _filteredFiles.length,
-          separatorBuilder: (context, index) =>
-              const SizedBox(height: AppTheme.spacingMd),
-          itemBuilder: (context, index) {
-            final file = _filteredFiles[index];
-            return _buildFileCard(context, file);
-          },
-        ),
-        const SizedBox(height: AppTheme.spacingXl),
-      ],
-    );
-  }
+  // Unused method replaced by _buildSliverSearchResults
 
   Widget _buildFileCard(BuildContext context, FirebaseFile file) {
     final theme = Theme.of(context);
@@ -520,6 +709,7 @@ class _HomeTabState extends State<HomeTab> {
     return BounceWrapper(
       onTap: () => _openFile(context, file),
       child: EnhancedCard(
+        isGlass: true,
         padding: const EdgeInsets.all(AppTheme.spacingMd),
         margin: EdgeInsets.zero,
         child: Row(
@@ -690,9 +880,9 @@ class _HomeTabState extends State<HomeTab> {
                   },
                   child: Text(
                     "Jambo, $name!",
-                    style: GoogleFonts.nunito(
+                    style: GoogleFonts.quicksand(
                       fontSize: 24,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       color: theme.colorScheme.onSurface,
                       height: 1.2,
                     ),
@@ -701,10 +891,10 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 2),
                 Text(
                   _getGreetingSubtitle(),
-                  style: GoogleFonts.nunito(
+                  style: GoogleFonts.quicksand(
                     fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -774,6 +964,87 @@ class _HomeTabState extends State<HomeTab> {
     return "Good evening! Let's review today.";
   }
 
+  Widget _buildAiTutorHero(BuildContext context) {
+    return BounceWrapper(
+      onTap: () => context.push('/ai-tutor'),
+      child: GlassCard(
+        borderRadius: AppTheme.radiusXl,
+        padding: const EdgeInsets.all(24),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withValues(alpha: 0.8),
+            AppColors.accentTeal.withValues(alpha: 0.7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    ),
+                    child: Text(
+                      "MOST POPULAR",
+                      style: GoogleFonts.quicksand(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Chat with\nyour AI Tutor",
+                    style: GoogleFonts.quicksand(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Snap a photo or ask anything\nto get instant help!",
+                    style: GoogleFonts.quicksand(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.psychology_rounded,
+                size: 48,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroCard(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -792,23 +1063,16 @@ class _HomeTabState extends State<HomeTab> {
         onTap: () {
           context.push('/career-compass');
         },
-        child: Container(
-          width: double.infinity,
+        child: GlassCard(
+          borderRadius: AppTheme.radiusXl,
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6C63FF), Color(0xFF9B72CB), Color(0xFFD96570)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6C63FF).withValues(alpha: 0.35),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
+          gradient: LinearGradient(
+            colors: [
+              AppColors.kidPurple.withValues(alpha: 0.7),
+              AppColors.kidPink.withValues(alpha: 0.6),
             ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
           child: Row(
             children: [
@@ -818,47 +1082,47 @@ class _HomeTabState extends State<HomeTab> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+                        horizontal: 12,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                       child: Text(
-                        "CAREER INSIGHT",
-                        style: GoogleFonts.inter(
+                        "ADVENTURE AWAITS",
+                        style: GoogleFonts.quicksand(
                           color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
                         ),
                       ),
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      "Discover Your\nFuture Path",
-                      style: GoogleFonts.nunito(
+                      "Explore Your\nFuture!",
+                      style: GoogleFonts.quicksand(
                         color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        height: 1.2,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
+                        horizontal: 20,
+                        vertical: 12,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
@@ -866,18 +1130,18 @@ class _HomeTabState extends State<HomeTab> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "Start Guide",
-                            style: GoogleFonts.nunito(
+                            "Start Journey",
+                            style: GoogleFonts.quicksand(
                               fontWeight: FontWeight.w800,
-                              color: const Color(0xFF6C63FF),
-                              fontSize: 14,
+                              color: AppColors.kidPurple,
+                              fontSize: 15,
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           const Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 16,
-                            color: Color(0xFF6C63FF),
+                            Icons.rocket_launch_rounded,
+                            size: 18,
+                            color: AppColors.kidPurple,
                           ),
                         ],
                       ),
@@ -886,19 +1150,23 @@ class _HomeTabState extends State<HomeTab> {
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                  border: Border.all(
+              Hero(
+                tag: 'hero_rocket',
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
                   ),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.compass,
-                  size: 44,
-                  color: Colors.white,
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 48,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],

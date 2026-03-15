@@ -92,32 +92,27 @@ class AuthService {
     try {
       if (kIsWeb) {
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.setCustomParameters({'prompt': 'select_account'});
         try {
-          final UserCredential userCredential =
-              await _auth.signInWithPopup(googleProvider);
+          debugPrint('[AUTH] Starting Google Popup sign-in...');
+          // FIX: Switched from redirect to popup to prevent browser tracking blockers 
+          // from breaking the sign-in loop.
+          final userCredential = await _auth.signInWithPopup(googleProvider);
           return userCredential.user;
         } on FirebaseAuthException catch (e) {
-          if (e.code == 'popup-closed-by-user' ||
-              e.code == 'cancelled-by-user') {
-            debugPrint(
-                'Popup was closed or cancelled. Falling back to redirect...');
-            await _auth.signInWithRedirect(googleProvider);
-            // After redirect, the page will reload and we won't return anything here.
-            return null;
-          }
+          debugPrint('[AUTH] FirebaseAuthException during popup: ${e.code} - ${e.message}');
           rethrow;
         }
       } else {
         await _ensureGoogleSignInInitialized();
 
-        final GoogleSignInAccount googleUser = await _googleSignIn.authenticate(
-          scopeHint: <String>['email'],
-        );
-
+        // FIX: In 7.0+, the method is .authenticate() and is non-nullable
+        final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+        
         final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
         final OAuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: null,
+          accessToken: null, // accessToken is handled separately in 7.0+ if needed
           idToken: googleAuth.idToken,
         );
 
@@ -148,12 +143,6 @@ class AuthService {
             'The auth popup was closed before completion. Please try again and ensure popups are allowed.');
       }
       rethrow;
-    } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
-        debugPrint('Google Sign In: User cancelled');
-        return null;
-      }
-      rethrow;
     } catch (e) {
       debugPrint('Google Sign In Error: $e');
       rethrow;
@@ -181,14 +170,12 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
-      // Only sign out from Google if it was initialized in this session.
-      // This prevents "Bad state" errors on Web where the plugin may not be initialized.
       if (_googleSignInInitialized) {
         await _googleSignIn.signOut();
       }
     } catch (e) {
       debugPrint(
-          'Google Sign Out error (safe to ignore if not initialized): $e');
+          'Google Sign Out error: $e');
     } finally {
       await _auth.signOut();
       _googleSignInInitialized = false;

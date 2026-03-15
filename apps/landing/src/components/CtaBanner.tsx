@@ -1,6 +1,7 @@
 'use client';
 import Image from 'next/image';
 import { useLocale } from '@/i18n';
+import { Download } from 'lucide-react';
 import AnimatedSection from './AnimatedSection';
 import styles from './CtaBanner.module.css';
 
@@ -41,6 +42,10 @@ export default function CtaBanner() {
                         </a>
                         <a href="https://apps.apple.com/app/id6400000000" className={styles.storeBtn} target="_blank" rel="noopener noreferrer" aria-label="Download on the App Store">
                             <Image src="/app-store-badge.svg" alt="Download on the App Store" width={200} height={59} className={styles.badge} />
+                        </a>
+                        <a href="#" className={styles.apkBtn} target="_blank" rel="noopener noreferrer">
+                            <Download size={20} />
+                            <span>Download APK (Android)</span>
                         </a>
                     </div>
                 </AnimatedSection>

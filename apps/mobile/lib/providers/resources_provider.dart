@@ -219,9 +219,10 @@ class ResourcesProvider extends ChangeNotifier {
   Future<void> fetchRecommendations({
     required UserModel user,
     int limit = 6,
+    bool isRefresh = false,
   }) async {
     if (_recommendationsLoading) return;
-    if (_recommendationsLoaded && _recommendations.isNotEmpty) return;
+    if (_recommendationsLoaded && !isRefresh) return;
 
     _recommendationsLoading = true;
     // Don't notify here to avoid unnecessary rebuilds during load

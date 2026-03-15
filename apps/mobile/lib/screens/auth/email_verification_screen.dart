@@ -50,7 +50,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     final verified = await authProvider.reloadAndCheckEmailVerified();
     if (verified && mounted) {
       _pollTimer?.cancel();
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // GoRouter redirect handles navigation automatically via refreshListenable
     }
   }
 
@@ -62,7 +62,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     setState(() => _isCheckingManually = false);
     if (verified) {
       _pollTimer?.cancel();
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // GoRouter redirect handles navigation automatically via refreshListenable
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -279,16 +279,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                             ),
                           ),
 
-                          // Sign out
+                          // Sign out — GoRouter redirect handles navigation to /login
                           TextButton(
                             onPressed: authProvider.isLoading
                                 ? null
                                 : () async {
                                     await authProvider.signOut();
-                                    if (context.mounted) {
-                                      Navigator.of(context)
-                                          .popUntil((route) => route.isFirst);
-                                    }
                                   },
                             child: const Text('Back to Sign In'),
                           ),

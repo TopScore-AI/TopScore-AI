@@ -37,6 +37,7 @@
 .grad {
     background: var(--gradient);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -76,6 +77,47 @@
     display: block;
     height: 59px;
     width: auto;
+}
+
+.apkBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 61px;
+    padding: 0 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-foreground);
+    font-size: 15px;
+    font-weight: 700;
+    transition: all 0.2s;
+    text-decoration: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.apkBtn:hover {
+    transform: translateY(-3px);
+    border-color: var(--primary);
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.apkBtn svg {
+    opacity: 0.8;
+}
+
+.apkBtn:hover svg {
+    opacity: 1;
+}
+
+@media (max-width: 480px) {
+    .apkBtn {
+        width: 100%;
+        max-width: 200px;
+    }
 }
 
 

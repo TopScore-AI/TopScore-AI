@@ -36,8 +36,8 @@ class OfflineService {
       _prefs = await SharedPreferences.getInstance();
       debugPrint("✅ SharedPreferences Initialized");
 
-      // 2. Initialize Hive (Only on non-web to avoid hangs/issues)
-      if (!kIsWeb) {
+      // 2. Initialize Hive (Strictly non-web)
+      if (!kIsWeb && !kIsWeb) { // Double check for extra safety against some build weirdness
         await Hive.initFlutter();
         _resourceBox = await Hive.openBox(_resourceBoxName);
         _settingsBox = await Hive.openBox(_settingsBoxName);

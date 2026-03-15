@@ -15,11 +15,8 @@ class SessionHistoryCarousel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resourcesProvider = Provider.of<ResourcesProvider>(context);
-    final aiTutorProvider = Provider.of<AiTutorHistoryProvider>(context);
-
-    final recentFiles = resourcesProvider.recentlyOpened;
-    final recentChats = aiTutorProvider.threads;
+    final recentFiles = context.select<ResourcesProvider, List<FirebaseFile>>((p) => p.recentlyOpened);
+    final recentChats = context.select<AiTutorHistoryProvider, List<Map<String, dynamic>>>((p) => p.threads);
 
     // Combine and sort by recency
     final List<dynamic> combinedItems = [];

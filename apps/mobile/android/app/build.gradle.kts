@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -8,10 +9,25 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
 android {
     namespace = "com.topscoreapp.ai"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
+
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+            storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+            storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -36,9 +52,8 @@ android {
 
     buildTypes {
         release {
-            // Use debug signing config for development builds
-            // For production builds, create key.properties with your signing credentials
-            signingConfig = signingConfigs.getByName("debug")
+            // Updated to use the release signing config
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

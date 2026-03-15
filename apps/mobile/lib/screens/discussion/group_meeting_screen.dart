@@ -82,7 +82,7 @@ class _GroupMeetingScreenState extends State<GroupMeetingScreen>
   }
 
   void _showPermissionDeniedDialog() {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(

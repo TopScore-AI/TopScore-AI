@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import '../message_model.dart';
+import '../../config/app_theme.dart';
 
 class ChatInputArea extends StatefulWidget {
   final TextEditingController textController;
@@ -119,73 +120,99 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (widget.pendingFileName != null)
-                  _buildAttachmentPreview(theme, isDark),
-
                 if (widget.replyingToMessage != null)
                   _buildReplyPreview(theme, isDark),
 
                 // Main input pill
                 Container(
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(28),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: isDark ? 0.8 : 0.9),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    border: Border.all(
+                      color: (isDark ? Colors.white : theme.primaryColor).withValues(alpha: 0.1),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: theme.primaryColor
-                            .withValues(alpha: isDark ? 0.08 : 0.04),
+                            .withValues(alpha: isDark ? 0.15 : 0.08),
                         blurRadius: 20,
                         spreadRadius: 2,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Attachment button (left inside pill)
-                      Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.2)
-                              : Colors.transparent,
-                          border: Border.all(
+                      if (widget.pendingFileName != null) ...[
+                        _buildAttachmentPreview(theme, isDark),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Divider(
+                            height: 1,
+                            thickness: 1,
                             color: (isDark ? Colors.white : Colors.black)
-                                .withValues(alpha: 0.15),
+                                .withValues(alpha: 0.1),
                           ),
-                          boxShadow: isDark
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.05),
-                                    blurRadius: 4,
-                                    spreadRadius: 1,
-                                  )
-                                ]
-                              : null,
                         ),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.add_rounded,
-                            size: 22,
-                            color:
-                                isDark ? Colors.white : theme.iconTheme.color,
+                      ],
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Attachment button (left inside pill)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isDark
+                                  ? Colors.black.withValues(alpha: 0.2)
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: (isDark ? Colors.white : Colors.black)
+                                    .withValues(alpha: 0.15),
+                              ),
+                              boxShadow: isDark
+                                  ? [
+                                      BoxShadow(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.05),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.attach_file_rounded,
+                                size: 20,
+                                color: theme.colorScheme.onSurface,
+                                shadows: isDark
+                                    ? const [
+                                        Shadow(
+                                          color: Colors.black38,
+                                          offset: Offset(0, 1),
+                                          blurRadius: 2,
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              tooltip: 'Attach file',
+                              onPressed: widget.onShowAttachmentMenu,
+                              visualDensity: VisualDensity.compact,
+                            ),
                           ),
-                          tooltip: 'Attach file',
-                          onPressed: widget.onShowAttachmentMenu,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
 
                       // Text field
                       Expanded(
                         child: TextField(
                           controller: widget.textController,
                           focusNode: widget.messageFocusNode,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.quicksand(
                             color: isDark ? Colors.white : Colors.black87,
                             fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                           keyboardType: TextInputType.multiline,
                           textInputAction: TextInputAction.send,
@@ -230,6 +257,8 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                           ],
                         ),
                       ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -250,34 +279,49 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             widget.pendingFileName!.toLowerCase().endsWith('.webp'));
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 54,
-              height: 54,
-              child: isImage && widget.pendingPreviewData != null
-                  ? Image.memory(
-                      base64Decode(
-                        widget.pendingPreviewData!.contains(',')
-                            ? widget.pendingPreviewData!.split(',').last
-                            : widget.pendingPreviewData!,
+          // Minimized preview (squircle-like rounded corners)
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (isDark ? Colors.white : Colors.black)
+                    .withValues(alpha: 0.1),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: isImage && widget.pendingPreviewData != null
+                    ? Image.memory(
+                        base64Decode(
+                          widget.pendingPreviewData!.contains(',')
+                              ? widget.pendingPreviewData!.split(',').last
+                              : widget.pendingPreviewData!,
+                        ),
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: theme.primaryColor.withValues(alpha: 0.12),
+                        child: Icon(
+                          Icons.description_rounded,
+                          color: theme.primaryColor,
+                          size: 20,
+                        ),
                       ),
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      color: theme.primaryColor.withValues(alpha: 0.12),
-                      child: const Icon(Icons.description_rounded),
-                    ),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -288,26 +332,45 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                 Text(
                   widget.pendingFileName ?? 'Attachment',
                   style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   widget.isUploading ? 'Uploading…' : 'Attached',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: widget.isUploading ? null : Colors.green[700],
+                  style: GoogleFonts.quicksand(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: (isDark ? Colors.white : Colors.black)
+                        .withValues(alpha: 0.5),
                   ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 20),
-            onPressed:
-                widget.isUploading ? null : widget.onClearPendingAttachment,
+          // Close button as small circle
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.isUploading ? null : widget.onClearPendingAttachment,
+              borderRadius: BorderRadius.circular(15),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (isDark ? Colors.white : Colors.black)
+                      .withValues(alpha: 0.05),
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: isDark ? Colors.white : Colors.black.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -336,7 +399,16 @@ class _ChatInputAreaState extends State<ChatInputArea> {
           size: 22,
           color: widget.isRecording
               ? Colors.red
-              : (isDark ? Colors.white : theme.primaryColor),
+              : (isDark ? Colors.white : Colors.black87),
+          shadows: isDark
+              ? const [
+                  Shadow(
+                    color: Colors.black45,
+                    offset: Offset(0, 1),
+                    blurRadius: 3,
+                  )
+                ]
+              : null,
         ),
         onPressed: widget.onToggleRecording,
         tooltip: widget.isRecording ? 'Stop recording' : 'Voice input',
@@ -389,7 +461,20 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             : null,
       ),
       child: IconButton(
-        icon: Icon(icon, size: 20, color: iconColor),
+        icon: Icon(
+          icon,
+          size: 20,
+          color: iconColor,
+          shadows: isDark
+              ? const [
+                  Shadow(
+                    color: Colors.black45,
+                    offset: Offset(0, 1),
+                    blurRadius: 3,
+                  )
+                ]
+              : null,
+        ),
         onPressed: onPressed,
         tooltip: tooltip,
         visualDensity: VisualDensity.compact,
@@ -424,9 +509,9 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                   widget.replyingToMessage!.isUser
                       ? 'Replying to you'
                       : 'Replying to TopScore AI',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.quicksand(
                     fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                     color: theme.primaryColor,
                   ),
                 ),
@@ -440,7 +525,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 20),
+            icon: Icon(Icons.close_rounded, size: 20, color: isDark ? Colors.white : null),
             onPressed: widget.onCancelReply,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),

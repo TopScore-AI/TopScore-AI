@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:app_links/app_links.dart';
+import 'package:web/web.dart' as web;
 
 import 'providers/auth_provider.dart';
 import 'providers/download_provider.dart';
@@ -18,157 +21,185 @@ import 'providers/ai_tutor_history_provider.dart';
 import 'providers/tutor_connection_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/notification_provider.dart';
-import 'router.dart' as app_router;
-
-import 'screens/home_screen.dart';
-import 'screens/landing_page.dart';
-import 'screens/subscription/subscription_screen.dart';
-import 'screens/auth/email_verification_screen.dart';
-import 'screens/auth/auth_screen.dart';
+import 'router.dart';
 
 import 'firebase_options.dart';
-import 'services/notification_service.dart';
 import 'services/offline_service.dart';
-import 'services/update_service.dart';
 import 'services/analytics_service.dart';
 import 'config/app_theme.dart';
 import 'widgets/app_error_widget.dart';
+import 'widgets/global_background.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
-  if (kDebugMode) {
-    debugPrint('[TOPSCORE] 1. Starting main()');
-  }
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Enable clean URLs for web (removes # from URLs)
-  usePathUrlStrategy();
-  if (kDebugMode) {
-    debugPrint(
-      '[TOPSCORE] 2. WidgetsFlutterBinding initialized & URL strategy set',
-    );
-  }
-
-  // Load environment variables with error handling
-  try {
+  runZonedGuarded(() async {
     if (kDebugMode) {
-      debugPrint('[TOPSCORE] 3. Loading dotenv...');
+      debugPrint('[TOPSCORE] 1. Starting main()');
     }
-    // On web, dotenv loading might fail, but we don't need it since Firebase config is hardcoded
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Enable clean URLs for web (removes # from URLs)
+    usePathUrlStrategy();
+    if (kDebugMode) {
+      debugPrint(
+        '[TOPSCORE] 2. WidgetsFlutterBinding initialized & URL strategy set',
+      );
+    }
+
+    // Load environment variables with error handling
+    try {
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 3. Loading dotenv...');
+      }
+      if (!kIsWeb) {
+        await dotenv.load(fileName: ".env");
+      }
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 4. Dotenv loaded successfully');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 4. Dotenv load error (continuing anyway): $e');
+      }
+    }
+
+    // Initialize Firebase with error handling
+    try {
+      if (kDebugMode) {
+        debugPrint('[TOPSCORE] 5. Checking Firebase apps...');
+      }
+      if (Firebase.apps.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('[TOPSCORE] 6. Initializing Firebase...');
+        }
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        if (kDebugMode) {
+          debugPrint('[TOPSCORE] 7. Firebase initialized successfully');
+        }
+
+        // Initialize Analytics
+        try {
+          AnalyticsService.instance.enableDebugMode();
+          if (kDebugMode) {
+            debugPrint('[TOPSCORE] 7b. Analytics initialized');
+          }
+        } catch (analyticsError) {
+          debugPrint('[TOPSCORE] Analytics init error (non-fatal): $analyticsError');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('[TOPSCORE] 6-7. Firebase already initialized');
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('[TOPSCORE] 7. Firebase init error: $e');
+      debugPrint('[TOPSCORE] 7. Stack trace: $stackTrace');
+      // Rethrow to be caught by the runZonedGuarded boundary
+      rethrow;
+    }
+
+    // Enable offline persistence (only on non-web)
     if (!kIsWeb) {
-      await dotenv.load(fileName: ".env");
+      try {
+        FirebaseFirestore.instance.settings = const Settings(
+          persistenceEnabled: true,
+        );
+      } catch (e) {
+        debugPrint("Firestore persistence error: $e");
+      }
     }
     if (kDebugMode) {
-      debugPrint('[TOPSCORE] 4. Dotenv loaded successfully');
+      debugPrint('[TOPSCORE] 8. Firestore settings done (skipped on web)');
     }
-  } catch (e) {
+
+    // Init Notifications (skip on web to avoid blocking)
+    if (!kIsWeb) {
+      try {
+// Notification initialization removed or needs update for unified router
+      } catch (e) {
+        debugPrint("Notification Init Error: $e");
+      }
+    }
     if (kDebugMode) {
-      debugPrint('[TOPSCORE] 4. Dotenv load error (continuing anyway): $e');
+      debugPrint('[TOPSCORE] 9. Notifications done (skipped on web)');
     }
-  }
 
-  // Initialize Firebase with error handling
-  try {
-    if (kDebugMode) {
-      debugPrint('[TOPSCORE] 5. Checking Firebase apps...');
-    }
-    if (Firebase.apps.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('[TOPSCORE] 6. Initializing Firebase...');
-      }
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      if (kDebugMode) {
-        debugPrint('[TOPSCORE] 7. Firebase initialized successfully');
-      }
-
-      // Initialize Analytics
-      AnalyticsService.instance.enableDebugMode();
-      if (kDebugMode) {
-        debugPrint('[TOPSCORE] 7b. Analytics initialized');
-      }
-    } else {
-      if (kDebugMode) {
-        debugPrint('[TOPSCORE] 6-7. Firebase already initialized');
-      }
-    }
-  } catch (e, stackTrace) {
-    debugPrint('[TOPSCORE] 7. Firebase init error: $e');
-    debugPrint('[TOPSCORE] 7. Stack trace: $stackTrace');
-  }
-
-  // Enable offline persistence (only on non-web)
-  if (!kIsWeb) {
+    // Init Offline Storage (Initializes SharedPreferences on web, Hive on mobile)
     try {
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true,
-      );
+      await OfflineService().init();
     } catch (e) {
-      debugPrint("Firestore persistence error: $e");
+      debugPrint("Offline Init Error: $e");
     }
-  }
-  if (kDebugMode) {
-    debugPrint('[TOPSCORE] 8. Firestore settings done (skipped on web)');
-  }
-
-  // Init Notifications (skip on web to avoid blocking)
-  if (!kIsWeb) {
-    try {
-      final notificationService = NotificationService();
-      await notificationService.initialize();
-      await setupInteractedMessage();
-    } catch (e) {
-      debugPrint("Notification Init Error: $e");
+    if (kDebugMode) {
+      debugPrint('[TOPSCORE] 10. Offline storage done');
+      debugPrint('[TOPSCORE] 11. Calling runApp()...');
     }
-  }
-  if (kDebugMode) {
-    debugPrint('[TOPSCORE] 9. Notifications done (skipped on web)');
-  }
 
-  // Init Offline Storage (Initializes SharedPreferences on web, Hive on mobile)
-  try {
-    await OfflineService().init();
-  } catch (e) {
-    debugPrint("Offline Init Error: $e");
-  }
-  if (kDebugMode) {
-    debugPrint('[TOPSCORE] 10. Offline storage done');
-    debugPrint('[TOPSCORE] 11. Calling runApp()...');
-  }
+    // Global error handler for uncaught Flutter widget errors
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('[TOPSCORE] FlutterError: ${details.exceptionAsString()}');
+    };
+    ErrorWidget.builder =
+        (FlutterErrorDetails details) => AppErrorWidget(details: details);
 
-  // Global error handler for uncaught Flutter widget errors
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('[TOPSCORE] FlutterError: ${details.exceptionAsString()}');
-  };
-  ErrorWidget.builder =
-      (FlutterErrorDetails details) => AppErrorWidget(details: details);
-
-  runApp(const MyApp());
-  if (kDebugMode) {
+    runApp(const MyApp());
     debugPrint('[TOPSCORE] 12. runApp() called');
-  }
-}
-
-Future<void> setupInteractedMessage() async {
-  RemoteMessage? initialMessage =
-      await FirebaseMessaging.instance.getInitialMessage();
-  if (initialMessage != null) {
-    _handleMessage(initialMessage);
-  }
-  FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
-}
-
-void _handleMessage(RemoteMessage message) {
-  if (message.data['screen'] == 'subscription_page') {
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-    );
-  } else if (message.data['screen'] == 'daily_challenge') {
-    debugPrint("Daily Challenge Notification Clicked");
-  }
+  }, (error, stack) {
+    debugPrint('[TOPSCORE] FATAL STARTUP ERROR: $error');
+    debugPrint('[TOPSCORE] Stack trace: $stack');
+    
+    // Fallback: If everything fails, show a safety UI
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFFF9FAFB),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                const SizedBox(height: 16),
+                const Text(
+                  'Initialization Error',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The application failed to start correctly. This usually happens due to a configuration mismatch or network issues.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                  ),
+                  child: Text(
+                    error.toString(),
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => web.window.location.reload(),
+                  child: const Text('Reload Application'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ));
+  });
 }
 
 class MyApp extends StatefulWidget {
@@ -188,6 +219,7 @@ class _MyAppState extends State<MyApp> {
   late final AiTutorHistoryProvider _aiTutorHistoryProvider;
   late final TutorConnectionProvider _tutorConnectionProvider;
   late final AppLinks _appLinks;
+  late final GoRouter _router;
 
   @override
   void initState() {
@@ -200,26 +232,28 @@ class _MyAppState extends State<MyApp> {
     _resourcesProvider = ResourcesProvider();
     _aiTutorHistoryProvider = AiTutorHistoryProvider();
     _tutorConnectionProvider = TutorConnectionProvider();
+    _router = createRouter(_authProvider);
 
-    if (kIsWeb) {
-      UpdateService().startAutoCheck();
-    }
+    // Start auth initialization immediately so GoRouter redirect
+    // can properly gate navigation from the very first frame.
+    _authProvider.init().then((_) {
+      if (kIsWeb) {
+        web.window.dispatchEvent(web.CustomEvent('app-ready'));
+      }
+    });
+    _authProvider.addListener(_syncAnalyticsUser);
 
     // Initialize deep link handling for app shortcuts
     if (!kIsWeb) {
       _appLinks = AppLinks();
-      _initDeepLinks();
+      _initDeepLinks(_router);
     }
 
-    // Defer initialization until after the first frame
+    // Defer non-auth initialization until after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _authProvider.init();
       _downloadProvider.init();
       _navigationProvider.init();
       _resourcesProvider.loadRecentlyOpened();
-
-      // Set analytics user properties once auth resolves
-      _authProvider.addListener(_syncAnalyticsUser);
     });
   }
 
@@ -246,7 +280,7 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _syncFCMToken(String uid) async {
     try {
-      if (kIsWeb) return; // Optional: handle web push if needed later
+      if (kIsWeb) return;
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -260,12 +294,12 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  Future<void> _initDeepLinks() async {
+  Future<void> _initDeepLinks(GoRouter router) async {
     // Handle initial link (app opened from shortcut while closed)
     try {
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) {
-        _handleDeepLink(initialUri);
+        _handleDeepLink(initialUri, router);
       }
     } catch (e) {
       debugPrint('Error getting initial deep link: $e');
@@ -273,18 +307,17 @@ class _MyAppState extends State<MyApp> {
 
     // Handle links while app is running
     _appLinks.uriLinkStream.listen((uri) {
-      _handleDeepLink(uri);
+      _handleDeepLink(uri, router);
     });
   }
 
-  void _handleDeepLink(Uri uri) {
+  void _handleDeepLink(Uri uri, GoRouter router) {
     // Convert topscore://app/path to /path for go_router
     if (uri.scheme == 'topscore' && uri.host == 'app') {
       final path = uri.path.isEmpty ? '/home' : uri.path;
       debugPrint('Deep link received: $path');
-      // Navigate after a small delay to ensure router is ready
       Future.delayed(const Duration(milliseconds: 100), () {
-        app_router.router.go(path);
+        router.go(path);
       });
     }
   }
@@ -322,79 +355,46 @@ class _MyAppState extends State<MyApp> {
           create: (_) => NotificationProvider(),
         ),
       ],
-      child: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
-          return Consumer<SettingsProvider>(
-            builder: (context, settings, _) {
-              // Check if user is authenticated to decide routing strategy
-              final isLoggedIn = authProvider.userModel != null;
-
-              if (isLoggedIn && !authProvider.needsRoleSelection) {
-                // Use go_router for logged-in users/guests with clean URLs
-                return MaterialApp.router(
-                  title: 'TopScore AI',
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.lightTheme,
-                  darkTheme: AppTheme.darkTheme,
-                  themeMode: settings.themeMode,
-                  locale: settings.locale,
-                  supportedLocales: const [
-                    Locale('en'),
-                    Locale('sw'),
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp.router(
+            title: 'TopScore AI',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: settings.themeMode,
+            locale: settings.locale,
+            supportedLocales: const [
+              Locale('en'),
+              Locale('sw'),
+            ],
+            routerConfig: _router,
+            builder: (context, child) {
+              return GlobalBackground(
+                child: Stack(
+                  children: [
+                    child!,
+                    // Visual Heartbeat Indicator (Diagnostic)
+                    if (!kIsWeb || kDebugMode)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.pinkAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
                   ],
-                  routerConfig: app_router.router,
-                );
-              }
-
-              return MaterialApp(
-                title: 'TopScore AI',
-                navigatorKey: navigatorKey,
-                debugShowCheckedModeBanner: false,
-                theme: AppTheme.lightTheme,
-                darkTheme: AppTheme.darkTheme,
-                themeMode: settings.themeMode,
-                locale: settings.locale,
-                navigatorObservers: [
-                  AnalyticsService.instance.observer,
-                ],
-                supportedLocales: const [
-                  Locale('en'),
-                  Locale('sw'),
-                ],
-                home: const AuthWrapper(),
-                routes: {
-                  '/landing': (context) => const LandingPage(),
-                  '/home': (context) => const HomeScreen(),
-                },
+                ),
               );
             },
           );
         },
       ),
     );
-  }
-}
-
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-
-    if (authProvider.isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (authProvider.requiresEmailVerification) {
-      return const EmailVerificationScreen();
-    }
-
-    if (authProvider.userModel == null) {
-      return const AuthScreen();
-    }
-
-    // Always route to student home screen - teacher and parent screens disabled
-    return const HomeScreen();
   }
 }

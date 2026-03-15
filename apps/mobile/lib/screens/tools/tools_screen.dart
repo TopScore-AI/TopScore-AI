@@ -11,6 +11,7 @@ import 'timetable_screen.dart';
 import 'science_lab_screen.dart';
 import 'periodic_table_screen.dart';
 import '../files_screen.dart'; // Corrected path for sibling of parent
+import '../../utils/responsive_layout.dart';
 
 class ToolCardData {
   final String title;
@@ -134,65 +135,67 @@ class ToolsScreen extends StatelessWidget {
           slivers: [
             // --- HEADER BANNER ---
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+              child: CenterContent(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2E3192).withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2E3192).withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Productivity Hub",
-                              style: GoogleFonts.nunito(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Productivity Hub",
+                                style: GoogleFonts.nunito(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              "Everything you need to boost your study efficiency in one place.",
-                              style: GoogleFonts.nunito(
-                                fontSize: 14,
-                                color: Colors.white.withValues(alpha: 0.9),
+                              const SizedBox(height: 8),
+                              Text(
+                                "Everything you need to boost your study efficiency in one place.",
+                                style: GoogleFonts.nunito(
+                                  fontSize: 14,
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.build,
+                            color: Colors.white,
+                            size: 30,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.build,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

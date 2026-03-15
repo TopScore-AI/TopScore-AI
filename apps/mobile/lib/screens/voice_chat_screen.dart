@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -73,11 +74,18 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
       developer.log("Microphone permission denied", name: "VoiceChatScreen");
       if (mounted) {
         setState(() => _isConnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+
+        if (kIsWeb) {
+          _showWebMicPermissionGuide();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
               content: Text(
-                  "Microphone permission is required for TopScore AI Voice")),
-        );
+                "Microphone permission is required for TopScore AI Voice",
+              ),
+            ),
+          );
+        }
       }
       return;
     }
@@ -425,6 +433,41 @@ class _VoiceChatScreenState extends State<VoiceChatScreen>
           style: const TextStyle(color: Colors.white60, fontSize: 12),
         ),
       ],
+    );
+  }
+
+  void _showWebMicPermissionGuide() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.mic_off, color: Colors.orange),
+            SizedBox(width: 12),
+            Text("Microphone Restricted"),
+          ],
+        ),
+        content: const Text(
+          "Your browser is blocking microphone access. To use live voice:\n\n"
+          "1. Click the lock icon 🔒 next to the web address.\n"
+          "2. Toggle the Microphone switch to \"Allow\".\n"
+          "3. Refresh the page to start chatting!",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Got it"),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _connect();
+            },
+            child: const Text("Try Again"),
+          ),
+        ],
+      ),
     );
   }
 }

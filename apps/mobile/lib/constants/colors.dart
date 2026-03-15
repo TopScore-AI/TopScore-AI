@@ -23,6 +23,17 @@ class AppColors {
   static const Color secondaryViolet = Color(0xFF8b5cf6);
   static const Color secondaryPink = Color(0xFFec4899);
 
+  // Playful Kid-Friendly Palette
+  static const Color kidPurple = Color(0xFFC084FC);
+  static const Color kidPink = Color(0xFFF472B6);
+  static const Color kidBlue = Color(0xFF60A5FA);
+  static const Color kidCyan = Color(0xFF22D3EE);
+  static const Color kidOrange = Color(0xFFFB923C);
+  static const Color kidTeal = Color(0xFF2DD4BF);
+  static const Color kidMint = Color(0xFF4ADE80);
+  static const Color kidLavender = Color(0xFFE879F9);
+  static const Color kidYellow = Color(0xFFFACC15);
+
   static const Color black = Color(0xFF0f0f23);
   static const Color white = Color(0xFFFFFFFF);
 
@@ -113,6 +124,24 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0x30FFFFFF), Color(0x10FFFFFF)],
+  );
+
+  static const LinearGradient kidGradientPrimary = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [kidBlue, kidCyan],
+  );
+
+  static const LinearGradient kidGradientSecondary = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [kidPurple, kidLavender],
+  );
+
+  static const LinearGradient kidGradientAccent = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [kidPink, kidOrange],
   );
 
   // Achievement & Discovery Colors (For Gamification)

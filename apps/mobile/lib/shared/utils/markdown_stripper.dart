@@ -75,7 +75,44 @@ class MarkdownStripper {
     // 16. Cleanup extra whitespace and blank lines
     cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     cleaned = cleaned.replaceAll(RegExp(r'[ \t]+'), ' ');
-
     return cleaned.trim();
+  }
+
+  /// Strips markdown and ensures the title is not numeric, empty, too short, or "None".
+  /// Returns [fallback] (default 'New Chat') if the title is invalid.
+  static String cleanTitle(String? title, {String fallback = 'New Chat'}) {
+    if (title == null || title.isEmpty) return _cleanFallback(fallback);
+    
+    // Strip markdown first
+    final stripped = strip(title);
+    
+    // Clean up invisible characters and normalize
+    final normalized = stripped.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '').trim();
+    
+    // Scrub all numerical values (0-9) as requested
+    final noDigits = normalized.replaceAll(RegExp(r'\d+'), '').trim();
+    
+    // Fallback conditions:
+    // 1. Empty after stripping
+    // 2. Just "None" (common LLM artifact)
+    // 3. Too short (e.g. just one character that isn't meaningful)
+    
+    if (noDigits.isEmpty ||
+        noDigits.toLowerCase() == 'none' ||
+        noDigits.length < 2) {
+      return _cleanFallback(fallback);
+    }
+    
+    return noDigits;
+  }
+
+  static String _cleanFallback(String fallback) {
+    if (fallback == 'New Chat') return fallback;
+    final cleaned = strip(fallback);
+    // Take first 30 chars of fallback if it's a message
+    if (cleaned.length > 30) {
+      return '${cleaned.substring(0, 30)}...';
+    }
+    return cleaned.isNotEmpty ? cleaned : 'New Chat';
   }
 }

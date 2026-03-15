@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/image_cache_manager.dart';
 
@@ -39,9 +40,12 @@ class NetworkAwareImage extends StatelessWidget {
       fit: fit ?? BoxFit.cover,
 
       // Use custom cache manager for profile pictures to prevent 429 errors
-      cacheManager: isProfilePicture
-          ? ProfileImageCacheManager()
-          : AppImageCacheManager(),
+      // Skip on web as custom cache managers can trigger path_provider issues
+      cacheManager: kIsWeb
+          ? null
+          : (isProfilePicture
+              ? ProfileImageCacheManager()
+              : AppImageCacheManager()),
 
       // Smooth Fade-In Animation
       fadeInDuration: const Duration(milliseconds: 300),

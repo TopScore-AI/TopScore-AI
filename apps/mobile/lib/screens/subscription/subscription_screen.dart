@@ -12,6 +12,7 @@ import '../../config/api_config.dart';
 import '../../services/recaptcha_service.dart';
 import 'package:intl/intl.dart';
 import 'paystack_checkout_screen.dart';
+import '../../utils/responsive_layout.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -122,7 +123,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   void _showVerifyDialog(String reference) {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -206,7 +207,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   void _showAlreadyActiveAlert() {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Active Subscription'),
@@ -239,7 +240,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: theme.colorScheme.onSurface),
       ),
-      body: SingleChildScrollView(
+      body: CenterContent(
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -356,7 +358,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -400,7 +403,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return const SizedBox(
       height: 20,
       width: 20,
-      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+      child: CircularProgressIndicator.adaptive(
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        strokeWidth: 2,
+      ),
     );
   }
 }

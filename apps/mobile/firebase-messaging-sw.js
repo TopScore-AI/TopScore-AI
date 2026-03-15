@@ -3,7 +3,7 @@ importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-comp
 
 firebase.initializeApp({
     apiKey: "AIzaSyDoG5zU8EzdPPFrXFstx0licFDklaxs83M",
-    authDomain: "elimisha-90787.firebaseapp.com",
+    authDomain: "app.topscoreapp.ai",
     databaseURL: "https://elimisha-90787-default-rtdb.firebaseio.com",
     projectId: "elimisha-90787",
     storageBucket: "elimisha-90787.firebasestorage.app",

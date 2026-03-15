@@ -122,7 +122,7 @@ class UserModel {
       email: map['email'] ?? '',
       displayName: map['displayName'] ?? '',
       photoURL: map['photoURL'] ?? map['photoUrl'],
-      role: map['role'] ?? '',
+      role: map['role'] ?? 'student',
       grade: map['grade'] is int
           ? map['grade']
           : int.tryParse(

@@ -55,7 +55,9 @@ class ResourceModel {
       source: data['source'],
       createdAt: data['createdAt'] is Timestamp
           ? (data['createdAt'] as Timestamp).toDate()
-          : null,
+          : (data['createdAt'] is String 
+              ? DateTime.tryParse(data['createdAt']) 
+              : null),
       ragStatus: data['ragStatus'] ?? 'pending',
       storagePath: data['storagePath'],
       uploadedBy: data['uploadedBy'],

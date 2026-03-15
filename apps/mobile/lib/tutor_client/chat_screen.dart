@@ -25,11 +25,8 @@ import '../providers/settings_provider.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_history_sidebar.dart';
-import 'widgets/collapsed_sidebar.dart';
 import 'widgets/empty_state_widget.dart';
 import 'widgets/session_rating_dialog.dart';
-import '../config/app_theme.dart';
-import '../constants/colors.dart';
 
 import '../shared/utils/markdown_stripper.dart';
 import '../models/video_result.dart';
@@ -43,6 +40,8 @@ import '../providers/ai_tutor_history_provider.dart';
 import '../config/api_config.dart';
 import 'enhanced_websocket_service.dart';
 import '../screens/voice_chat_screen.dart';
+import '../providers/navigation_provider.dart';
+import '../config/app_theme.dart';
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? chatThread;
@@ -129,9 +128,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   StreamSubscription? _childRemovedSub;
 
   // History
-  List<Map<String, dynamic>> _threads = [];
   Set<String> _bookmarkedMessageIds = {};
-  bool _isLoadingHistory = false;
   bool _isLoadingMessages = false;
 
   // Current chat title — displayed in top bar and synced with sidebar
@@ -152,8 +149,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final List<Map<String, dynamic>> _messageQueue = [];
 
   final FocusNode _messageFocusNode = FocusNode();
-  // Sidebar tri-state: 'expanded' (280px), 'collapsed' (60px icon-only), 'hidden' (0px)
-  String _sidebarMode = 'collapsed';
   bool _isSidebarInitialized = false;
 
   // Speech to text
@@ -165,8 +160,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isSidebarInitialized) {
-      // Always start collapsed
-      _sidebarMode = 'collapsed';
       _isSidebarInitialized = true;
     }
   }
@@ -235,15 +228,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       });
 
       // 2. Load thread if passed from another screen
+      _fetchThreadList(silent: true);
       if (widget.chatThread != null) {
         _loadThread(widget.chatThread!['thread_id']);
-      } else {
-        // Background load of previous chats
-        _fetchThreadList(silent: true);
       }
 
       // 3. Handle initial data
-      if (widget.initialImage != null) {
+      final navProvider =
+          Provider.of<NavigationProvider>(context, listen: false);
+
+      if (navProvider.pendingThreadId != null) {
+        _loadThread(navProvider.pendingThreadId!);
+        navProvider.clearPendingData();
+      } else if (navProvider.pendingMessage != null ||
+          navProvider.pendingImage != null) {
+        if (navProvider.pendingImage != null) {
+          _processProviderImage(navProvider.pendingImage!, autoSend: true);
+        } else if (navProvider.pendingMessage != null) {
+          _sendMessage(text: navProvider.pendingMessage);
+        }
+        navProvider.clearPendingData();
+      } else if (widget.initialImage != null) {
         _processProviderImage(widget.initialImage!, autoSend: true);
       } else if (widget.initialImageFile != null) {
         _processProviderImage(XFile(widget.initialImageFile!.path),
@@ -516,10 +521,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Initialize Speech-to-Text
   Future<void> _initSpeech() async {
-    if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      // Speech-to-text is not officially supported or stable on these platforms
-      // for this package, or requires specific browser permissions for web.
-      // We'll disable it for now.
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      // Speech-to-text is not officially supported or stable on these desktop platforms
+      // for this package. We'll disable it for now.
       setState(() {
         _speechEnabled = false;
       });
@@ -560,14 +564,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Toggle speech recognition (start/stop)
   Future<void> _toggleDictation() async {
     if (!_speechEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Speech recognition not available or permission denied.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
+      if (kIsWeb) {
+        // Try to re-initialize if it failed before (might have been denied)
+        final reInit = await _speechToText.initialize();
+        if (reInit) {
+          setState(() => _speechEnabled = true);
+        } else {
+          _showWebMicPermissionGuide();
+          return;
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Speech recognition not available or permission denied.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
     }
 
     if (_isRecording) {
@@ -606,8 +621,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchThreadList({bool silent = false}) async {
-    if (!silent) setState(() => _isLoadingHistory = true);
-
     try {
       final historyProvider =
           Provider.of<AiTutorHistoryProvider>(context, listen: false);
@@ -616,33 +629,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           authProvider.userModel?.uid ?? FirebaseAuth.instance.currentUser?.uid;
       if (userId == null) return;
 
-      await historyProvider.fetchHistory(userId);
+      await historyProvider.fetchHistory(userId, forceRefresh: !silent);
 
-      if (mounted) {
-        setState(() {
-          _threads = historyProvider.threads;
-          _isLoadingHistory = false;
+      // Initialize with a new chat if empty
+      if (historyProvider.threads.isEmpty) {
+        final newId = const Uuid().v4();
+        _wsService.setThreadId(newId);
+        _saveLastThreadId(newId);
+
+        historyProvider.addThread({
+          'thread_id': newId,
+          'title': 'New Chat',
+          'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
         });
 
-        // Sync title cache
-        for (final t in _threads) {
+        if (mounted) {
+          setState(() {
+            _currentTitle = 'New Chat';
+          });
+        }
+      } else {
+        // Sync title cache from provider
+        for (final t in historyProvider.threads) {
           final tId = t['thread_id'];
-          final title = t['title'];
-          if (tId != null && title != null) {
-            _titleCache[tId] = title;
+          final rawTitle = t['title'];
+          if (tId != null && rawTitle != null) {
+            _titleCache[tId] = MarkdownStripper.cleanTitle(
+              rawTitle.toString(),
+              fallback: _getFirstUserMessage() ?? 'New Chat',
+            );
           }
         }
       }
     } catch (e) {
       developer.log('Error loading history: $e', name: 'ChatScreen');
-      if (mounted) setState(() => _isLoadingHistory = false);
-    }
-
-    // Initialize with a new chat if empty
-    if (_threads.isEmpty) {
-      final newId = const Uuid().v4();
-      _wsService.setThreadId(newId);
-      _saveLastThreadId(newId);
     }
   }
 
@@ -666,15 +686,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _messages.clear();
       _wsService.setThreadId(threadId);
 
-      // Set the top bar title immediately from cache or thread list
+      // Set the top bar title immediately from cache or history provider
       if (cachedTitle != null) {
-        _currentTitle = cachedTitle;
+        _currentTitle = MarkdownStripper.cleanTitle(
+          cachedTitle,
+          fallback: _getFirstUserMessage() ?? 'New Chat',
+        );
       } else {
-        final thread = _threads.firstWhere(
+        final historyProvider =
+            Provider.of<AiTutorHistoryProvider>(context, listen: false);
+        final thread = historyProvider.threads.firstWhere(
           (t) => t['thread_id'] == threadId,
           orElse: () => <String, dynamic>{},
         );
-        _currentTitle = thread['title'] as String? ?? 'New Chat';
+        final rawTitle = thread['title'] as String? ?? 'New Chat';
+        _currentTitle = MarkdownStripper.cleanTitle(
+          rawTitle,
+          fallback: _getFirstUserMessage() ?? 'New Chat',
+        );
       }
     });
 
@@ -773,6 +802,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           if (!msg.isUser) {
             _isTyping = false;
             // _statusMessage = null;
+          }
+
+          // Proactive title update: if current title is default, try using first message snippet
+          if (_currentTitle == 'New Chat') {
+            final firstMsg = _getFirstUserMessage();
+            if (firstMsg != null) {
+              _currentTitle = MarkdownStripper.cleanTitle(null, fallback: firstMsg);
+            }
           }
         });
       }
@@ -914,23 +951,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _wsService.setThreadId(newId);
     _saveLastThreadId(newId);
 
+    final historyProvider =
+        Provider.of<AiTutorHistoryProvider>(context, listen: false);
+    
     setState(() {
       _messages.clear();
       _currentTitle = 'New Chat';
 
-      // Add the new thread to the top of _threads so the sidebar
-      // shows it immediately with the placeholder title.
-      _threads.insert(0, {
+      // Use provider to add the new thread so sidebar updates in real-time
+      historyProvider.addThread({
         'thread_id': newId,
         'title': 'New Chat',
         'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
       });
-
-      // Auto-close sidebar on mobile for better UX
-      final isMobile = MediaQuery.of(context).size.width <= 700;
-      if (isMobile) {
-        _sidebarMode = 'hidden';
-      }
     });
 
     if (closeDrawer && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
@@ -1005,36 +1038,33 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       case 'title_updated':
         final updatedThreadId = data['thread_id'] ?? _wsService.threadId;
-        final newTitle = data['title'];
-        if (newTitle != null && newTitle.toString().isNotEmpty) {
-          setState(() {
-            // Update sidebar thread list
-            final threadIndex = _threads.indexWhere(
-              (t) => t['thread_id'] == updatedThreadId,
-            );
-            if (threadIndex != -1) {
-              _threads[threadIndex]['title'] = newTitle;
-            }
-
-            // Update title cache
-            _titleCache[updatedThreadId] = newTitle;
-
-            // Update top bar title if this is the active thread
-            if (updatedThreadId == _wsService.threadId) {
-              _currentTitle = newTitle;
-            }
-          });
-
-          // Also update the history provider so it stays in sync
+        final rawTitle = data['title'];
+        if (rawTitle != null && rawTitle.toString().isNotEmpty) {
+          final newTitle = MarkdownStripper.cleanTitle(
+            rawTitle.toString(),
+            fallback: _getFirstUserMessage() ?? 'New Chat',
+          );
+          
+          // Use history provider for reactive updates across the app
           final historyProvider = Provider.of<AiTutorHistoryProvider>(
             context,
             listen: false,
           );
+          
           historyProvider.addThread({
             'thread_id': updatedThreadId,
             'title': newTitle,
             'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
           });
+
+          // Update title cache and local top bar state
+          _titleCache[updatedThreadId] = newTitle;
+          
+          if (updatedThreadId == _wsService.threadId) {
+            setState(() {
+              _currentTitle = newTitle;
+            });
+          }
         }
         break;
 
@@ -1310,7 +1340,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       // Auto-refresh the chat title after the AI responds.
       // The backend generates a title after the first exchange;
-      // give it a moment then fetch the updated title.
+      // trigger the refresh immediately when streaming finishes.
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) _refreshCurrentTitle();
       });
@@ -1339,6 +1369,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// and update both the top bar and the sidebar entry.
   Future<void> _refreshCurrentTitle() async {
     try {
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userId = authProvider.userModel?.uid;
       if (userId == null) return;
@@ -1350,22 +1382,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final threads = data['threads'] as List? ?? [];
+        final threads = data is List ? data : (data['threads'] as List? ?? []);
 
         // Find the current thread and update the title
         for (final t in threads) {
           if (t['thread_id'] == currentThreadId) {
-            final newTitle = t['title'] ?? 'New Chat';
+            final newTitle = MarkdownStripper.cleanTitle(
+              t['title'],
+              fallback: _getFirstUserMessage() ?? 'New Chat',
+            );
             if (newTitle != _currentTitle && mounted) {
               setState(() {
                 _currentTitle = newTitle;
-                // Also update the sidebar entry
-                final idx = _threads.indexWhere(
-                  (th) => th['thread_id'] == currentThreadId,
-                );
-                if (idx != -1) {
-                  _threads[idx]['title'] = newTitle;
-                }
+              });
+              // Update using provider
+              historyProvider.addThread({
+                'thread_id': currentThreadId,
+                'title': newTitle,
+                'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
               });
             }
             break;
@@ -1387,6 +1421,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
     );
     _scrollToBottom();
+  }
+
+  String? _getFirstUserMessage() {
+    try {
+      final userMsgs = _messages.where((m) => m.isUser).toList();
+      if (userMsgs.isEmpty) return null;
+      return userMsgs.first.text;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _clearPendingAttachment() {
@@ -1476,6 +1520,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _sendMessage({String? text, String? fileUrl}) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final historyProvider =
+        Provider.of<AiTutorHistoryProvider>(context, listen: false);
     if (!authProvider.canSendMessage) {
       _showDailyLimitReached();
       return;
@@ -1526,6 +1572,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           replyToText: _replyingToMessage?.text,
         ),
       );
+
+      // Optimistic History Update via provider
+      final threadId = _wsService.threadId;
+      historyProvider.addThread({
+        'thread_id': threadId,
+        'title': _currentTitle,
+        'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      });
+
       _isTyping = true;
       // _statusMessage = "Connecting...";
 
@@ -2245,7 +2300,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final success = await historyProvider.deleteAllThreads(userId);
     if (success && mounted) {
       setState(() {
-        _threads = [];
         _messages.clear();
         _startNewChat();
       });
@@ -2267,22 +2321,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _deleteThread(String threadId) async {
     try {
       // API CALL to delete thread
-      final response = await http.delete(
+      await http.delete(
         Uri.parse('$_backendUrl/threads/$threadId'),
       );
 
-      if (response.statusCode == 200) {
-        setState(() {
-          // Remove from local list
-          _threads.removeWhere((t) => t['thread_id'] == threadId);
+      if (!mounted) return;
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.userModel?.uid;
 
+      if (userId != null && await historyProvider.deleteThread(userId, threadId)) {
+        setState(() {
           // If we deleted the active chat, start a new one
           if (_wsService.threadId == threadId) {
             _startNewChat(closeDrawer: false);
           }
         });
       } else {
-        throw Exception('Server error: ${response.statusCode}');
+        throw Exception('Delete failed');
       }
     } catch (e) {
       developer.log('Error deleting thread: $e', name: 'ChatScreen');
@@ -2330,18 +2387,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
 
       if (response.statusCode == 200) {
+        // Sync with provider
+        if (!mounted) return;
+        final historyProvider =
+            Provider.of<AiTutorHistoryProvider>(context, listen: false);
+        historyProvider.addThread({
+          'thread_id': threadId,
+          'title': newTitle,
+          'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        });
+
         // Update Local UI immediately
         setState(() {
-          final index = _threads.indexWhere((t) => t['thread_id'] == threadId);
-          if (index != -1) {
-            _threads[index]['title'] = newTitle;
-          }
           // Sync cache
-          _titleCache[threadId] = newTitle;
+          final cleanTitle = MarkdownStripper.cleanTitle(newTitle);
+          _titleCache[threadId] = cleanTitle;
 
           // Update top bar if renaming the active thread
           if (threadId == _wsService.threadId) {
-            _currentTitle = newTitle;
+            _currentTitle = cleanTitle;
           }
         });
       } else {
@@ -2418,47 +2482,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Use local constraints to decide layout mode
-        final isDesktop = constraints.maxWidth > 700;
-
-        return Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: Colors.transparent, // Transparent to show gradient
-          extendBodyBehindAppBar: true,
-          drawer: isDesktop ? null : _buildMobileDrawer(theme, isDark),
-          appBar: _buildMobileAppBar(theme, isDark),
-          body: Container(
-            decoration: BoxDecoration(
-              color: isDark
-                  ? AppColors.backgroundDark
-                  : theme.scaffoldBackgroundColor,
-              gradient: isDark
-                  ? RadialGradient(
-                      center: Alignment.topCenter,
-                      radius: 2.5,
-                      colors: [
-                        AppColors.surfaceDark,
-                        AppColors.backgroundDark,
-                      ],
-                      stops: const [0.0, 1.0],
-                    )
-                  : null,
-            ),
-            child: SafeArea(
-              child: isDesktop
-                  ? Row(
-                      children: [
-                        _buildSidebar(theme, isDark),
-                        Expanded(child: _buildMainChatArea(theme)),
-                      ],
-                    )
-                  : _buildMainChatArea(theme),
-            ),
-          ),
-        );
-      },
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: Colors.transparent, // Transparent to show gradient
+      extendBodyBehindAppBar: true,
+      drawer: _buildMobileDrawer(theme, isDark),
+      appBar: _buildMobileAppBar(theme, isDark),
+      body: Container(
+        color: Colors.transparent,
+        child: SafeArea(
+          child: _buildMainChatArea(theme),
+        ),
+      ),
     );
   }
 
@@ -2468,52 +2503,71 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   PreferredSizeWidget _buildMobileAppBar(ThemeData theme, bool isDark) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      centerTitle: true,
-      automaticallyImplyLeading: false,
-      leading: IconButton(
-        icon: Icon(
-          Icons.menu_rounded,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-        ),
-        tooltip: 'Chat history',
-        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-      ),
-      title: Text(
-        _currentTitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.outfit(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            Icons.edit_square,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+    // Use theme's onSurface — guaranteed to contrast with scaffold background
+    final appBarContentColor = theme.colorScheme.onSurface;
+
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight),
+      child: AppTheme.buildGlassContainer(
+        context,
+        borderRadius: 0,
+        blur: 15,
+        opacity: isDark ? 0.1 : 0.7,
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.1),
+            width: 1,
           ),
-          tooltip: 'New Chat',
-          onPressed: () => _startNewChat(closeDrawer: false),
         ),
-        const SizedBox(width: 4),
-      ],
+        child: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: Icon(
+              Icons.menu_rounded,
+              color: appBarContentColor,
+            ),
+            tooltip: 'Chat history',
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          title: Text(
+            MarkdownStripper.cleanTitle(_currentTitle),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.quicksand(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: appBarContentColor,
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(
+                Icons.edit_square,
+                color: appBarContentColor,
+              ),
+              tooltip: 'New Chat',
+              onPressed: () => _startNewChat(closeDrawer: false),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildMobileDrawer(ThemeData theme, bool isDark) {
+    final historyProvider = Provider.of<AiTutorHistoryProvider>(context);
     return Drawer(
       backgroundColor: theme.scaffoldBackgroundColor,
       child: ChatHistorySidebar(
         isDark: isDark,
-        threads: _threads,
+        threads: historyProvider.threads,
         historySearchQuery: _historySearchQuery,
         historySearchController: _historySearchController,
-        isLoadingHistory: _isLoadingHistory,
+        isLoadingHistory: historyProvider.isLoading,
         currentThreadId: _wsService.threadId,
         onCloseSidebar: () => Navigator.pop(context),
         onStartNewChat: _startNewChat,
@@ -2531,61 +2585,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           });
         },
       ),
-    );
-  }
-
-  Widget _buildSidebar(ThemeData theme, bool isDark) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      width: _sidebarMode == 'expanded'
-          ? 280
-          : _sidebarMode == 'collapsed'
-              ? 60
-              : 0,
-      curve: Curves.easeInOut,
-      child: _sidebarMode == 'hidden'
-          ? const SizedBox.shrink()
-          : _sidebarMode == 'collapsed'
-              ? CollapsedSidebar(
-                  isDark: isDark,
-                  onModeChange: (mode) => setState(() => _sidebarMode = mode),
-                  onStartNewChat: () => _startNewChat(closeDrawer: false),
-                )
-              : AppTheme.buildGlassContainer(
-                  context,
-                  borderRadius: 0,
-                  opacity: isDark ? 0.3 : 0.5,
-                  blur: 20,
-                  border: Border(
-                    right: BorderSide(
-                      color: theme.dividerColor.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  child: ChatHistorySidebar(
-                    isDark: isDark,
-                    threads: _threads,
-                    historySearchQuery: _historySearchQuery,
-                    historySearchController: _historySearchController,
-                    isLoadingHistory: _isLoadingHistory,
-                    currentThreadId: _wsService.threadId,
-                    onCloseSidebar: () =>
-                        setState(() => _sidebarMode = 'collapsed'),
-                    onStartNewChat: _startNewChat,
-                    onLoadThread: _loadThread,
-                    onRenameThread: _showRenameDialog,
-                    onDeleteThread: _confirmDeleteThread,
-                    onDeleteAllThreads: _deleteAllChatHistory,
-                    onFinishLesson: _showRatingDialog,
-                    onSearchChanged: (value) {
-                      setState(() {
-                        _historySearchQuery = value;
-                        if (value.isEmpty) {
-                          _historySearchController.clear();
-                        }
-                      });
-                    },
-                  ),
-                ),
     );
   }
 
@@ -2621,7 +2620,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               _buildAttachmentOption(
                 icon: Icons.photo_library_outlined,
                 label: 'Choose from Gallery',
-                color: Colors.purple,
+                color: isDark ? Colors.purpleAccent : Colors.purple,
                 onTap: () {
                   Navigator.pop(context);
                   _pickImageFromGallery();
@@ -2630,7 +2629,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               _buildAttachmentOption(
                 icon: Icons.camera_alt_outlined,
                 label: kIsWeb ? 'Capture Photo' : 'Take Photo',
-                color: Colors.blue,
+                color: isDark ? Colors.lightBlueAccent : Colors.blue,
                 onTap: () {
                   Navigator.pop(context);
                   _takePhoto();
@@ -2639,7 +2638,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               _buildAttachmentOption(
                 icon: Icons.description_outlined,
                 label: 'Upload Document',
-                color: Colors.orange,
+                color: isDark ? Colors.orangeAccent : Colors.orange,
                 onTap: () {
                   Navigator.pop(context);
                   _pickFile(
@@ -2795,10 +2794,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               child: Text(
                 'TopScore AI can make mistakes, please verify important information.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                  fontWeight: FontWeight.w400,
+                style: GoogleFonts.quicksand(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -2837,6 +2836,60 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       onShuffleQuestions: () {}, // Not used
       replyingToMessage: _replyingToMessage,
       onCancelReply: () => setState(() => _replyingToMessage = null),
+    );
+  }
+
+  void _showWebMicPermissionGuide() {
+    _showPermissionGuideDialog(
+      title: 'Microphone Restricted',
+      message:
+          'Your browser is blocking microphone access. To use voice input:\n\n'
+          '1. Click the lock icon 🔒 next to the web address.\n'
+          '2. Toggle the Microphone switch to "Allow".\n'
+          '3. Refresh the page to start chatting with your voice!',
+    );
+  }
+
+  void _showPermissionGuideDialog({
+    required String title,
+    required String message,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.mic_off, color: Colors.orange),
+            const SizedBox(width: 12),
+            Text(title, style: GoogleFonts.quicksand(fontWeight: FontWeight.w800)),
+          ],
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.quicksand(fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Got it',
+              style: GoogleFonts.quicksand(fontWeight: FontWeight.w700),
+            ),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Simply re-tries init as a gesture of "fixing it"
+              _initSpeech();
+            },
+            child: Text(
+              'Try Again',
+              style: GoogleFonts.quicksand(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

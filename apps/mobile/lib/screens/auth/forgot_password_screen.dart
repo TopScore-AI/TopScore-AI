@@ -210,7 +210,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _showSuccessDialog() {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(

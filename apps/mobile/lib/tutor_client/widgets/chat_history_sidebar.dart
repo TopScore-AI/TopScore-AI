@@ -80,7 +80,16 @@ class ChatHistorySidebar extends StatelessWidget {
                         Icon(Icons.edit_outlined,
                             size: 18,
                             color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7)),
+                                .withValues(alpha: 0.7),
+                            shadows: isDark
+                                ? const [
+                                    Shadow(
+                                      color: Colors.black26,
+                                      offset: Offset(0, 1),
+                                      blurRadius: 2,
+                                    )
+                                  ]
+                                : null),
                         const SizedBox(width: 8),
                         Text(
                           'New chat',
@@ -124,7 +133,19 @@ class ChatHistorySidebar extends StatelessWidget {
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
                 suffixIcon: historySearchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          shadows: isDark
+                              ? const [
+                                  Shadow(
+                                    color: Colors.black26,
+                                    offset: Offset(0, 1),
+                                    blurRadius: 2,
+                                  )
+                                ]
+                              : null,
+                        ),
                         onPressed: () => onSearchChanged(''),
                         color:
                             theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -202,23 +223,6 @@ class ChatHistorySidebar extends StatelessWidget {
             ),
 
           // Footer — very minimal (Grok often just has collapse arrow or nothing)
-          Divider(
-              height: 1, color: isDark ? Colors.grey[900] : Colors.grey[300]),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  '« Collapse',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -283,7 +287,7 @@ class ChatHistorySidebar extends StatelessWidget {
   Widget _buildThreadTile(dynamic thread, ThemeData theme) {
     final isSelected = thread['thread_id'] == currentThreadId;
     final rawTitle = thread['title'] as String? ?? 'New Chat';
-    final title = MarkdownStripper.strip(rawTitle);
+    final title = MarkdownStripper.cleanTitle(rawTitle);
 
     return Material(
       color: isSelected
@@ -321,7 +325,16 @@ class ChatHistorySidebar extends StatelessWidget {
         trailing: PopupMenuButton<String>(
           icon: Icon(Icons.more_horiz_rounded,
               size: 18,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              shadows: isDark
+                  ? const [
+                      Shadow(
+                        color: Colors.black26,
+                        offset: Offset(0, 1),
+                        blurRadius: 2,
+                      )
+                    ]
+                  : null),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           position: PopupMenuPosition.over,

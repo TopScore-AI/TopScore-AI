@@ -227,7 +227,7 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(),
+          const CircularProgressIndicator.adaptive(),
           const SizedBox(height: 24),
           Text(
             'Generating your quiz...',
@@ -425,7 +425,7 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
               fontSize: 16,
             ),
           ),
-          Slider(
+          Slider.adaptive(
             value: _questionCount.toDouble(),
             min: 3,
             max: 10,

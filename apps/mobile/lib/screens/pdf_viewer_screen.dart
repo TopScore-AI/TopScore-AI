@@ -231,31 +231,20 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
       if (widget.bytes != null) {
         loadedBytes = widget.bytes;
-      } else if (widget.url != null) {
-        loadedBytes = await _downloadFromUrl(widget.url!);
-      } else if (widget.storagePath != null) {
-        if (widget.storagePath!.startsWith('http')) {
-          loadedBytes = await _downloadFromUrl(widget.storagePath!);
-        } else {
-          try {
-            loadedBytes = await FirebaseStorage.instance
-                .ref(widget.storagePath!)
-                .getData(30 * 1024 * 1024);
-
-            if (loadedBytes == null) throw Exception("File is empty");
-          } on FirebaseException catch (e) {
-            if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
-              if (mounted) {
-                setState(() {
-                  _isSubscriptionError = true;
-                  _isLoading = false;
-                });
-              }
-              return;
-            }
+      } else if (widget.url != null && widget.url!.isNotEmpty) {
+        try {
+          loadedBytes = await _downloadFromUrl(widget.url!);
+        } catch (e) {
+          debugPrint("URL download failed: $e");
+          // If URL fails (e.g., 403) and we have a storage path, fallback to storage
+          if (widget.storagePath != null) {
+            loadedBytes = await _loadFromStorage(widget.storagePath!);
+          } else {
             rethrow;
           }
         }
+      } else if (widget.storagePath != null) {
+        loadedBytes = await _loadFromStorage(widget.storagePath!);
       } else if (widget.assetPath != null) {
         final byteData = await rootBundle.load(widget.assetPath!);
         loadedBytes = byteData.buffer.asUint8List();
@@ -272,11 +261,46 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     } catch (e) {
       debugPrint("Error loading PDF: $e");
       if (mounted) {
+        String message = e.toString();
+        
+        // Enhance message for common "Blocked by Client" or 403 scenarios
+        if (message.contains('403') || message.contains('blocked') || message.contains('connection')) {
+          message = "Access Denied (403/Blocked). If you're on Web, please disable AdBlockers for this site or try a different browser.";
+        }
+        
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = message;
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<Uint8List> _loadFromStorage(String path) async {
+    if (path.startsWith('http')) {
+      return await _downloadFromUrl(path);
+    }
+
+    try {
+      // First try to get a fresh download URL if possible (useful for some viewer types)
+      // But here we need bytes, so we get data directly
+      final data = await FirebaseStorage.instance
+          .ref(path)
+          .getData(30 * 1024 * 1024);
+
+      if (data == null) throw Exception("File is empty");
+      return data;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        if (mounted) {
+          setState(() {
+            _isSubscriptionError = true;
+            _isLoading = false;
+          });
+        }
+        throw Exception("Permission denied");
+      }
+      rethrow;
     }
   }
 
@@ -284,6 +308,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
       return response.bodyBytes;
+    } else if (response.statusCode == 403) {
+      throw Exception("403 Forbidden: Access denied to PDF resource");
     } else {
       throw Exception("Failed to download: ${response.statusCode}");
     }

@@ -44,7 +44,7 @@ class DefaultFirebaseOptions {
   // Hardcoded for web to avoid dotenv issues in production
   static FirebaseOptions get web => const FirebaseOptions(
         apiKey: 'AIzaSyDoG5zU8EzdPPFrXFstx0licFDklaxs83M',
-        appId: '1:974459699084:web:8d47fa11d39ca31968a0a9',
+        appId: '1:974459699084:web:8d47fa11d39ca31968a0a9', // Fixed appId match with .env and console
         messagingSenderId: '974459699084',
         projectId: 'elimisha-90787',
         authDomain: 'elimisha-90787.firebaseapp.com',

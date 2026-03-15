@@ -56,7 +56,10 @@ class ReportService {
 
       for (final doc in docs) {
         final data = doc.data();
-        final ts = (data['timestamp'] as Timestamp?)?.toDate();
+        final dynamic rawTs = data['timestamp'];
+        final ts = rawTs is Timestamp 
+            ? rawTs.toDate() 
+            : (rawTs is String ? DateTime.tryParse(rawTs) : null);
         if (ts == null) continue;
 
         final dayKey = _dayAbbrev(ts.weekday);

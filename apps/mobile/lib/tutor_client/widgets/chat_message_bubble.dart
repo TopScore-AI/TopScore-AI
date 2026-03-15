@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../constants/colors.dart';
+import '../../config/app_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:provider/provider.dart';
@@ -94,33 +95,28 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Dismissible(
-      key: Key('msg_${widget.message.id}'),
-      direction: DismissDirection.horizontal,
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.endToStart) {
-          // Swipe left to reply
-          widget.onReply(widget.message);
-          return false; // Don't actually dismiss
-        }
-        return false;
-      },
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: const Icon(Icons.reply, color: Colors.grey),
-      ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.reply, color: Colors.grey),
-      ),
-      child: Consumer<SettingsProvider>(
-        builder: (context, settings, child) {
-          return widget.message.isUser
-              ? _buildUserBubble(context, theme, isDark, settings)
-              : _buildAiBubble(context, theme, isDark, settings);
+    return RepaintBoundary(
+      child: Dismissible(
+        key: Key('msg_${widget.message.id}'),
+        direction: DismissDirection.horizontal,
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.endToStart) {
+            // Swipe left to reply
+            widget.onReply(widget.message);
+            return false; // Don't actually dismiss
+          }
+          return false;
         },
+        // Optimize Dismissible by providing zero-sized or minimal backgrounds when not swiping
+        background: const SizedBox.shrink(),
+        secondaryBackground: const SizedBox.shrink(),
+        child: Consumer<SettingsProvider>(
+          builder: (context, settings, child) {
+            return widget.message.isUser
+                ? _buildUserBubble(context, theme, isDark, settings)
+                : _buildAiBubble(context, theme, isDark, settings);
+          },
+        ),
       ),
     );
   }
@@ -143,21 +139,21 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 gradient: LinearGradient(
                   colors: isDark
                       ? [
-                          AppColors.surfaceVariantDark,
-                          AppColors.surfaceElevatedDark
+                          AppColors.kidPurple.withValues(alpha: 0.8),
+                          AppColors.kidPurple.withValues(alpha: 0.6),
                         ]
                       : [
-                          AppColors.primary,
-                          AppColors.primary.withValues(alpha: 0.85)
+                          AppColors.kidPurple,
+                          AppColors.kidPurple.withValues(alpha: 0.8)
                         ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(22),
-                  topRight: Radius.circular(22),
-                  bottomLeft: Radius.circular(22),
-                  bottomRight: Radius.circular(4), // Distinct tip
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppTheme.radiusLg),
+                  topRight: Radius.circular(AppTheme.radiusLg),
+                  bottomLeft: Radius.circular(AppTheme.radiusLg),
+                  bottomRight: Radius.circular(AppTheme.radiusSm), // Distinct playful tip
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -237,11 +233,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     const SizedBox(width: 8),
                     Text(
                       'TopScore AI',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.quicksand(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w800,
                         color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                            theme.colorScheme.onSurface.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -311,6 +307,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                   ? Icons.pause_circle_filled
                   : Icons.play_circle_filled,
               color: Colors.white,
+              shadows: const [
+                Shadow(
+                  color: Colors.black45,
+                  offset: Offset(0, 1),
+                  blurRadius: 4,
+                ),
+              ],
               size: 32,
             ),
             onPressed: () {
@@ -480,40 +483,47 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         ],
       ),
       styleSheet: MarkdownStyleSheet(
-        p: GoogleFonts.dmSans(
+        p: GoogleFonts.quicksand(
           fontSize: settings.fontSize + 2,
           height: settings.lineHeight,
+          fontWeight: FontWeight.w600,
           color: widget.message.isUser
               ? Colors.white
               : theme.colorScheme.onSurface,
         ),
-        h1: GoogleFonts.outfit(
+        h1: GoogleFonts.quicksand(
           fontSize: 24,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w800,
           color: theme.primaryColor,
         ),
-        h2: GoogleFonts.outfit(
+        h2: GoogleFonts.quicksand(
           fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: theme.primaryColor.withValues(alpha: 0.8),
+          fontWeight: FontWeight.w800,
+          color: theme.primaryColor.withValues(alpha: 0.9),
         ),
-        h3: GoogleFonts.outfit(
+        h3: GoogleFonts.quicksand(
           fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: theme.colorScheme.onSurface,
         ),
-        strong: const TextStyle(fontWeight: FontWeight.bold),
+        strong: const TextStyle(fontWeight: FontWeight.w800),
         em: const TextStyle(fontStyle: FontStyle.italic),
-        listBullet: GoogleFonts.inter(fontSize: 16, color: theme.primaryColor),
+        listBullet: GoogleFonts.quicksand(
+          fontSize: 16, 
+          fontWeight: FontWeight.w800,
+          color: theme.primaryColor
+        ),
         listIndent: 24.0,
-        blockquote: GoogleFonts.inter(
+        blockquote: GoogleFonts.quicksand(
           fontSize: 15,
           fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w600,
           color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
         ),
         blockquoteDecoration: BoxDecoration(
           border: Border(left: BorderSide(color: theme.primaryColor, width: 4)),
-          color: theme.primaryColor.withValues(alpha: 0.05),
+          color: theme.primaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
         ),
         code: GoogleFonts.firaCode(
           fontSize: 14,
@@ -521,13 +531,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
               ? Colors.white.withValues(alpha: 0.1)
               : Colors.black.withValues(alpha: 0.08),
           color: isDark
-              ? AppColors.accentTeal
-              : AppColors.accentTeal.withValues(alpha: 0.8),
+              ? AppColors.kidCyan
+              : AppColors.kidCyan.withValues(alpha: 0.8),
         ),
-        codeblockPadding: EdgeInsets.zero,
+        codeblockPadding: const EdgeInsets.all(AppTheme.spacingMd),
         codeblockDecoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
         ),
       ),
     );
@@ -636,12 +647,27 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final finalColor = color ??
         (isActive
             ? AppColors.googleBlue
-            : theme.colorScheme.onSurface.withValues(alpha: 0.6));
+            : (theme.brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.9)
+                : theme.colorScheme.onSurface.withValues(alpha: 0.6)));
     return Semantics(
       label: tooltip ?? 'Action button',
       button: true,
       child: IconButton(
-        icon: Icon(icon, size: 18, color: finalColor),
+        icon: Icon(
+          icon,
+          size: 18,
+          color: finalColor,
+          shadows: theme.brightness == Brightness.dark
+              ? const [
+                  Shadow(
+                    color: Colors.black54,
+                    offset: Offset(0, 1),
+                    blurRadius: 3,
+                  ),
+                ]
+              : null,
+        ),
         tooltip: tooltip,
         onPressed: onTap,
         splashRadius: 20,
@@ -661,9 +687,22 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       label: tooltip ?? 'Small action button',
       button: true,
       child: IconButton(
-        icon: Icon(icon,
-            size: 16,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+        icon: Icon(
+          icon,
+          size: 16,
+          color: theme.brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.85)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          shadows: theme.brightness == Brightness.dark
+              ? const [
+                  Shadow(
+                    color: Colors.black38,
+                    offset: Offset(0, 1),
+                    blurRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
         onPressed: onTap,
         tooltip: tooltip,
         constraints: const BoxConstraints(),
@@ -692,14 +731,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 color: theme.primaryColor,
               ),
               const SizedBox(width: 8),
-              Text(
-                "Sources",
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: theme.primaryColor,
+                Text(
+                  "Sources",
+                  style: GoogleFonts.quicksand(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: theme.primaryColor,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),

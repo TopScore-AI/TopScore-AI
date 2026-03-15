@@ -26,7 +26,11 @@ class SupportTicket {
       subject: data['subject'] ?? '',
       message: data['message'] ?? '',
       status: data['status'] ?? 'open',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      createdAt: data['createdAt'] is Timestamp
+          ? (data['createdAt'] as Timestamp).toDate()
+          : (data['createdAt'] is String 
+              ? (DateTime.tryParse(data['createdAt']) ?? DateTime.now())
+              : DateTime.now()),
       reply: data['reply'],
     );
   }

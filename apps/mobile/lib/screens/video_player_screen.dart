@@ -6,7 +6,6 @@ import 'package:chewie/chewie.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import 'package:google_fonts/google_fonts.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final String? videoUrl;
@@ -36,7 +35,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _initializePlayer();
   }
 
+
   Future<void> _initializePlayer() async {
+    final theme = Theme.of(context);
     try {
       if (widget.videoFile != null) {
         _videoController = VideoPlayerController.file(widget.videoFile!);
@@ -53,19 +54,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         autoPlay: true,
         looping: false,
         aspectRatio: _videoController.value.aspectRatio,
-
-        // --- NEW: Smart Controls ---
         allowFullScreen: true,
         allowMuting: true,
         showControls: true,
-        showOptions: false, // Cleaner UI
-
-        // --- NEW: UI Customization ---
-        placeholder: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+        showOptions: false,
+        placeholder: Center(
+          child: CircularProgressIndicator.adaptive(
+              valueColor: AlwaysStoppedAnimation<Color>(
+                  theme.colorScheme.primary)),
         ),
-
-        // --- NEW: Custom Error UI ---
         errorBuilder: (context, errorMessage) {
           return Center(
             child: Column(
@@ -92,19 +89,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
           );
         },
-
-        // Customize the UI colors
         materialProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFF6C63FF),
-          handleColor: const Color(0xFF6C63FF),
+          playedColor: theme.colorScheme.primary,
+          handleColor: theme.colorScheme.primary,
           backgroundColor: Colors.grey.withValues(alpha: 0.5),
           bufferedColor: Colors.white24,
         ),
-
-        // Cupertino (iOS) controls customization
         cupertinoProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFF6C63FF),
-          handleColor: const Color(0xFF6C63FF),
+          playedColor: theme.colorScheme.primary,
+          handleColor: theme.colorScheme.primary,
           backgroundColor: Colors.grey,
           bufferedColor: Colors.white24,
         ),
@@ -122,18 +115,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _downloadAndShare() async {
-    // 1. If it's already a local file, share it directly
     if (widget.videoFile != null) {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(widget.videoFile!.path)],
-          text: 'Sharing ${widget.title}',
+          subject: 'Sharing ${widget.title}',
         ),
       );
       return;
     }
 
-    // 2. If Web, standard download is complex, show toast
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Download not supported on Web yet")),
@@ -141,11 +132,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       return;
     }
 
-    // 3. Download from URL to Temp
     try {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Downloading video...")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Downloading video...")),
+      );
 
       final response = await http.get(Uri.parse(widget.videoUrl!));
       if (response.statusCode == 200) {
@@ -161,16 +151,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           await SharePlus.instance.share(
             ShareParams(
               files: [XFile(file.path)],
-              text: 'Sharing ${widget.title}',
+              subject: 'Sharing ${widget.title}',
             ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Download failed: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Download failed: $e")),
+        );
       }
     }
   }
@@ -184,6 +174,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -191,7 +183,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           widget.title,
-          style: GoogleFonts.nunito(color: Colors.white),
+          style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
         ),
         actions: [
           IconButton(
@@ -204,13 +196,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       body: SafeArea(
         child: Center(
           child: _isLoading
-              ? const CircularProgressIndicator(color: Color(0xFF6C63FF))
+              ? CircularProgressIndicator.adaptive(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      theme.colorScheme.primary))
               : _errorMessage != null
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.red, size: 48),
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 48,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           _errorMessage!,
@@ -218,7 +215,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
-                        ElevatedButton(
+                        FilledButton(
                           onPressed: () {
                             setState(() {
                               _isLoading = true;

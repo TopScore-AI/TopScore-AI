@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 
-class EnhancedCard extends StatefulWidget {
+
+class EnhancedCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsets? padding;
@@ -13,6 +14,7 @@ class EnhancedCard extends StatefulWidget {
   final Border? border;
   final bool enableHoverEffect;
   final bool enablePressEffect;
+  final bool isGlass;
 
   const EnhancedCard({
     super.key,
@@ -27,129 +29,63 @@ class EnhancedCard extends StatefulWidget {
     this.border,
     this.enableHoverEffect = true,
     this.enablePressEffect = true,
+    this.isGlass = false,
   });
-
-  @override
-  State<EnhancedCard> createState() => _EnhancedCardState();
-}
-
-class _EnhancedCardState extends State<EnhancedCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _elevationAnimation;
-  bool _isHovered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: AppTheme.durationFast,
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _elevationAnimation = Tween<double>(
-      begin: widget.elevation ?? AppTheme.elevationSm,
-      end: (widget.elevation ?? AppTheme.elevationSm) + 4,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    if (widget.enablePressEffect && widget.onTap != null) {
-      _controller.forward();
-    }
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    if (widget.enablePressEffect && widget.onTap != null) {
-      _controller.reverse();
-    }
-  }
-
-  void _handleTapCancel() {
-    if (widget.enablePressEffect && widget.onTap != null) {
-      _controller.reverse();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cardColor = widget.color ?? theme.cardColor;
-    final radius = widget.borderRadius ?? AppTheme.radiusLg;
+    final cardColor = color ?? theme.cardColor;
+    final radius = borderRadius ?? AppTheme.radiusLg;
+    final elevationVal = elevation ?? AppTheme.elevationSm;
 
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      onTap: widget.onTap,
-      child: MouseRegion(
-        onEnter: (_) {
-          if (widget.enableHoverEffect && widget.onTap != null) {
-            setState(() => _isHovered = true);
-          }
-        },
-        onExit: (_) {
-          if (widget.enableHoverEffect && widget.onTap != null) {
-            setState(() => _isHovered = false);
-          }
-        },
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: widget.enablePressEffect ? _scaleAnimation.value : 1.0,
-              child: AnimatedContainer(
-                duration: AppTheme.durationNormal,
-                margin: widget.margin,
-                decoration: BoxDecoration(
-                  color: widget.gradient == null ? cardColor : null,
-                  gradient: widget.gradient,
-                  borderRadius: BorderRadius.circular(radius),
-                  border: widget.border,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: theme.brightness == Brightness.dark ? 0.3 : 0.08,
-                      ),
-                      blurRadius: _isHovered && widget.enableHoverEffect
-                          ? _elevationAnimation.value * 2
-                          : (widget.elevation ?? AppTheme.elevationSm) * 2,
-                      offset: Offset(
-                        0,
-                        _isHovered && widget.enableHoverEffect
-                            ? _elevationAnimation.value / 2
-                            : (widget.elevation ?? AppTheme.elevationSm) / 2,
-                      ),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(radius),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Padding(
-                      padding: widget.padding ??
-                          const EdgeInsets.all(AppTheme.spacingMd),
-                      child: widget.child,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
+    final Widget cardContent = Padding(
+      padding: padding ?? const EdgeInsets.all(AppTheme.spacingMd),
+      child: child,
+    );
+
+    final Widget interactiveContent = onTap != null
+        ? InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(radius),
+            child: cardContent,
+          )
+        : cardContent;
+
+    if (isGlass) {
+      return Container(
+        margin: margin ?? const EdgeInsets.all(AppTheme.spacingSm),
+        child: AppTheme.buildGlassContainer(
+          context,
+          padding: EdgeInsets.zero,
+          borderRadius: radius,
+          border: border,
+          gradient: gradient,
+          child: interactiveContent,
+        ),
+      );
+    }
+
+    return Card(
+      elevation: elevationVal,
+      margin: margin ?? const EdgeInsets.all(AppTheme.spacingSm),
+      color: gradient == null ? cardColor : Colors.transparent,
+      surfaceTintColor: theme.colorScheme.surfaceTint,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: border?.top ?? BorderSide.none,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          gradient: gradient,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: interactiveContent,
         ),
       ),
     );
   }
 }
+

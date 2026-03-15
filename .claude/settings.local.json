@@ -4,7 +4,11 @@
       "Bash(flutter analyze:*)",
       "Bash(dart analyze:*)",
       "Bash(findstr:*)",
-      "Bash(dart pub deps)"
+      "Bash(dart pub deps)",
+      "WebFetch(domain:firebase.google.com)",
+      "WebSearch",
+      "WebFetch(domain:app.topscoreapp.ai)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

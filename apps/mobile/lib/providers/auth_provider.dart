@@ -12,16 +12,21 @@ class AuthProvider with ChangeNotifier {
 
   bool _requiresEmailVerification = false;
   StreamSubscription<UserModel?>? _userStreamSubscription;
+  StreamSubscription<User?>? _authStateSubscription;
 
   UserModel? _userModel;
   UserModel? get userModel => _userModel;
 
   bool get requiresEmailVerification => _requiresEmailVerification;
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  bool get isAuthenticated => _userModel != null;
+  bool _isInitializing = true;
+  bool get isInitializing => _isInitializing;
+
+  /// Uses Firebase Auth currentUser as the source of truth for authentication.
+  bool get isAuthenticated => _authService.currentUser != null;
 
   /// Whether the user has a currently active (non-expired) subscription.
   bool get hasActiveSubscription {
@@ -41,18 +46,16 @@ class AuthProvider with ChangeNotifier {
       final now = DateTime.now();
       final elapsed = now.difference(_userModel!.lastMessageDate!);
       if (elapsed.inHours >= 24) {
-        // 24h window expired, count is effectively 0
         return true;
       }
     }
 
-    // Limit to 5 per 24-hour window for Freemium
     return _userModel!.dailyMessageCount < 5;
   }
 
   Future<void> incrementDailyMessage() async {
     if (_userModel == null) return;
-    if (hasActiveSubscription) return; // No tracking for subscribers
+    if (hasActiveSubscription) return;
 
     final now = DateTime.now();
     int newCount = 1;
@@ -61,12 +64,9 @@ class AuthProvider with ChangeNotifier {
     if (_userModel!.lastMessageDate != null) {
       final elapsed = now.difference(_userModel!.lastMessageDate!);
       if (elapsed.inHours < 24) {
-        // Still within the 24h window — increment
         newCount = _userModel!.dailyMessageCount + 1;
-        newDate =
-            _userModel!.lastMessageDate!; // preserve original window start
+        newDate = _userModel!.lastMessageDate!;
       }
-      // else: window expired — reset to count=1 with new timestamp
     }
 
     try {
@@ -88,7 +88,6 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Whether the 24h document access window has expired and the list should reset.
   bool get _documentWindowExpired {
     if (_userModel?.lastDocumentAccessDate == null) return true;
     return DateTime.now()
@@ -97,7 +96,6 @@ class AuthProvider with ChangeNotifier {
         24;
   }
 
-  // Used by UI to check without side-effects
   bool get canOpenDocument {
     if (_userModel == null) return false;
     if (hasActiveSubscription) return true;
@@ -108,12 +106,10 @@ class AuthProvider with ChangeNotifier {
   Future<bool> tryAccessDocument(String docId) async {
     if (_userModel == null) return false;
 
-    // Check if trial or premium
     final isPremiumOrTrial =
         await SubscriptionService().isSessionPremiumOrTrial();
     if (isPremiumOrTrial) return true;
 
-    // Reset the document list if 24h window has expired
     List<String> currentDocs = List<String>.from(_userModel!.accessedDocuments);
     DateTime windowStart = _userModel!.lastDocumentAccessDate ?? DateTime.now();
 
@@ -122,12 +118,10 @@ class AuthProvider with ChangeNotifier {
       windowStart = DateTime.now();
     }
 
-    // Already accessed within this window?
     if (currentDocs.contains(docId)) {
       return true;
     }
 
-    // If limits not reached
     if (currentDocs.length < 5) {
       try {
         final newList = List<String>.from(currentDocs)..add(docId);
@@ -152,50 +146,171 @@ class AuthProvider with ChangeNotifier {
       }
     }
 
-    // Denied payload
     return false;
   }
 
-  bool get needsRoleSelection => false;
+  // ──────────────────────────────────────────────────────────
+  //  Initialization — uses Firebase authStateChanges() stream
+  //  per https://firebase.google.com/docs/auth/flutter/start
+  // ──────────────────────────────────────────────────────────
 
   Future<void> init() async {
-    _setLoading(true);
+    _isInitializing = true;
+    notifyListeners();
     try {
+      debugPrint('[AUTH] Provider init starting...');
+      
+      // Load domains early
       await _authService.ensureBlockedEmailDomainsLoaded();
 
-      // Handle Google Sign In redirect result
-      final redirectResult = await _authService.getRedirectResult();
-      if (redirectResult?.user != null) {
-        debugPrint("Google Sign In redirect result handled successfully");
-        await _ensureUserProfile(redirectResult!.user!);
+      // Step 1: On web, check for redirect result FIRST.
+      if (kIsWeb) {
+        debugPrint('[AUTH] Checking for redirect result...');
+        try {
+          final redirectResult = await _authService.getRedirectResult()
+              .timeout(const Duration(seconds: 10), onTimeout: () {
+            debugPrint('[AUTH] getRedirectResult timed out');
+            return null;
+          });
+          if (redirectResult?.user != null) {
+            debugPrint('[AUTH] Redirect sign-in found: ${redirectResult!.user!.uid}');
+            await _resolveUser(redirectResult.user!);
+            _startAuthListener();
+            return; 
+          }
+        } catch (e) {
+          debugPrint('[AUTH] getRedirectResult error (non-fatal): $e');
+        }
       }
 
-      User? user = _authService.currentUser;
-      if (user != null) {
-        if (user.isAnonymous) {
-          debugPrint(
-              "Anonymous user detected but guest mode is disabled. Signing out...");
-          await _authService.signOut();
-          _userModel = null;
-          return;
-        }
-
-        await user.reload();
+      // Step 2: Ensure we wait for the first auth state change with a timeout
+      debugPrint('[AUTH] Waiting for authStateChanges().first...');
+      User? user;
+      try {
+        user = await _authService.auth.authStateChanges().first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('[AUTH] authStateChanges().first timed out, using currentUser');
+            return _authService.currentUser;
+          },
+        );
+      } catch (e) {
+        debugPrint('[AUTH] Error waiting for auth state: $e');
         user = _authService.currentUser;
-        if (user == null || !user.emailVerified) {
-          _requiresEmailVerification = user != null;
-          _userModel = null;
-          return;
-        }
-
-        _userModel = await _authService.getUserProfile(user.uid);
-        _listenToUserProfile(user.uid);
       }
+      
+      debugPrint('[AUTH] Initial user resolved: ${user?.uid}');
+
+      if (user != null) {
+        await _resolveUser(user);
+      } else {
+        // Explicitly clear model if no user found on startup
+        _userModel = null;
+        _requiresEmailVerification = false;
+      }
+
+      // Step 3: Start persistent listener
+      _startAuthListener();
     } catch (e) {
-      debugPrint("AuthProvider init error: $e");
+      debugPrint("[AUTH] AuthProvider init error: $e");
     } finally {
-      _setLoading(false);
+      // Small delay on web to ensure indexedDB state is fully propagated to UI if needed
+      if (kIsWeb) await Future.delayed(const Duration(milliseconds: 100));
+      
+      _isInitializing = false;
+      notifyListeners();
+      debugPrint('[AUTH] Init complete. isInitializing: false, authenticated: $isAuthenticated, user: ${_authService.currentUser?.uid}');
     }
+  }
+
+  /// Starts a persistent listener on authStateChanges to react to sign-in/sign-out
+  /// events that happen after initialization (e.g. from email sign-in, sign-out button).
+  void _startAuthListener() {
+    _authStateSubscription?.cancel();
+    _authStateSubscription = _authService.auth.authStateChanges().listen((user) async {
+      // Skip during loading or initialization — init or explicit methods handle resolution.
+      if (_isLoading || _isInitializing) return;
+      debugPrint('[AUTH] authStateChanges (post-init): ${user?.uid}');
+      await _resolveUser(user);
+    });
+  }
+
+  /// Resolves a Firebase Auth user: checks anonymous, verification, loads profile.
+  Future<void> _resolveUser(User? firebaseUser) async {
+    if (firebaseUser == null) {
+      if (_userModel == null && !_requiresEmailVerification && _authService.currentUser == null) {
+        return; // Already in signed-out state
+      }
+      debugPrint('[AUTH] Resolving null user (Sign Out).');
+      _userModel = null;
+      _requiresEmailVerification = false;
+      _userStreamSubscription?.cancel();
+      notifyListeners();
+      return;
+    }
+
+    if (firebaseUser.isAnonymous) {
+      if (_userModel == null && !_requiresEmailVerification && isAuthenticated) {
+        return; // Already in anonymous state
+      }
+      debugPrint("[AUTH] Anonymous user detected. Keeping authenticated state but no profile.");
+      _userModel = null;
+      _requiresEmailVerification = false;
+      notifyListeners();
+      return;
+    }
+
+    // Heavy operations below: reload and Firestore fetch
+    // We only want to run these if the user has changed OR if we are currently
+    // in an unauthenticated/unverified state but have a firebaseUser.
+    final bool isSameUser = _userModel?.uid == firebaseUser.uid;
+    final bool wasVerified = isSameUser && !_requiresEmailVerification;
+
+    // Reload to get fresh emailVerified status.
+    User user = firebaseUser;
+    try {
+      await firebaseUser.reload();
+      user = _authService.currentUser ?? firebaseUser;
+      debugPrint('[AUTH] User ${user.uid} reloaded. Verified: ${user.emailVerified}');
+    } catch (e) {
+      debugPrint("[AUTH] user.reload() failed, using cached state: $e");
+    }
+
+    // If verification status and user are the same, we can often skip notifications
+    if (isSameUser && wasVerified == user.emailVerified && _userModel != null) {
+      debugPrint('[AUTH] No state change detected for ${user.uid}. Skipping heavy resolution.');
+      // Ensure we stop initializing if we were
+      if (_isInitializing) {
+        _isInitializing = false;
+        notifyListeners();
+      }
+      return;
+    }
+
+    if (!user.emailVerified) {
+      debugPrint('[AUTH] User ${user.uid} not verified.');
+      _requiresEmailVerification = true;
+      _userModel = null;
+      notifyListeners();
+      return;
+    }
+
+    _requiresEmailVerification = false;
+
+    // Fetch or create Firestore profile
+    if (_userModel?.uid != user.uid) {
+      debugPrint('[AUTH] Loading Firestore profile for ${user.uid}...');
+      final model = await _authService.getUserProfile(user.uid);
+      if (model != null) {
+        _userModel = model;
+      } else {
+        debugPrint('[AUTH] Profile missing, creating default for ${user.uid}...');
+        await _ensureUserProfile(user);
+      }
+      _listenToUserProfile(user.uid);
+    }
+    
+    notifyListeners();
   }
 
   void _listenToUserProfile(String uid) {
@@ -219,7 +334,7 @@ class AuthProvider with ChangeNotifier {
         email: user.email ?? '',
         displayName: user.displayName ?? 'New User',
         photoURL: user.photoURL,
-        role: '',
+        role: 'student',
         grade: null,
         schoolName: '',
       );
@@ -228,32 +343,35 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // --- GOOGLE SIGN IN ---
+  // ── GOOGLE SIGN IN ─────────────────────────────────────────
   Future<bool> signInWithGoogle() async {
     try {
       _setLoading(true);
       final user = await _authService.signInWithGoogle();
 
       if (user != null) {
+        // Both Mobile and Web paths now return a user directly!
         _requiresEmailVerification = false;
-        await _ensureUserProfile(user);
+        await _resolveUser(user);
 
         // Mark onboarding complete on successful sign-in
         await OfflineService().setStringList('onboarding_complete', ['true']);
-
-        notifyListeners();
+        
+        _setLoading(false);
         return true;
       }
+      
+      // If user is null, it means the user cancelled the sign-in flow.
+      _setLoading(false);
+      return false;
     } catch (e) {
       debugPrint("Google Sign In Error: $e");
-      rethrow;
-    } finally {
       _setLoading(false);
+      rethrow;
     }
-    return false;
   }
 
-  // --- EMAIL SIGN IN ---
+  // ── EMAIL SIGN IN ──────────────────────────────────────────
   Future<bool> signInWithEmail(String email, String password) async {
     try {
       _setLoading(true);
@@ -264,20 +382,26 @@ class AuthProvider with ChangeNotifier {
       await user.reload();
       final refreshedUser = _authService.currentUser;
       if (refreshedUser == null || !refreshedUser.emailVerified) {
+        debugPrint('[AUTH] User ${refreshedUser?.uid} email not verified. Setting _requiresEmailVerification to true.');
         _requiresEmailVerification = true;
-        await _authService.sendEmailVerification();
         _userModel = null;
+        try {
+          debugPrint('[AUTH] Sending email verification...');
+          await _authService.sendEmailVerification();
+        } catch (e) {
+          debugPrint('[AUTH] Error sending email verification: $e');
+        }
         notifyListeners();
         return false;
       }
 
+      debugPrint('[AUTH] User ${refreshedUser.uid} email verified. Resolving user...');
       _requiresEmailVerification = false;
-      await _ensureUserProfile(refreshedUser);
+      await _resolveUser(refreshedUser);
 
       // Mark onboarding complete on successful sign-in
       await OfflineService().setStringList('onboarding_complete', ['true']);
 
-      notifyListeners();
       return true;
     } catch (e) {
       debugPrint("Email Sign In Error: $e");
@@ -287,7 +411,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // --- EMAIL SIGN UP ---
+  // ── EMAIL SIGN UP ──────────────────────────────────────────
   Future<bool> signUpWithEmail(
     String email,
     String password, {
@@ -298,25 +422,26 @@ class AuthProvider with ChangeNotifier {
       final credential = await _authService.signUpWithEmail(email, password);
       final user = credential?.user;
       if (user != null) {
-        // Set display name on the Firebase Auth user first
         if (displayName != null && displayName.isNotEmpty) {
           await user.updateDisplayName(displayName);
           await user.reload();
         }
+        
+        try {
+          debugPrint('[AUTH] Sending initial verification email for new user ${user.uid}...');
+          await _authService.sendEmailVerification();
+        } catch (e) {
+          debugPrint('[AUTH] Error sending initial verification: $e');
+        }
 
-        // Send verification email
-        await user.sendEmailVerification().catchError((e) {
-          debugPrint("Failed to send verification email: $e");
-        });
-
-        // Create profile immediately so it's ready when they verify
+        // Create profile immediately
         await _ensureUserProfile(_authService.currentUser ?? user);
 
-        // Require verification before granting access
+        // Require verification (return false to signals caller to handle or wait for redirect)
         _requiresEmailVerification = true;
         _userModel = null;
         notifyListeners();
-        return false; // Signals caller to show verification screen
+        return false;
       }
       return false;
     } catch (e) {
@@ -340,19 +465,14 @@ class AuthProvider with ChangeNotifier {
     if (user == null) return false;
     await user.reload();
     final refreshedUser = _authService.currentUser;
-    if (refreshedUser == null || !refreshedUser.emailVerified) {
-      _requiresEmailVerification = true;
-      notifyListeners();
-      return false;
+    await _resolveUser(refreshedUser);
+    
+    if (refreshedUser?.emailVerified ?? false) {
+      // Mark onboarding complete
+      await OfflineService().setStringList('onboarding_complete', ['true']);
+      return true;
     }
-    _requiresEmailVerification = false;
-    await _ensureUserProfile(refreshedUser);
-
-    // Mark onboarding complete
-    await OfflineService().setStringList('onboarding_complete', ['true']);
-
-    notifyListeners();
-    return true;
+    return false;
   }
 
   Future<void> updateUserRole({
@@ -381,8 +501,7 @@ class AuthProvider with ChangeNotifier {
         'displayName': displayName ?? _userModel!.displayName,
         'phoneNumber': phoneNumber,
         'curriculum': curriculum,
-        'educationLevel':
-            educationLevel ?? curriculum, // Sync both for compatibility
+        'educationLevel': educationLevel ?? curriculum, // Sync both for compatibility
         'interests': interests,
         'subjects': subjects,
         if (dateOfBirth != null)
@@ -447,7 +566,6 @@ class AuthProvider with ChangeNotifier {
       final uid = _userModel!.uid;
       final firestore = _authService.firestore;
 
-      // Delete user's support tickets
       final tickets = await firestore
           .collection('support_tickets')
           .where('userId', isEqualTo: uid)
@@ -456,7 +574,6 @@ class AuthProvider with ChangeNotifier {
         await doc.reference.delete();
       }
 
-      // Delete user's activity records
       final activities = await firestore
           .collection('user_activity')
           .where('userId', isEqualTo: uid)
@@ -465,10 +582,8 @@ class AuthProvider with ChangeNotifier {
         await doc.reference.delete();
       }
 
-      // Delete user profile document
       await firestore.collection('users').doc(uid).delete();
 
-      // Delete Firebase Auth account
       await _authService.deleteAccount();
       _userModel = null;
       notifyListeners();
@@ -514,6 +629,7 @@ class AuthProvider with ChangeNotifier {
       }
       _requiresEmailVerification = false;
       await _ensureUserProfile(user);
+      _listenToUserProfile(user.uid);
 
       // Mark onboarding complete
       await OfflineService().setStringList('onboarding_complete', ['true']);
@@ -530,6 +646,7 @@ class AuthProvider with ChangeNotifier {
   @override
   void dispose() {
     _userStreamSubscription?.cancel();
+    _authStateSubscription?.cancel();
     super.dispose();
   }
 }

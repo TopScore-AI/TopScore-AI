@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:go_router/go_router.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
 import '../../services/recaptcha_service.dart';
+import '../../widgets/glass_card.dart';
+import '../../widgets/global_background.dart';
+import '../../config/app_theme.dart';
+import '../../utils/browser_utils.dart';
+import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -47,13 +52,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = Provider.of<AuthProvider>(context).isLoading;
+    debugPrint('[LOGIN] build() entered');
+    // Only disable UI during explicit sign-in operations (_isSubmitting),
+    // not during initial auth resolution (authProvider.isLoading).
+    // This prevents the login page from appearing blank/frozen on first load.
     final theme = Theme.of(context);
+    final isLoading = _isSubmitting;
 
-    return Scaffold(
-      body: Container(
-        color: theme.scaffoldBackgroundColor,
-        child: SafeArea(
+    return GlobalBackground(
+      child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(
@@ -66,49 +73,41 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (BrowserUtils.isInAppBrowser) _buildIabWarningBanner(theme),
                     // Logo Section
                     _buildLogoSection(theme),
                     const SizedBox(height: 60),
 
                     // Login Form Card
-                    Container(
+                    GlassCard(
+                      borderRadius: AppTheme.radiusXl,
                       padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: theme.cardColor,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: theme.dividerColor.withValues(alpha: 0.1),
-                        ),
-                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            "Welcome",
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+                            "Welcome!",
+                            style: GoogleFonts.quicksand(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.onSurface,
                             ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "Sign in to continue learning",
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.hintColor,
+                            "Let's play and learn together",
+                            style: GoogleFonts.quicksand(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                             ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 32),
 
                           // Google Sign In Button
-                          _buildGoogleButton(context, theme, isLoading),
+                          _buildGoogleButton(theme, isLoading),
 
                           const SizedBox(height: 16),
 
@@ -118,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Expanded(
                                 child: Divider(
                                   color: theme.dividerColor.withValues(
-                                    alpha: 0.3,
+                                    alpha: 0.2,
                                   ),
                                 ),
                               ),
@@ -128,7 +127,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 child: Text(
                                   'or',
-                                  style: theme.textTheme.bodySmall?.copyWith(
+                                  style: GoogleFonts.quicksand(
+                                    fontWeight: FontWeight.w700,
                                     color: theme.hintColor,
                                   ),
                                 ),
@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Expanded(
                                 child: Divider(
                                   color: theme.dividerColor.withValues(
-                                    alpha: 0.3,
+                                    alpha: 0.2,
                                   ),
                                 ),
                               ),
@@ -145,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                           const SizedBox(height: 16),
 
-                          _buildEmailPasswordForm(context, theme, isLoading),
+                          _buildEmailPasswordForm(theme, isLoading),
                         ],
                       ),
                     ),
@@ -155,39 +155,31 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 
   Widget _buildLogoSection(ThemeData theme) {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primaryPurple.withValues(alpha: 0.4),
-                blurRadius: 25,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const FaIcon(
-            FontAwesomeIcons.graduationCap,
-            size: 40,
-            color: AppColors.accentTeal,
+        AppTheme.buildGlassContainer(
+          context,
+          borderRadius: 32,
+          padding: const EdgeInsets.all(4),
+          child: Image.asset(
+            'assets/images/topscore_logo.jpg',
+            height: 120,
+            width: 120,
+            fit: BoxFit.cover,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         Text(
           AppStrings.appName,
-          style: GoogleFonts.roboto(
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-            color: theme.textTheme.titleLarge?.color,
+          style: GoogleFonts.quicksand(
+            fontSize: 36,
+            fontWeight: FontWeight.w800,
+            color: AppColors.kidBlue,
+            letterSpacing: -1,
           ),
         ),
       ],
@@ -195,7 +187,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildGoogleButton(
-    BuildContext context,
     ThemeData theme,
     bool isLoading,
   ) {
@@ -206,43 +197,41 @@ class _LoginScreenState extends State<LoginScreen> {
             ? null
             : () async {
                 try {
-                  await Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  ).signInWithGoogle();
-                  if (context.mounted) {
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  await authProvider.signInWithGoogle();
+                  if (!mounted) return;
+                  if (authProvider.isAuthenticated) {
                     context.go('/home');
                   }
                 } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(this.context).showSnackBar(
-                      SnackBar(
-                        content: const Text(
-                          'Sign in failed. Please try again.',
-                        ),
-                        backgroundColor: AppColors.error,
-                        action: SnackBarAction(
-                          label: 'Retry',
-                          textColor: Colors.white,
-                          onPressed: () async {
-                            try {
-                              await Provider.of<AuthProvider>(
-                                context,
-                                listen: false,
-                              ).signInWithGoogle();
-                            } catch (_) {}
-                          },
-                        ),
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text(
+                        'Sign in failed. Please try again.',
                       ),
-                    );
-                  }
+                      backgroundColor: AppColors.error,
+                      action: SnackBarAction(
+                        label: 'Retry',
+                        textColor: Colors.white,
+                        onPressed: () async {
+                          try {
+                            await Provider.of<AuthProvider>(
+                              context,
+                              listen: false,
+                            ).signInWithGoogle();
+                          } catch (_) {}
+                        },
+                      ),
+                    ),
+                  );
                 }
               },
         style: OutlinedButton.styleFrom(
-          backgroundColor: theme.cardColor,
-          side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+          backgroundColor: theme.brightness == Brightness.light ? Colors.white : Colors.white.withValues(alpha: 0.05),
+          side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.15)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           ),
           elevation: 0,
         ),
@@ -254,8 +243,6 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 24,
               width: 24,
               errorBuilder: (context, error, stackTrace) {
-                // Try fallback to just the image name if prefix is still causing issues
-                debugPrint('Google logo asset error: $error');
                 return const FaIcon(
                   FontAwesomeIcons.google,
                   size: 20,
@@ -266,10 +253,10 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(width: 12),
             Text(
               "Continue with Google",
-              style: GoogleFonts.roboto(
+              style: GoogleFonts.quicksand(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: theme.textTheme.bodyLarge?.color,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ],
@@ -279,7 +266,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildEmailPasswordForm(
-    BuildContext context,
     ThemeData theme,
     bool isLoading,
   ) {
@@ -454,7 +440,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   : () async {
                       final email = _emailController.text.trim();
                       if (email.isEmpty) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Enter your email to reset password'),
                           ),
@@ -467,14 +453,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           listen: false,
                         ).sendPasswordReset(email);
                         if (!mounted) return;
-                        ScaffoldMessenger.of(this.context).showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Password reset email sent'),
                           ),
                         );
                       } catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
+                          ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: const Text(
                                 'Could not send reset email. Please check your email address.',
@@ -570,12 +556,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isSubmitting = true);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      bool success;
+      bool success = false;
       if (_isRegister) {
         success = await authProvider.signUpWithEmail(
           email,
@@ -585,26 +570,100 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         success = await authProvider.signInWithEmail(email, password);
       }
-
+      
       if (!mounted) return;
-
       if (success) {
         context.go('/home');
       }
-      // If !success, AuthWrapper in main.dart will show EmailVerificationScreen
-      // via requiresEmailVerification flag automatically
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_friendlyAuthError(e)),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_friendlyAuthError(e)),
+          backgroundColor: AppColors.error,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Widget _buildIabWarningBanner(ThemeData theme) {
+    final iabName = BrowserUtils.detectedIabName ?? 'this browser';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: GlassCard(
+        borderRadius: AppTheme.radiusMd,
+        padding: const EdgeInsets.all(16),
+        opacity: theme.brightness == Brightness.dark ? 0.15 : 0.8,
+        blur: 10,
+        border: Border.all(
+          color: AppColors.kidOrange.withValues(alpha: 0.3),
+          width: 2,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: AppColors.kidOrange,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "You're in $iabName",
+                    style: GoogleFonts.quicksand(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "Built-in browsers like $iabName can be unstable. For the best experience and working Google login, please open TopScore in Chrome or Safari.",
+              style: GoogleFonts.quicksand(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(
+                    const ClipboardData(text: 'https://app.topscoreapp.ai'),
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Link copied! Open Chrome/Safari and paste to continue.'),
+                      backgroundColor: AppColors.kidBlue,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text("Copy Link"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.kidBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Maps auth exceptions to user-friendly messages

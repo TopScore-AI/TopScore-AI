@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../config/app_theme.dart';
+
 
 enum ButtonVariant { primary, secondary, outline, ghost, danger }
 enum ButtonSize { small, medium, large }
 
-class EnhancedButton extends StatefulWidget {
+class EnhancedButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;
   final ButtonVariant variant;
@@ -28,193 +28,125 @@ class EnhancedButton extends StatefulWidget {
   });
 
   @override
-  State<EnhancedButton> createState() => _EnhancedButtonState();
-}
-
-class _EnhancedButtonState extends State<EnhancedButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: AppTheme.durationFast,
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    _controller.forward();
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    _controller.reverse();
-  }
-
-  void _handleTapCancel() {
-    _controller.reverse();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isEnabled = widget.onPressed != null && !widget.isLoading;
+    final isEnabled = onPressed != null && !isLoading;
 
-    // Size configurations
-    double height;
-    double horizontalPadding;
-    double fontSize;
-    double iconSize;
+    final (double fontSize, double iconSize) = switch (size) {
+      ButtonSize.small => (13.0, 16.0),
+      ButtonSize.medium => (15.0, 20.0),
+      ButtonSize.large => (18.0, 24.0),
+    };
 
-    switch (widget.size) {
-      case ButtonSize.small:
-        height = 36;
-        horizontalPadding = AppTheme.spacingMd;
-        fontSize = 14;
-        iconSize = 16;
-        break;
-      case ButtonSize.large:
-        height = 56;
-        horizontalPadding = AppTheme.spacingXl;
-        fontSize = 18;
-        iconSize = 24;
-        break;
-      case ButtonSize.medium:
-        height = 48;
-        horizontalPadding = AppTheme.spacingLg;
-        fontSize = 16;
-        iconSize = 20;
-        break;
-    }
+    final textColor = _getTextColor(theme);
 
-    return GestureDetector(
-      onTapDown: isEnabled ? _handleTapDown : null,
-      onTapUp: isEnabled ? _handleTapUp : null,
-      onTapCancel: isEnabled ? _handleTapCancel : null,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: AnimatedContainer(
-          duration: AppTheme.durationNormal,
-          height: height,
-          width: widget.fullWidth ? double.infinity : null,
-          child: ElevatedButton(
-            onPressed: isEnabled ? widget.onPressed : null,
-            style: _getButtonStyle(theme, height, horizontalPadding),
-            child: widget.isLoading
-                ? SizedBox(
-                    height: iconSize,
-                    width: iconSize,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _getTextColor(theme),
-                      ),
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.icon != null) ...[
-                        Icon(widget.icon, size: iconSize),
-                        SizedBox(width: AppTheme.spacingSm),
-                      ],
-                      Text(
-                        widget.text,
-                        style: GoogleFonts.nunito(
-                          fontSize: fontSize,
-                          fontWeight: FontWeight.w700,
-                          color: _getTextColor(theme),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
+    final Widget buttonChild = isLoading
+        ? SizedBox(
+            height: iconSize,
+            width: iconSize,
+            child: CircularProgressIndicator.adaptive(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(textColor),
+            ),
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: iconSize),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                text,
+                style: GoogleFonts.inter(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+            ],
+          );
+
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      child: _ButtonLayout(
+        variant: variant,
+        isEnabled: isEnabled,
+        onPressed: onPressed,
+        customColor: customColor,
+        child: buttonChild,
       ),
     );
   }
 
-  ButtonStyle _getButtonStyle(ThemeData theme, double height, double padding) {
-    final baseColor = widget.customColor ?? theme.colorScheme.primary;
-
-    switch (widget.variant) {
-      case ButtonVariant.primary:
-        return ElevatedButton.styleFrom(
-          backgroundColor: baseColor,
-          foregroundColor: Colors.white,
-          elevation: AppTheme.elevationSm,
-          shadowColor: baseColor.withValues(alpha: 0.4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: padding),
-        );
-
-      case ButtonVariant.secondary:
-        return ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.secondary,
-          foregroundColor: Colors.white,
-          elevation: AppTheme.elevationSm,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: padding),
-        );
-
-      case ButtonVariant.outline:
-        return ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: baseColor,
-          elevation: 0,
-          side: BorderSide(color: baseColor, width: 1.5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: padding),
-        );
-
-      case ButtonVariant.ghost:
-        return ElevatedButton.styleFrom(
-          backgroundColor: baseColor.withValues(alpha: 0.1),
-          foregroundColor: baseColor,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: padding),
-        );
-
-      case ButtonVariant.danger:
-        return ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.error,
-          foregroundColor: Colors.white,
-          elevation: AppTheme.elevationSm,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: padding),
-        );
-    }
-  }
-
   Color _getTextColor(ThemeData theme) {
-    switch (widget.variant) {
-      case ButtonVariant.outline:
-      case ButtonVariant.ghost:
-        return widget.customColor ?? theme.colorScheme.primary;
-      default:
-        return Colors.white;
-    }
+    return switch (variant) {
+      ButtonVariant.primary => theme.colorScheme.onPrimary,
+      ButtonVariant.secondary => theme.colorScheme.onSecondaryContainer,
+      ButtonVariant.outline || ButtonVariant.ghost =>
+        customColor ?? theme.colorScheme.primary,
+      ButtonVariant.danger => theme.colorScheme.onError,
+    };
   }
 }
+
+class _ButtonLayout extends StatelessWidget {
+  final ButtonVariant variant;
+  final bool isEnabled;
+  final VoidCallback? onPressed;
+  final Color? customColor;
+  final Widget child;
+
+  const _ButtonLayout({
+    required this.variant,
+    required this.isEnabled,
+    this.onPressed,
+    this.customColor,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return switch (variant) {
+      ButtonVariant.primary => FilledButton(
+          onPressed: isEnabled ? onPressed : null,
+          style: customColor != null
+              ? FilledButton.styleFrom(backgroundColor: customColor)
+              : null,
+          child: child,
+        ),
+      ButtonVariant.secondary => FilledButton.tonal(
+          onPressed: isEnabled ? onPressed : null,
+          child: child,
+        ),
+      ButtonVariant.outline => OutlinedButton(
+          onPressed: isEnabled ? onPressed : null,
+          style: customColor != null
+              ? OutlinedButton.styleFrom(
+                  foregroundColor: customColor,
+                  side: BorderSide(color: customColor!),
+                )
+              : null,
+          child: child,
+        ),
+      ButtonVariant.ghost => TextButton(
+          onPressed: isEnabled ? onPressed : null,
+          style: customColor != null
+              ? TextButton.styleFrom(foregroundColor: customColor)
+              : null,
+          child: child,
+        ),
+      ButtonVariant.danger => FilledButton(
+          onPressed: isEnabled ? onPressed : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.error,
+            foregroundColor: theme.colorScheme.onError,
+          ),
+          child: child,
+        ),
+    };
+  }
+}
+

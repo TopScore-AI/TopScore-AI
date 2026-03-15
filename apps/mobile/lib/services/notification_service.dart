@@ -28,6 +28,11 @@ class NotificationService {
   NotificationService._internal();
 
   Future<void> initialize() async {
+    if (kIsWeb) {
+      debugPrint("Notifications not supported/initialized on Web");
+      return;
+    }
+
     // Initialize Timezones for scheduling
     tz.initializeTimeZones();
 

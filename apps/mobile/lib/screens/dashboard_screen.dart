@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -102,7 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       backgroundImage: user?.photoURL != null
                           ? CachedNetworkImageProvider(
                               user!.photoURL!,
-                              cacheManager: ProfileImageCacheManager(),
+                              cacheManager: kIsWeb ? null : ProfileImageCacheManager(),
                             )
                           : null,
                       child: user?.photoURL == null

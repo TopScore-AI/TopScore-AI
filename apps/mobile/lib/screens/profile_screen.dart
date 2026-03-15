@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -293,7 +294,7 @@ class ProfileScreen extends StatelessWidget {
                             ? DecorationImage(
                                 image: CachedNetworkImageProvider(
                                   user.photoURL!,
-                                  cacheManager: ProfileImageCacheManager(),
+                                  cacheManager: kIsWeb ? null : ProfileImageCacheManager(),
                                 ),
                                 fit: BoxFit.cover,
                               )
@@ -523,7 +524,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showDeleteConfirmation(BuildContext context, AuthProvider auth) {
-    showDialog(
+    showAdaptiveDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Delete Account & Data?"),

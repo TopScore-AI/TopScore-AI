@@ -12,6 +12,7 @@ import '../../constants/colors.dart';
 import '../../widgets/resources/resource_file_card.dart';
 import '../../widgets/resources/resource_states.dart';
 import '../../widgets/resources/recommended_files_section.dart';
+import '../../utils/responsive_layout.dart';
 
 class ResourcesScreen extends StatefulWidget {
   const ResourcesScreen({super.key, this.initialCategory});
@@ -152,34 +153,36 @@ class _ResourcesScreenState extends State<ResourcesScreen>
       backgroundColor: theme.scaffoldBackgroundColor,
       elevation: 0,
       flexibleSpace: FlexibleSpaceBar(
-        background: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 50, 20, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Learning Resources',
-                style: GoogleFonts.nunito(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onSurface,
+        background: CenterContent(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 50, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Learning Resources',
+                  style: GoogleFonts.nunito(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                user != null
-                    ? [user.educationLevel ?? user.curriculum, user.gradeLabel]
-                        .where(
-                            (e) => e != null && e.toString().trim().isNotEmpty)
-                        .join(' • ')
-                    : 'Access your study materials',
-                style: GoogleFonts.nunito(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 4),
+                Text(
+                  user != null
+                      ? [user.educationLevel ?? user.curriculum, user.gradeLabel]
+                          .where(
+                              (e) => e != null && e.toString().trim().isNotEmpty)
+                          .join(' • ')
+                      : 'Access your study materials',
+                  style: GoogleFonts.nunito(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -198,52 +201,54 @@ class _ResourcesScreenState extends State<ResourcesScreen>
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: AppTheme.searchFieldDecoration(
-                    hint: 'Search notes, papers...',
-                  ).copyWith(
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 20),
-                            onPressed: _clearSearch,
-                          )
-                        : null,
+                child: CenterContent(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    decoration: AppTheme.searchFieldDecoration(
+                      hint: 'Search notes, papers...',
+                    ).copyWith(
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: _clearSearch,
+                            )
+                          : null,
+                    ),
                   ),
                 ),
               ),
-              TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                labelColor: AppColors.primary,
-                unselectedLabelColor: AppColors.textSecondary,
-                indicatorColor: AppColors.primary,
-                indicatorWeight: 3,
-                labelStyle: GoogleFonts.nunito(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
+                TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textSecondary,
+                  indicatorColor: AppColors.primary,
+                  indicatorWeight: 3,
+                  labelStyle: GoogleFonts.nunito(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                  unselectedLabelStyle: GoogleFonts.nunito(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                  dividerColor: Colors.transparent,
+                  tabs: _categories.map((title) {
+                    if (title == 'Curriculum') {
+                      final authProvider =
+                          Provider.of<AuthProvider>(context, listen: false);
+                      return Tab(
+                        text: (authProvider.userModel?.educationLevel ??
+                                authProvider.userModel?.curriculum ??
+                                'CBC')
+                            .toUpperCase(),
+                      );
+                    }
+                    return Tab(text: title);
+                  }).toList(),
                 ),
-                unselectedLabelStyle: GoogleFonts.nunito(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-                dividerColor: Colors.transparent,
-                tabs: _categories.map((title) {
-                  if (title == 'Curriculum') {
-                    final authProvider =
-                        Provider.of<AuthProvider>(context, listen: false);
-                    return Tab(
-                      text: (authProvider.userModel?.educationLevel ??
-                              authProvider.userModel?.curriculum ??
-                              'CBC')
-                          .toUpperCase(),
-                    );
-                  }
-                  return Tab(text: title);
-                }).toList(),
-              ),
               const Divider(height: 1, color: AppColors.border),
             ],
           ),
@@ -303,27 +308,51 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                 // Main file list
                 SliverPadding(
                   padding: const EdgeInsets.all(20),
-                  sliver: SliverList.separated(
-                    itemCount: files.length + (provider.hasMore ? 1 : 0),
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      if (index == files.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      }
+                  sliver: ResponsiveLayout.isMobile(context)
+                      ? SliverList.separated(
+                          itemCount: files.length + (provider.hasMore ? 1 : 0),
+                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            if (index == files.length) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator.adaptive(
+                                      strokeWidth: 2),
+                                ),
+                              );
+                            }
 
-                      final file = files[index];
-                      return ResourceFileCard(
-                        file: file,
-                        onTap: () => _openFile(file),
-                      );
-                    },
-                  ),
+                            final file = files[index];
+                            return ResourceFileCard(
+                              file: file,
+                              onTap: () => _openFile(file),
+                            );
+                          },
+                        )
+                      : SliverGrid(
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 400,
+                            mainAxisExtent: 100,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              if (index == files.length) {
+                                return const Center(
+                                  child: CircularProgressIndicator.adaptive(),
+                                );
+                              }
+                              final file = files[index];
+                              return ResourceFileCard(
+                                file: file,
+                                onTap: () => _openFile(file),
+                              );
+                            },
+                            childCount: files.length + (provider.hasMore ? 1 : 0),
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -341,6 +370,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
       context.push('/pdf-viewer', extra: {
         'url': file.downloadUrl,
         'title': file.displayName,
+        'storagePath': file.path,
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

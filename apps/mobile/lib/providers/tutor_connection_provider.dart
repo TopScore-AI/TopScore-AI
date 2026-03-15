@@ -30,8 +30,12 @@ class TutorConnectionProvider with ChangeNotifier {
         notifyListeners();
       });
 
-      // Connect immediately
-      _wsService!.connect();
+      // Connect immediately with safety catch
+      try {
+        _wsService!.connect();
+      } catch (e) {
+        debugPrint('[TutorConnection] Failed to connect safely: $e');
+      }
       _isInitialized = true;
     } else {
       _isInitialized = false;
