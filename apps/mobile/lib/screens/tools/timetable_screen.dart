@@ -9,6 +9,7 @@ import 'dart:math';
 // Import services
 import '../../providers/auth_provider.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/glass_card.dart';
 
 // ───────────────────────── Constants ─────────────────────────
 const Color _kAccent = Color(0xFF6C63FF);
@@ -747,144 +748,147 @@ class _EntryCard extends StatelessWidget {
     );
     final notes = entry['notes'] as String? ?? '';
 
-    return Card(
-      color: theme.cardColor,
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: onEdit,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // Icon
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: type.color.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: FaIcon(type.icon, color: type.color, size: 18),
-                  ),
-                  const SizedBox(width: 12),
-                  // Title + time
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry['subject'] ?? 'Unknown',
-                          style: GoogleFonts.nunito(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${entry['startTime']} – ${entry['endTime']}',
-                          style: GoogleFonts.nunito(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Type badge
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: type.color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      type.label,
-                      style: GoogleFonts.nunito(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: type.color,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              // Notes
-              if (notes.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  notes,
-                  style: GoogleFonts.nunito(
-                    fontSize: 13,
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-
-              const SizedBox(height: 10),
-              // Bottom row: notification info + actions
-              Row(
-                children: [
-                  // Notification indicator
-                  InkWell(
-                    onTap: () => onToggleNotification(!notifyEnabled),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        padding: EdgeInsets.zero,
+        child: InkWell(
+          onTap: onEdit,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // Icon
+                    Container(
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: notifyEnabled
-                            ? _kAccent.withValues(alpha: 0.08)
-                            : theme.disabledColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
+                        color: type.color.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: FaIcon(type.icon, color: type.color, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    // Title + time
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            notifyEnabled
-                                ? Icons.notifications_active_rounded
-                                : Icons.notifications_off_outlined,
-                            size: 14,
-                            color:
-                                notifyEnabled ? _kAccent : theme.disabledColor,
-                          ),
-                          const SizedBox(width: 4),
                           Text(
-                            notifyEnabled ? reminderOffset.label : 'No reminder',
+                            entry['subject'] ?? 'Unknown',
                             style: GoogleFonts.nunito(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: notifyEnabled
-                                  ? _kAccent
-                                  : theme.disabledColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${entry['startTime']} – ${entry['endTime']}',
+                            style: GoogleFonts.nunito(
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.6),
+                              fontSize: 13,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  // Delete button
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.redAccent, size: 20),
-                    tooltip: 'Delete',
-                    onPressed: () => _confirmDelete(context),
+                    // Type badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: type.color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        type.label,
+                        style: GoogleFonts.nunito(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: type.color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Notes
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    notes,
+                    style: GoogleFonts.nunito(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-              ),
-            ],
+
+                const SizedBox(height: 10),
+                // Bottom row: notification info + actions
+                Row(
+                  children: [
+                    // Notification indicator
+                    InkWell(
+                      onTap: () => onToggleNotification(!notifyEnabled),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: notifyEnabled
+                              ? _kAccent.withValues(alpha: 0.08)
+                              : theme.disabledColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              notifyEnabled
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_off_outlined,
+                              size: 14,
+                              color: notifyEnabled
+                                  ? _kAccent
+                                  : theme.disabledColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              notifyEnabled
+                                  ? reminderOffset.label
+                                  : 'No reminder',
+                              style: GoogleFonts.nunito(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: notifyEnabled
+                                    ? _kAccent
+                                    : theme.disabledColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Delete button
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          color: Colors.redAccent, size: 20),
+                      tooltip: 'Delete',
+                      onPressed: () => _confirmDelete(context),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

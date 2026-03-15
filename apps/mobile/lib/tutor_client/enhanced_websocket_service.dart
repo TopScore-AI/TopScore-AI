@@ -8,6 +8,7 @@ import 'connection_manager.dart';
 import 'offline_storage.dart';
 
 import '../config/api_config.dart';
+import '../utils/browser_utils.dart';
 
 /// Enhanced WebSocket Service with retry logic, offline support, and audio queue
 class EnhancedWebSocketService {
@@ -18,6 +19,7 @@ class EnhancedWebSocketService {
       StreamController.broadcast();
 
   bool _isConnected = false;
+  bool _hasActivity = false;
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
   Timer? _reconnectTimer;
@@ -205,6 +207,7 @@ class EnhancedWebSocketService {
     String? replyToText,
     Map<String, dynamic>? extraData,
   }) async {
+    _hasActivity = true;
     final messageId = const Uuid().v4();
     final targetThreadId = threadId ?? this.threadId;
 
@@ -371,6 +374,18 @@ class EnhancedWebSocketService {
 
   void _scheduleReconnect() {
     _reconnectAttempts++;
+
+    // NEW: Automatic reload on Web for unused applications
+    if (kIsWeb && !_hasActivity && _reconnectAttempts >= 3) {
+      if (kDebugMode) {
+        debugPrint(
+          'WebSocket: Unused app on Web detected after $_reconnectAttempts attempts. Reloading...',
+        );
+      }
+      BrowserUtils.reloadPage();
+      return;
+    }
+
     if (_reconnectAttempts < _maxReconnectAttempts) {
       final backoffSeconds = _reconnectAttempts * 2;
       if (kDebugMode) {

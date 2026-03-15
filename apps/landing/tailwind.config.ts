@@ -24,6 +24,9 @@ const config = {
                 ring: "var(--ring)",
                 background: "var(--bg)",
                 foreground: "var(--text)",
+                "primary-raw": "var(--primary-raw)",
+                "secondary-raw": "var(--secondary-raw)",
+                "accent-raw": "var(--accent-raw)",
                 primary: {
                     DEFAULT: "var(--primary)",
                     foreground: "var(--text)",

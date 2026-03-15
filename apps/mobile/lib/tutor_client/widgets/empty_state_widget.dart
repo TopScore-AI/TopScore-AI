@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
+import '../../widgets/glass_card.dart';
 
 class EmptyStateWidget extends StatefulWidget {
   final bool isDark;
@@ -175,8 +176,9 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
     final emoji = suggestion['emoji'] ?? '✨';
     final text = suggestion['title'] ?? '';
 
-    return Material(
-      color: Colors.transparent,
+    return GlassCard(
+      borderRadius: 24,
+      padding: EdgeInsets.zero,
       child: InkWell(
         onTap: () {
           if (widget.onSuggestionTap != null) {
@@ -184,32 +186,8 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> {
           }
         },
         borderRadius: BorderRadius.circular(24),
-        hoverColor: widget.isDark
-            ? AppColors.primary.withValues(alpha: 0.1)
-            : AppColors.primary.withValues(alpha: 0.05),
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color: widget.isDark
-                ? AppColors.surfaceVariantDark
-                : AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: widget.isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.12),
-              width: 1,
-            ),
-            boxShadow: widget.isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

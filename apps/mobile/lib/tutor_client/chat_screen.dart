@@ -2566,7 +2566,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildMobileDrawer(ThemeData theme, bool isDark) {
     final historyProvider = Provider.of<AiTutorHistoryProvider>(context);
     return Drawer(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: Colors.transparent, // Transparent to show glass effect
+      elevation: 0,
       child: ChatHistorySidebar(
         isDark: isDark,
         threads: historyProvider.threads,

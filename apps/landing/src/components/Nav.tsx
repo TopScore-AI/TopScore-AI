@@ -39,64 +39,67 @@ export default function Nav() {
     useEffect(() => { setOpen(false); }, [pathname]);
 
     return (
-        <>
-            <header
-                className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
-            >
-                <div className={styles.inner}>
-                    <Link href="/" className={styles.logo}>
-                        <Image src="/logo.png" alt="TopScore AI" width={36} height={36} className={styles.logoImg} />
-                        TopScore AI
-                    </Link>
+        <header
+            className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
+        >
+            <div className={styles.inner}>
+                <Link href="/" className={styles.logo}>
+                    <Image src="/logo.png" alt="TopScore AI" width={36} height={36} className={styles.logoImg} />
+                    <span className="font-black">TopScore AI</span>
+                </Link>
 
-                    {/* Desktop links */}
-                    <nav className={styles.links}>
-                        {linkKeys.map(({ href, key }) => (
-                            <Link key={href} href={href} className={pathname === href ? styles.active : ''}>
-                                {t(key)}
+                {/* Desktop links */}
+                <nav className="hidden md:flex items-center gap-8">
+                    {linkKeys.map(({ href, key }) => (
+                        <Link
+                            key={href}
+                            href={href}
+                            className={`text-sm font-bold transition-colors hover:text-primary-raw ${pathname === href ? 'text-foreground' : 'text-muted-foreground'
+                                }`}
+                        >
+                            {t(key)}
+                        </Link>
+                    ))}
+                    <div className="flex items-center gap-3 ml-4 border-l pl-4 border-border/50">
+                        <Button asChild className={styles.cta}>
+                            <Link href="/download">
+                                {t('nav.download')}
                             </Link>
-                        ))}
-                        <div className="flex items-center gap-3 ml-4 border-l pl-4 border-border/50">
-                            <Button asChild className={styles.cta}>
-                                <Link href="/download">
-                                    {t('nav.download')}
-                                </Link>
-                            </Button>
-                        </div>
-                    </nav>
-
-                    {/* Mobile menu using Shadcn Sheet */}
-                    <div className="md:hidden">
-                        <Sheet open={open} onOpenChange={setOpen}>
-                            <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon" className={styles.burger}>
-                                    <Menu className="h-6 w-6" />
-                                    <span className="sr-only">Toggle menu</span>
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent side="right" className={styles.drawer}>
-                                <nav className={styles.drawerLinks}>
-                                    {linkKeys.map(({ href, key }) => (
-                                        <Link
-                                            key={href}
-                                            href={href}
-                                            className={`${styles.drawerLink} ${pathname === href ? styles.drawerActive : ''}`}
-                                            onClick={() => setOpen(false)}
-                                        >
-                                            {t(key)}
-                                        </Link>
-                                    ))}
-                                    <Button asChild className={styles.drawerCta}>
-                                        <Link href="/download" onClick={() => setOpen(false)}>
-                                            {t('nav.downloadMobile')}
-                                        </Link>
-                                    </Button>
-                                </nav>
-                            </SheetContent>
-                        </Sheet>
+                        </Button>
                     </div>
+                </nav>
+
+                {/* Mobile menu using Shadcn Sheet */}
+                <div className="md:hidden">
+                    <Sheet open={open} onOpenChange={setOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-foreground">
+                                <Menu className="h-6 w-6" />
+                                <span className="sr-only">Toggle menu</span>
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className={styles.drawer}>
+                            <nav className={styles.drawerLinks}>
+                                {linkKeys.map(({ href, key }) => (
+                                    <Link
+                                        key={href}
+                                        href={href}
+                                        className={`${styles.drawerLink} ${pathname === href ? styles.drawerActive : ''}`}
+                                        onClick={() => setOpen(false)}
+                                    >
+                                        {t(key)}
+                                    </Link>
+                                ))}
+                                <Button asChild className={styles.drawerCta}>
+                                    <Link href="/download" onClick={() => setOpen(false)}>
+                                        {t('nav.downloadMobile')}
+                                    </Link>
+                                </Button>
+                            </nav>
+                        </SheetContent>
+                    </Sheet>
                 </div>
-            </header>
-        </>
+            </div>
+        </header>
     );
 }

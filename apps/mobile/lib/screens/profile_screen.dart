@@ -255,94 +255,50 @@ class ProfileScreen extends StatelessWidget {
 
   Widget _buildProfileHeader(BuildContext context, dynamic user, bool isDark) {
     final theme = Theme.of(context);
+    final photoURL = user?.photoURL;
+    final hasPhoto = photoURL != null && photoURL.isNotEmpty;
+
     return Column(
       children: [
-        Stack(
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.cardColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-                image: (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                    ? DecorationImage(
-                        image: CachedNetworkImageProvider(
-                          user.photoURL!,
-                          cacheManager: ProfileImageCacheManager(),
-                        ),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: Semantics(
-                label: 'Profile picture of ${user?.displayName ?? "Student"}',
-                image: true,
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: theme.cardColor,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 15,
-                        offset: const Offset(0, 5),
+        Semantics(
+          label: 'Profile picture of ${user?.displayName ?? "Student"}',
+          image: true,
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.cardColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+              image: hasPhoto
+                  ? DecorationImage(
+                      image: CachedNetworkImageProvider(
+                        photoURL,
+                        cacheManager: kIsWeb ? null : ProfileImageCacheManager(),
                       ),
-                    ],
-                    image:
-                        (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                            ? DecorationImage(
-                                image: CachedNetworkImageProvider(
-                                  user.photoURL!,
-                                  cacheManager: kIsWeb ? null : ProfileImageCacheManager(),
-                                ),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
-                  ),
-                  child: (user?.photoURL == null || user!.photoURL!.isEmpty)
-                      ? Center(
-                          child: Text(
-                            user?.displayName?.substring(0, 1).toUpperCase() ??
-                                "?",
-                            style: GoogleFonts.nunito(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.accentTeal,
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-              ),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
             ),
-            if (user != null)
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryPurple,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: theme.scaffoldBackgroundColor,
-                      width: 2,
+            child: !hasPhoto
+                ? Center(
+                    child: Text(
+                      user?.displayName?.substring(0, 1).toUpperCase() ?? "?",
+                      style: GoogleFonts.nunito(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.accentTeal,
+                      ),
                     ),
-                  ),
-                  child: const Icon(Icons.edit, color: Colors.white, size: 14),
-                ),
-              ),
-          ],
+                  )
+                : null,
+          ),
         ),
         const SizedBox(height: 16),
         Text(

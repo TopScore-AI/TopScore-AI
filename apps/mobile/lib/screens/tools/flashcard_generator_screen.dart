@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ai_service.dart';
 import '../../models/flashcard_model.dart';
+import '../../widgets/glass_card.dart';
 
 import '../../services/offline_service.dart';
 
@@ -204,24 +205,25 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _topicController,
-            style: TextStyle(color: theme.colorScheme.onSurface),
-            decoration: InputDecoration(
-              hintText:
-                  "e.g., Photosynthesis, Newton's Laws, Quadratic Equations",
-              hintStyle: TextStyle(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: TextField(
+              controller: _topicController,
+              style: TextStyle(color: theme.colorScheme.onSurface),
+              decoration: InputDecoration(
+                hintText:
+                    "e.g., Photosynthesis, Newton's Laws, Quadratic Equations",
+                hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+                filled: true,
+                fillColor: Colors.transparent,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                prefixIcon: const Icon(Icons.topic),
               ),
-              filled: true,
-              fillColor: theme.brightness == Brightness.dark
-                  ? Colors.white10
-                  : Colors.grey.shade100,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              prefixIcon: const Icon(Icons.topic),
             ),
           ),
           const SizedBox(height: 20),
@@ -235,14 +237,8 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Container(
+          GlassCard(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: theme.brightness == Brightness.dark
-                  ? Colors.white10
-                  : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _educationLevel,
@@ -294,26 +290,22 @@ class _FlashcardGeneratorScreenState extends State<FlashcardGeneratorScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Container(
-            height: 150,
+          GlassCard(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.brightness == Brightness.dark
-                  ? Colors.white10
-                  : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: _sourceTextController,
-              maxLines: null,
-              expands: true,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                hintText:
-                    "Paste your notes here to generate flashcards from specific content...",
-                hintStyle: TextStyle(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            child: SizedBox(
+              height: 150,
+              child: TextField(
+                controller: _sourceTextController,
+                maxLines: null,
+                expands: true,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText:
+                      "Paste your notes here to generate flashcards from specific content...",
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
                 ),
               ),
             ),

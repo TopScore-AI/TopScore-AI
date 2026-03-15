@@ -22,6 +22,7 @@ import '../../widgets/virtual_lab/video_carousel.dart';
 import '../../utils/markdown/mermaid_builder.dart';
 import '../message_model.dart';
 import '../../models/user_model.dart';
+import '../../widgets/glass_card.dart';
 
 class ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
@@ -133,36 +134,23 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Container(
+            GlassCard(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark
-                      ? [
-                          AppColors.kidPurple.withValues(alpha: 0.8),
-                          AppColors.kidPurple.withValues(alpha: 0.6),
-                        ]
-                      : [
-                          AppColors.kidPurple,
-                          AppColors.kidPurple.withValues(alpha: 0.8)
-                        ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(AppTheme.radiusLg),
-                  topRight: Radius.circular(AppTheme.radiusLg),
-                  bottomLeft: Radius.circular(AppTheme.radiusLg),
-                  bottomRight: Radius.circular(AppTheme.radiusSm), // Distinct playful tip
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [
+                        AppColors.kidPurple.withValues(alpha: 0.7),
+                        AppColors.kidPurple.withValues(alpha: 0.5),
+                      ]
+                    : [
+                        AppColors.kidPurple.withValues(alpha: 0.9),
+                        AppColors.kidPurple.withValues(alpha: 0.7),
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              borderRadius: AppTheme.radiusLg,
+              // Custom border radius logic for the tip
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -195,15 +183,16 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           ClipboardService.instance
               .copyWithFeedback(context, widget.message.text);
         },
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 850),
-          margin: const EdgeInsets.symmetric(vertical: 8),
+        child: GlassCard(
+          padding: const EdgeInsets.all(16),
+          borderRadius: 20,
+          opacity: isDark ? 0.05 : 0.4,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Small AI label
               Padding(
-                padding: const EdgeInsets.only(bottom: 6, left: 2),
+                padding: const EdgeInsets.only(bottom: 12, left: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:math_expressions/math_expressions.dart';
 import '../../constants/colors.dart';
+import '../../widgets/glass_card.dart';
 
 class CalculatorScreen extends StatefulWidget {
   const CalculatorScreen({super.key});
@@ -102,32 +103,39 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     final borderRadius = (buttonHeight * 0.2).clamp(8.0, 16.0);
 
     return Expanded(
-      child: Container(
-        margin: EdgeInsets.all(margin),
-        height: buttonHeight,
-        child: ElevatedButton(
-          onPressed: () => _onPressed(text),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color ?? theme.cardColor,
-            foregroundColor: textColor ?? theme.colorScheme.onSurface,
-            padding: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
+      child: Padding(
+        padding: EdgeInsets.all(margin),
+        child: GlassCard(
+          padding: EdgeInsets.zero,
+          borderRadius: borderRadius,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _onPressed(text),
               borderRadius: BorderRadius.circular(borderRadius),
-            ),
-            elevation: 2,
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: margin,
-                vertical: margin / 2,
-              ),
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.bold,
+              child: Container(
+                alignment: Alignment.center,
+                height: buttonHeight,
+                decoration: BoxDecoration(
+                  color: color?.withValues(alpha: 0.2) ?? Colors.transparent,
+                  borderRadius: BorderRadius.circular(borderRadius),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: margin,
+                      vertical: margin / 2,
+                    ),
+                    child: Text(
+                      text,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.bold,
+                        color: textColor ?? theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import '../message_model.dart';
 import '../../config/app_theme.dart';
+import '../../widgets/glass_card.dart';
 
 class ChatInputArea extends StatefulWidget {
   final TextEditingController textController;
@@ -124,24 +125,9 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                   _buildReplyPreview(theme, isDark),
 
                 // Main input pill
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: isDark ? 0.8 : 0.9),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    border: Border.all(
-                      color: (isDark ? Colors.white : theme.primaryColor).withValues(alpha: 0.1),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.primaryColor
-                            .withValues(alpha: isDark ? 0.15 : 0.08),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                GlassCard(
+                  padding: EdgeInsets.zero,
+                  borderRadius: AppTheme.radiusXl,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

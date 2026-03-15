@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../constants/colors.dart';
+import '../../config/app_theme.dart';
 import '../../shared/utils/markdown_stripper.dart';
 
 class ChatHistorySidebar extends StatelessWidget {
@@ -46,11 +46,16 @@ class ChatHistorySidebar extends StatelessWidget {
       return title.contains(query);
     }).toList();
 
-    return Container(
-      width: 320, // typical sidebar width — Grok-ish
-      color: isDark ? AppColors.backgroundDark : AppColors.background,
-      child: Column(
-        children: [
+    return AppTheme.buildGlassContainer(
+      context,
+      borderRadius: 0,
+      blur: 20,
+      opacity: isDark ? 0.8 : 0.9,
+      child: Container(
+        width: 320, // typical sidebar width — Grok-ish
+        color: Colors.transparent,
+        child: Column(
+          children: [
           // Header area — minimal, logo optional or just New Chat
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
@@ -225,8 +230,9 @@ class ChatHistorySidebar extends StatelessWidget {
           // Footer — very minimal (Grok often just has collapse arrow or nothing)
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildThreadList(
       BuildContext context, List<dynamic> threads, ThemeData theme) {

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../tutor_client/chat_screen.dart';
+import '../../widgets/glass_card.dart';
 
 class SmartScannerScreen extends StatefulWidget {
   const SmartScannerScreen({super.key});
@@ -350,15 +351,11 @@ class _SmartScannerScreenState extends State<SmartScannerScreen>
       {required IconData icon,
       required String label,
       required VoidCallback onTap}) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: GlassCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white10,
-          borderRadius: BorderRadius.circular(16),
-        ),
+        borderRadius: 16,
         child: Column(
           children: [
             Icon(icon, color: Colors.white, size: 24),

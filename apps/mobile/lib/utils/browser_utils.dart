@@ -53,4 +53,11 @@ class BrowserUtils {
     
     return isInAppBrowser ? 'In-App Browser' : null;
   }
+
+  /// Reloads the current page on Web.
+  static void reloadPage() {
+    if (kIsWeb) {
+      web.window.location.reload();
+    }
+  }
 }

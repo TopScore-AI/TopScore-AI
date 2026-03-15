@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
+import '../../widgets/glass_card.dart';
 
 class PeriodicTableScreen extends StatefulWidget {
   const PeriodicTableScreen({super.key});
@@ -90,20 +91,23 @@ class _PeriodicTableScreenState extends State<PeriodicTableScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search by name, symbol, or atomic number...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: theme.cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                GlassCard(
+                  padding: EdgeInsets.zero,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, symbol, or atomic number...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
+                    },
                   ),
-                  onChanged: (value) {
-                    setState(() => _searchQuery = value);
-                  },
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -179,37 +183,41 @@ class _PeriodicTableScreenState extends State<PeriodicTableScreen> {
       itemCount: elements.length,
       itemBuilder: (context, index) {
         final element = elements[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            leading: Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: _getCategoryColor(element.category).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  element.symbol,
-                  style: GoogleFonts.roboto(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: _getCategoryColor(element.category),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: GlassCard(
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color:
+                      _getCategoryColor(element.category).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    element.symbol,
+                    style: GoogleFonts.roboto(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: _getCategoryColor(element.category),
+                    ),
                   ),
                 ),
               ),
+              title: Text(
+                element.name,
+                style: GoogleFonts.nunito(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                '${element.atomicNumber} • ${element.category}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showElementDetails(context, element),
             ),
-            title: Text(
-              element.name,
-              style: GoogleFonts.nunito(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              '${element.atomicNumber} • ${element.category}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showElementDetails(context, element),
           ),
         );
       },

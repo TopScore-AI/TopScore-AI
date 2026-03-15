@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/ai_service.dart';
 import '../../models/quiz_model.dart';
 import '../../services/offline_service.dart';
+import '../../widgets/glass_card.dart';
 
 class QuizGeneratorScreen extends StatefulWidget {
   const QuizGeneratorScreen({super.key});
@@ -320,17 +321,20 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _topicController,
-            decoration: InputDecoration(
-              hintText: 'e.g., World War I, Photosynthesis, Python Basics',
-              filled: true,
-              fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: TextField(
+              controller: _topicController,
+              decoration: InputDecoration(
+                hintText: 'e.g., World War I, Photosynthesis, Python Basics',
+                filled: true,
+                fillColor: Colors.transparent,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                prefixIcon: const Icon(Icons.topic_rounded),
               ),
-              prefixIcon: const Icon(Icons.topic_rounded),
             ),
           ),
           const SizedBox(height: 20),
@@ -350,16 +354,13 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Container(
+                    GlassCard(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[900] : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedLevel,
                           isExpanded: true,
+                          dropdownColor: theme.cardColor,
                           items: _levels.map((level) {
                             return DropdownMenuItem(
                               value: level,
@@ -388,16 +389,13 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Container(
+                    GlassCard(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[900] : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedDifficulty,
                           isExpanded: true,
+                          dropdownColor: theme.cardColor,
                           items: _difficulties.map((difficulty) {
                             return DropdownMenuItem(
                               value: difficulty,
@@ -447,16 +445,19 @@ class _QuizGeneratorScreenState extends State<QuizGeneratorScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _sourceTextController,
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: 'Paste notes or content to generate quiz from...',
-              filled: true,
-              fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: TextField(
+              controller: _sourceTextController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Paste notes or content to generate quiz from...',
+                filled: true,
+                fillColor: Colors.transparent,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
           ),
