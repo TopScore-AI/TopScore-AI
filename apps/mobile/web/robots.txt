@@ -1,0 +1,24 @@
+# TopScore AI App - Robots.txt
+# Focus crawl budget on the Next.js landing page instead.
+
+User-agent: *
+# Allow the root (login/signup)
+Allow: /$
+
+# Prevent bots from crawling auth-gated paths
+Disallow: /auth/
+Disallow: /dashboard/
+Disallow: /chat/
+Disallow: /library/
+Disallow: /pdf/
+Disallow: /profile/
+Disallow: /settings/
+
+# Prevent bots from indexing Flutter/WebAssembly engine files
+Disallow: /flutter_service_worker.js
+Disallow: /flutter_bootstrap.js
+Disallow: /*.json$
+Disallow: /assets/shaders/
+
+# Point to the app's minimal sitemap
+Sitemap: https://app.topscore.co.ke/sitemap.xml

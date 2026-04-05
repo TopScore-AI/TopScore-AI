@@ -1,0 +1,63 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Environment variables
+.env
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+#.vscode/
+
+# ────────────────────────────────────────────
+# Flutter / Dart (apps/mobile)
+# ────────────────────────────────────────────
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+apps/mobile/build/
+apps/mobile/.dart_tool/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio build artifacts
+apps/mobile/android/app/debug
+apps/mobile/android/app/profile
+apps/mobile/android/app/release
+
+# ────────────────────────────────────────────
+# Node / Next.js / Turborepo (apps/landing)
+# ────────────────────────────────────────────
+node_modules/
+.next/
+.turbo/
+out/
+dist/
+
+# ────────────────────────────────────────────
+# OS files
+# ────────────────────────────────────────────
+Thumbs.db

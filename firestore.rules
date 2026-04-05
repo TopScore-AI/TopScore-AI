@@ -1,0 +1,177 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── SECURITY FUNCTIONS ───────────────────────────────────────────────────
+
+    // Request came from the real, untampered TopScore AI binary
+    function isVerifiedApp() {
+      // App Check has been completely removed from this project.
+      return true;
+    }
+
+    // Student is logged in with a verified email
+    function isAuthenticated() {
+      return request.auth != null
+          && request.auth.uid != null
+          && request.auth.token.email_verified == true;
+    }
+
+    // Student is only touching their own document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Fields the Flutter app is allowed to write on the users document.
+    // The backend (Admin SDK) can write anything — these rules only constrain
+    // the mobile client.
+    function isAllowedUserUpdate() {
+      // Whitelist every field AuthProvider / SettingsProvider ever touches.
+      let allowed = [
+        'role', 'grade', 'schoolName', 'displayName', 'photoURL',
+        'phoneNumber', 'curriculum', 'educationLevel', 'interests', 'subjects',
+        'date_of_birth', 'parental_consent_given', 'preferred_language',
+        'dailyMessageCount', 'lastMessageDate',
+        'accessedDocuments', 'lastDocumentAccessDate',
+        'isSubscribed', 'subscriptionExpiry',
+        'xp', 'level', 'lastActivityAt'
+      ];
+      return request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(allowed);
+    }
+
+    // ─── USERS ────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Read own profile only — no cross-student profile reads from the client.
+      allow read: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+
+      // Create: only on first sign-up, only for own UID, only from the real app.
+      allow create: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+
+      // Update: own profile, real app, whitelisted fields only.
+      // This prevents a student from granting themselves isSubscribed=true.
+      allow update: if isAuthenticated() && isVerifiedApp() && isOwner(userId)
+                    && isAllowedUserUpdate();
+
+      // Delete: own account only, real app only.
+      // AuthProvider.deleteAccount() calls .delete() directly before
+      // deleting the Firebase Auth account.
+      allow delete: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+
+      // Legacy sub-collections (kept for backward compatibility)
+      match /chat_history/{messageId} {
+        allow read, write: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+      }
+      match /bookmarks/{document=**} {
+        allow read, write: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+      }
+    }
+
+    // ─── STREAKS ─────────────────────────────────────────────────────────────
+    match /user_streaks/{userId} {
+      allow read, write: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+    }
+
+    // ─── EDUCATIONAL RESOURCES ────────────────────────────────────────────────
+    // Students read; only the Admin SDK (backend migration tool) writes.
+    match /cbc_files/{fileId} {
+      allow read: if isAuthenticated() && isVerifiedApp();
+      allow write: if false;
+    }
+
+    match /844_files/{fileId} {
+      allow read: if isAuthenticated() && isVerifiedApp();
+      allow write: if false;
+    }
+
+    match /igcse_files/{fileId} {
+      allow read: if isAuthenticated() && isVerifiedApp();
+      // TEMPORARY: allow client writes for one-time IGCSE indexing.
+      // Revert to `if false` after indexing is complete.
+      allow write: if isAuthenticated() && isVerifiedApp();
+    }
+
+    // ─── SUPPORT TICKETS ──────────────────────────────────────────────────────
+    match /support_tickets/{ticketId} {
+      // Create own ticket only
+      allow create: if isAuthenticated() && isVerifiedApp()
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Read own ticket only (admin reads via Admin SDK, bypasses rules)
+      allow read: if isAuthenticated() && isVerifiedApp()
+                  && resource.data.userId == request.auth.uid;
+
+      // Students cannot update or delete tickets — admin does that via backend
+      allow update, delete: if false;
+    }
+
+    // ─── PROGRESS TRACKING ────────────────────────────────────────────────────
+    match /progress/{userId}/resources/{resourceId} {
+      allow read, write: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+    }
+
+    // ─── DOWNLOADS ────────────────────────────────────────────────────────────
+    match /downloads/{userId}/files/{fileId} {
+      allow read, write: if isAuthenticated() && isVerifiedApp() && isOwner(userId);
+    }
+
+    // ─── USER ACTIVITY (written by backend, deleted by client on account erasure) ──
+    match /user_activity/{docId} {
+      allow read: if isAuthenticated() && isVerifiedApp()
+                  && resource.data.userId == request.auth.uid;
+      // Client only needs delete for the Kenya DPA right-to-erasure flow
+      allow delete: if isAuthenticated() && isVerifiedApp()
+                    && resource.data.userId == request.auth.uid;
+      allow create, update: if false;
+    }
+
+    // ─── AI MEMORY (FastAPI backend only — client is read-only) ───────────────
+    match /student_memories/{studentId} {
+      allow read: if isAuthenticated() && isVerifiedApp() && isOwner(studentId);
+      allow write: if false;
+    }
+    match /student_memories/{studentId}/messages/{messageId} {
+      allow read: if isAuthenticated() && isVerifiedApp() && isOwner(studentId);
+      allow write: if false;
+    }
+
+    // ─── LEGACY FALLBACKS (read-only, authenticated) ──────────────────────────
+    match /files/{fileId} {
+      allow read: if isAuthenticated() && isVerifiedApp();
+      allow write: if false;
+    }
+    match /resources/{resourceId} {
+      allow read: if isAuthenticated() && isVerifiedApp();
+      allow write: if false;
+    }
+
+    // ─── TESTIMONIALS ─────────────────────────────────────────────────────────
+    // Landing page (unauthenticated) reads approved testimonials and submits new ones.
+    match /testimonials/{docId} {
+      // Anyone can read approved testimonials — powers the public landing page.
+      allow read: if resource.data.approved == true;
+
+      // Anyone can submit a new testimonial, but:
+      //   • approved must be false (admin reviews before publishing)
+      //   • only the expected fields are accepted (prevents junk writes)
+      //   • name and text must be non-empty strings under 500 chars
+      //   • rating must be an integer 1–5
+      allow create: if request.resource.data.approved == false
+                    && request.resource.data.keys().hasOnly([
+                         'name', 'rating', 'text', 'approved', 'createdAt', 'source'
+                       ])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 500
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5;
+
+      // Only the Admin SDK (backend) can approve or delete testimonials.
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,45 @@
+.wrapper {
+    margin-bottom: 24px;
+    padding: 12px 0;
+}
+
+.list {
+    display: flex;
+    align-items: center;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: color 0.2s;
+    text-decoration: none;
+}
+
+.link:hover {
+    color: var(--primary);
+}
+
+.separator {
+    color: var(--border);
+    margin: 0 4px;
+}
+
+.current {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+}

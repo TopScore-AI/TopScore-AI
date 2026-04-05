@@ -1,0 +1,176 @@
+name: topscore_ai  # Suggestion: Use snake_case for package names (Flutter standard)
+description: "Kenya's #1 AI-powered learning app for CBC, 8-4-4 & Cambridge IGCSE students."
+publish_to: 'none' 
+
+version: 1.0.1+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.27.0'
+
+# -----------------------------------------------------------------------------
+# PLATFORM RESTRICTION
+# This tells Flutter to ignore Windows, macOS, and Linux support entirely.
+# -----------------------------------------------------------------------------
+platforms:
+  android:
+  ios:
+  web:
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # --- Web Plugins ---
+  flutter_web_plugins:
+    sdk: flutter
+
+  # --- Core Firebase (Aligned Versions) ---
+  firebase_core: ^4.5.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  cloud_functions: ^6.0.6
+  firebase_storage: ^13.1.0
+  firebase_database: ^12.1.2
+  firebase_messaging: ^16.1.1
+  firebase_analytics: ^12.2.0
+    # --- Google & AI ---
+  google_sign_in: ^7.2.0
+  google_generative_ai: ^0.4.0
+  googleapis: ^15.0.0
+  extension_google_sign_in_as_googleapis_auth: ^3.0.0
+
+  # --- Modern Web Support (The Fix for your errors) ---
+  web: ^1.1.0               # Forces modern web support
+  go_router: ^17.0.1
+  app_links: ^6.3.3         # Deep link handling for app shortcuts
+  
+  # --- State & Utilities ---
+  provider: ^6.1.2
+  shared_preferences: ^2.2.3
+  http: ^1.2.1
+  package_info_plus: ^8.0.2
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  connectivity_plus: ^7.0.0
+  uuid: ^4.4.0
+  intl: ^0.20.2
+  url_launcher: ^6.3.2
+  flutter_animate: ^4.5.2
+  
+  # UPDATED: share_plus 10+ supports 'web ^1.0.0'
+  share_plus: ^12.0.1       
+  
+  universal_io: ^2.3.1
+
+  # --- In-app WebView (Paystack checkout) ---
+  webview_flutter: ^4.10.0
+
+  # --- UI Components ---
+  percent_indicator: ^4.2.3
+  fluttertoast: ^9.0.0
+  google_fonts: ^8.0.0
+  cupertino_icons: ^1.0.6
+  font_awesome_flutter: ^10.7.0
+  flip_card: ^0.7.0
+  confetti: ^0.8.0
+  fl_chart: ^1.1.1
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
+  flutter_staggered_grid_view: ^0.7.0
+  web_socket_channel: ^3.0.0
+  waveform_flutter: ^1.2.0
+
+  # --- Media & Input ---
+  record: ^6.1.1
+  audioplayers: ^6.0.0
+  flutter_tts: ^4.0.2
+  camera: ^0.11.2+1
+  image_picker: ^1.1.2
+  flutter_soloud: ^3.1.6
+  
+  # UPDATED: pasteboard 0.4.0+ supports 'web ^1.0.0'
+  pasteboard: ^0.4.0        
+  
+  # UPDATED: speech_to_text 7+ aligns better with modern JS/Web
+  speech_to_text: ^7.0.0    
+
+  # --- Math & Markdown ---
+  flutter_math_fork: ^0.7.2
+  math_expressions: ^3.1.0
+  flutter_markdown: ^0.7.2
+  markdown: ^7.2.2
+
+  # --- Files & PDF ---
+
+  syncfusion_flutter_pdfviewer: any
+  syncfusion_flutter_core: any
+  # For the "Lens" UI
+  croppy: ^1.4.1
+  # For copying images - simpler package that works
+  clipboard: ^3.0.14
+  file_picker: ^10.3.8
+  pdf: ^3.11.0
+
+  
+  # Mobile Only (Must wrap in kIsWeb check)
+  cunning_document_scanner: ^1.2.0 
+  google_mlkit_text_recognition: ^0.15.0
+
+  image: ^4.3.0
+  open_file: ^3.3.0
+  screenshot: ^3.0.0
+
+  # --- Storage ---
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  flutter_local_notifications: ^19.5.0
+  video_player: ^2.8.6
+  chewie: ^1.8.1
+  timezone: ^0.10.1
+  just_audio: ^0.10.5
+  shimmer: ^3.0.0
+  lottie: ^3.1.0
+  haptic_feedback: ^0.5.1+1
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+
+  # SEO and Optimizations
+  # Temporarily commenting out seo due to intl version conflict
+  # seo: ^1.2.1
+  easy_debounce: ^2.0.3
+  path: ^1.9.0
+
+  # --- Composition Studio ---
+  flutter_quill: ^11.5.0
+  flutter_quill_extensions: ^11.0.0
+
+  flutter_image_compress: ^2.3.0
+  firebase_crashlytics: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
+  flutter_web_optimizer: ^1.5.1
+  mocktail: ^1.0.4
+  mockito: ^5.4.4
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.9
+
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/config/
+    - assets/lottie/
+
+  # fonts:
+  #   To use custom fonts, provide .ttf or .otf files (Flutter does not support .woff2).
+  #   Example:
+  #   - family: UniversalSans
+  #     fonts:
+  #       - asset: assets/fonts/UniversalSans-Regular.ttf

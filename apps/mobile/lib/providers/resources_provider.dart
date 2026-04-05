@@ -1,0 +1,247 @@
+import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/firebase_file.dart';
+import '../models/user_model.dart';
+import '../services/storage_service.dart';
+import '../services/offline_service.dart';
+import '../services/firestore_service.dart';
+import '../services/streak_service.dart';
+import '../services/xp_service.dart';
+import 'dart:convert';
+
+enum ResourceState { initial, loading, loaded, error, empty }
+
+class ResourcesProvider extends ChangeNotifier {
+  final Map<String, List<FirebaseFile>> _tabCache = {};
+  final Map<String, DocumentSnapshot?> _lastDocumentCache = {};
+  final Map<String, bool> _hasMoreCache = {};
+
+  ResourceState _state = ResourceState.initial;
+  String _searchQuery = '';
+  String _currentCategory = 'All Files';
+
+  // Helper methodologies for translating UI tabs into query scopes
+  String? _getCollectionScope(String tabName) {
+    if (tabName == 'All Files' || tabName == 'Recommended') return null;
+    if (tabName == '844 Files') return '844_files';
+    if (tabName == 'IGCSE Files') return 'igcse_files';
+    // CBC Files, Notes, Lesson Plans, Schemes Of Work all target cbc_files
+    return 'cbc_files';
+  }
+
+  String? _getPathPrefix(String tabName) {
+    if (tabName == 'Notes') return 'resources/Notes/';
+    if (tabName == 'Lesson Plans') return 'resources/Lesson Plans/';
+    // Standardize 'Schemes of Work' / 'Schemes Of Work' edge-cases from DB paths
+    if (tabName == 'Schemes Of Work' || tabName == 'Schemes of Work') {
+      return 'resources/Schemes_Of_Work/';
+    }
+
+    // Everything else ('All Files', 'CBC Files', '844 Files') fetches entire collections
+    return null;
+  }
+
+  // Getters
+  List<FirebaseFile> get files => _tabCache[_currentCategory] ?? [];
+  ResourceState get state => _state;
+  bool get hasMore => _hasMoreCache[_currentCategory] ?? true;
+  String get searchQuery => _searchQuery;
+
+  void setSearchQuery(String query) {
+    final trimmed = query.trim();
+    if (_searchQuery == trimmed) return;
+    _searchQuery = trimmed;
+    // Clear cached results for all tabs so the new query fetches fresh data.
+    _tabCache.clear();
+    _lastDocumentCache.clear();
+    _hasMoreCache.clear();
+    _state = ResourceState.initial;
+    notifyListeners();
+  }
+
+  void setCategory(String category) {
+    if (_currentCategory == category) {
+      return;
+    }
+    _currentCategory = category;
+
+    // If we haven't loaded this category yet, it will be initial.
+    if (!_tabCache.containsKey(_currentCategory)) {
+      _state = ResourceState.initial;
+    } else {
+      _state = files.isEmpty ? ResourceState.empty : ResourceState.loaded;
+    }
+    notifyListeners();
+  }
+
+  Future<void> fetchFiles({
+    required UserModel user,
+    bool isRefresh = false,
+  }) async {
+    // Avoid multiple simultaneous loads for the same category (unless refreshing)
+    if (_state == ResourceState.loading && !isRefresh) {
+      return;
+    }
+
+    // If not refreshing and no more data, stop (only applies to pagination, not search)
+    if (!isRefresh &&
+        _hasMoreCache[_currentCategory] == false &&
+        _searchQuery.isEmpty) {
+      return;
+    }
+
+    if (isRefresh) {
+      _tabCache.remove(_currentCategory);
+      _lastDocumentCache.remove(_currentCategory);
+      _hasMoreCache.remove(_currentCategory);
+    }
+
+    _state = ResourceState.loading;
+    notifyListeners();
+
+    // Snapshot the query at the start so we can detect if it changed mid-flight.
+    final queryAtStart = _searchQuery;
+
+    try {
+      List<FirebaseFile> newFiles;
+
+      if (_searchQuery.isNotEmpty) {
+        newFiles = await StorageService.searchFiles(
+          _searchQuery,
+          curriculum: user.educationLevel ?? user.curriculum,
+          grade: _currentCategory == 'Recommended' ? user.grade : null,
+          role: user.role,
+          collectionScope: _getCollectionScope(_currentCategory),
+        );
+        _hasMoreCache[_currentCategory] = false;
+      } else {
+        newFiles = await StorageService.getPaginatedFiles(
+          curriculum: user.educationLevel ?? user.curriculum,
+          grade: _currentCategory == 'Recommended' ? user.grade : null,
+          role: user.role,
+          pathPrefix: _getPathPrefix(_currentCategory),
+          collectionScope: _getCollectionScope(_currentCategory),
+          lastDocument: _lastDocumentCache[_currentCategory],
+          limit: 20,
+        );
+        _hasMoreCache[_currentCategory] = newFiles.length >= 20;
+        if (newFiles.isNotEmpty) {
+          _lastDocumentCache[_currentCategory] = newFiles.last.snapshot;
+        }
+      }
+
+      // Discard results if the query changed while we were fetching.
+      if (_searchQuery != queryAtStart) return;
+
+      if (queryAtStart.isNotEmpty) {
+        // Search: replace results entirely
+        _tabCache[_currentCategory] = newFiles;
+      } else {
+        // Pagination: append
+        _tabCache[_currentCategory] ??= [];
+        _tabCache[_currentCategory]!.addAll(newFiles);
+      }
+
+      _state = (_tabCache[_currentCategory] ?? []).isEmpty
+          ? ResourceState.empty
+          : ResourceState.loaded;
+    } catch (e) {
+      _state = ResourceState.error;
+      if (kDebugMode) debugPrint("Error fetching files: $e");
+    }
+    notifyListeners();
+  }
+
+  // ==========================================
+  // Recently Opened Files Tracking
+  // ==========================================
+  List<FirebaseFile> _recentlyOpened = [];
+  List<FirebaseFile> get recentlyOpened => _recentlyOpened;
+  static const String _recentFilesPrefKey = 'recently_opened_v2';
+  final OfflineService _offlineService = OfflineService();
+  final FirestoreService _firestoreService = FirestoreService();
+
+  Future<void> loadRecentlyOpened() async {
+    try {
+      final recentJsonList = _offlineService.getStringList(_recentFilesPrefKey);
+
+      _recentlyOpened = recentJsonList.map((jsonStr) {
+        final Map<String, dynamic> data = jsonDecode(jsonStr);
+        return FirebaseFile.fromMap(data);
+      }).toList();
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint("Error loading recently opened: $e");
+    }
+  }
+
+  Future<void> trackFileOpen(FirebaseFile file, {String? userId}) async {
+    try {
+      // Add to front, remove duplicates based on path
+      _recentlyOpened.removeWhere((r) => r.path == file.path);
+      _recentlyOpened.insert(0, file);
+
+      // Keep only last 10
+      if (_recentlyOpened.length > 10) {
+        _recentlyOpened = _recentlyOpened.take(10).toList();
+      }
+
+      // Save to OfflineService (Hive)
+      final jsonList =
+          _recentlyOpened.map((f) => jsonEncode(f.toMap())).toList();
+      await _offlineService.setStringList(_recentFilesPrefKey, jsonList);
+
+      // Also persist to Firestore for cross-device sync and award XP
+      if (userId != null) {
+        _firestoreService.trackFileOpen(
+          userId: userId,
+          fileName: file.name,
+          filePath: file.path,
+          fileType: file.type,
+        );
+        // Fire-and-forget — XP + streak update
+        StreakService().recordActivity(userId, ActivityType.fileInteraction);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint("Error tracking file open: $e");
+    }
+  }
+
+  /// Load file history from Firestore and merge with local cache.
+  Future<void> loadCloudHistory(String userId) async {
+    try {
+      final cloudRecords = await _firestoreService.getFileHistory(userId);
+      if (cloudRecords.isEmpty) return;
+
+      // Convert cloud records to FirebaseFile objects
+      for (final record in cloudRecords) {
+        final path = record['filePath'] as String? ?? '';
+        // Skip if already in local list
+        if (_recentlyOpened.any((f) => f.path == path)) continue;
+
+        _recentlyOpened.add(FirebaseFile(
+          name: record['fileName'] as String? ?? 'Unknown',
+          path: path,
+          type: record['fileType'] as String? ?? 'pdf',
+          uploadedAt: (record['timestamp'] as Timestamp?)?.toDate(),
+        ));
+      }
+
+      // Sort by time descending, keep top 20
+      _recentlyOpened.sort((a, b) {
+        final ta = a.uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final tb = b.uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return tb.compareTo(ta);
+      });
+      if (_recentlyOpened.length > 20) {
+        _recentlyOpened = _recentlyOpened.take(20).toList();
+      }
+
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint("Error loading cloud history: $e");
+    }
+  }
+}

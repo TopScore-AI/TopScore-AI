@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+
+Sitemap: https://topscoreapp.ai/sitemap.xml
+Host: https://topscoreapp.ai
