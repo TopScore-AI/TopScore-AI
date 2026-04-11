@@ -22,7 +22,7 @@ const schema = {
 
 export default function ReviewsPage() {
     return (
-        <main className="bg-black min-h-screen text-white">
+        <main className="bg-black min-h-screen text-white" suppressHydrationWarning>
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-6 pt-32 pb-24">

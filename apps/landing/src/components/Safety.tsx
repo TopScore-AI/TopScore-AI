@@ -20,8 +20,8 @@ export default function Safety() {
                 <AnimatedSection animation="fadeUp">
                     <div className={styles.header}>
                         <div className={styles.label}>{t('safety.label')}</div>
-                        <h2 className={styles.title}>{t('safety.title')}</h2>
-                        <p className={styles.sub}>{t('safety.sub')}</p>
+                        <h2 className={`${styles.title} font-serif`}>{t('safety.title')}</h2>
+                        <p className={`${styles.sub} prose-editorial`}>{t('safety.sub')}</p>
                     </div>
                 </AnimatedSection>
 
@@ -37,7 +37,7 @@ export default function Safety() {
                                     <div className={styles.iconWrapper}>
                                         <Icon size={24} />
                                     </div>
-                                    <h3 className={styles.cardTitle}>{t(titleKey)}</h3>
+                                    <h3 className={`${styles.cardTitle} font-serif`}>{t(titleKey)}</h3>
                                     <p className={styles.cardDesc}>{t(descKey)}</p>
                                 </div>
                             </AnimatedSection>

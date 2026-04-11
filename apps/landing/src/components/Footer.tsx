@@ -8,7 +8,7 @@ import styles from './Footer.module.css';
 
 
 export default function Footer() {
-    const year = new Date().getFullYear();
+    const year = 2026; // Hardcoded for stability or could use suppressHydrationWarning
     const { t } = useLocale();
 
     return (

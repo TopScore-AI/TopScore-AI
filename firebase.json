@@ -23,7 +23,7 @@
   "hosting": [
     {
       "site": "elimisha-90787",
-      "public": "apps/mobile/build/web",
+      "public": "apps/topscore_ai/build/web",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -168,11 +168,11 @@
         "default": {
           "projectId": "elimisha-90787",
           "appId": "1:974459699084:android:26d53a933598930a68a0a9",
-          "fileOutput": "apps/mobile/android/app/google-services.json"
+          "fileOutput": "apps/topscore_ai/android/app/google-services.json"
         }
       },
       "dart": {
-        "apps/mobile/lib/firebase_options.dart": {
+        "apps/topscore_ai/lib/firebase_options.dart": {
           "projectId": "elimisha-90787",
           "configurations": {
             "android": "1:974459699084:android:26d53a933598930a68a0a9",

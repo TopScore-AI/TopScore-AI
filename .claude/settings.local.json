@@ -6,7 +6,9 @@
       "Bash(dart run:*)",
       "Bash(flutter build:*)",
       "Bash(firebase deploy:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(grep -r \"student_id\\\\|user_id\\\\|displayName\" lib/tutor_client/*.dart lib/tutor_client/parts/*.dart)",
+      "Bash(find . -name \"*.dart\" -type f -exec grep -l \"class UserModel\\\\|toMap.*displayName\" {} \\\\;)"
     ]
   }
 }

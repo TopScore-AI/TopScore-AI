@@ -15,7 +15,7 @@ export default function TrustedBy() {
     return (
         <section className={styles.section}>
             <AnimatedSection animation="fadeUp">
-                <p className={styles.heading}>Trusted by students across Kenya</p>
+                <p className={`${styles.heading} font-serif`}>Trusted by students across Kenya</p>
             </AnimatedSection>
 
             <AnimatedSection animation="fadeUp" delay="0.1s">

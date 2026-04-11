@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, DM_Sans } from 'next/font/google';
+import { Plus_Jakarta_Sans, DM_Sans, Newsreader } from 'next/font/google';
 import './globals.css';
 import { LocaleProvider } from '@/i18n';
 
@@ -12,6 +12,13 @@ const plusJakarta = Plus_Jakarta_Sans({
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-body',
+  display: 'swap',
+});
+
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  style: ['normal', 'italic'],
+  variable: '--font-serif',
   display: 'swap',
 });
 
@@ -180,7 +187,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${dmSans.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${plusJakarta.variable} ${dmSans.variable} ${newsreader.variable}`} suppressHydrationWarning>
       <head>
         <script
           type="application/ld+json"
@@ -218,11 +225,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
         `}</style>
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="dark"
+          forcedTheme="dark"
           disableTransitionOnChange
         >
           {children}

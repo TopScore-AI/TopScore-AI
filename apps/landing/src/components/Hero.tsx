@@ -23,14 +23,14 @@ export default function Hero() {
                         </AnimatedSection>
 
                         <AnimatedSection animation="fadeUp" delay="0.1s">
-                            <h1 className={styles.h1}>
+                            <h1 className={`${styles.h1} font-serif`}>
                                 {t('hero.h1a')}<span className={styles.gradText}>{t('hero.h1Grad')}</span><br />
                                 {t('hero.h1b')}
                             </h1>
                         </AnimatedSection>
 
                         <AnimatedSection animation="fadeUp" delay="0.2s">
-                            <p className={styles.sub}>
+                            <p className={`${styles.sub} prose-editorial`}>
                                 {t('hero.sub')}
                             </p>
                         </AnimatedSection>

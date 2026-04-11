@@ -26,10 +26,10 @@ export default function Features({ limit }: { limit?: number }) {
                 <AnimatedSection animation="fadeUp">
                     <div className={styles.header}>
                         <div className={styles.label}>{t('features.label')}</div>
-                        <h2 className={styles.title}>
+                        <h2 className={`${styles.title} font-serif`}>
                             {t('features.title')}<br />{t('features.titleBr')}
                         </h2>
-                        <p className={styles.sub}>
+                        <p className={`${styles.sub} prose-editorial`}>
                             {t('features.sub')}
                         </p>
                     </div>
@@ -49,7 +49,7 @@ export default function Features({ limit }: { limit?: number }) {
                                             {f.icon}
                                         </div>
                                         <CardHeader className="p-0 space-y-2 relative z-10">
-                                            <h3 className={styles.cardTitle}>{t(titleKey)}</h3>
+                                            <h3 className={`${styles.cardTitle} font-serif`}>{t(titleKey)}</h3>
                                         </CardHeader>
                                         <CardContent className="p-0 pt-2 pb-4 relative z-10">
                                             <p className={styles.cardDesc}>{t(descKey)}</p>
