@@ -10,7 +10,7 @@ export default function ReviewsCta() {
                 {t('reviews.cta.label')}
             </div>
             <h2 className="text-4xl md:text-5xl font-black mb-8 tracking-tight text-center">{t('reviews.cta.title')}</h2>
-            <p className="text-zinc-400 text-xl mb-12 max-w-2xl mx-auto leading-relaxed text-center">
+            <p className="text-xl mb-12 max-w-2xl mx-auto leading-relaxed text-center" style={{ color: 'var(--text-muted)' }}>
                 {t('reviews.cta.sub')}
             </p>
             <a href="/download" className="bg-primary text-white px-10 py-5 rounded-2xl font-black hover:scale-105 hover:shadow-[0_0_40px_rgba(37,99,235,0.3)] transition-all inline-block text-lg">

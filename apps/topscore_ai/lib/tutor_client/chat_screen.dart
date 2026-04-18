@@ -18,6 +18,7 @@ import 'widgets/empty_state_widget.dart';
 import '../widgets/glass_card.dart';
 
 import 'chat_controller.dart';
+import 'connection_manager.dart' as cm;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatScreen extends StatefulWidget {
@@ -80,13 +81,39 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
 
-      if (widget.startVoice) {
-        controller.startLiveVoiceMode(context);
-      }
-
       // THE LIFELINE: Check for recovered images from Background Kill
       controller.recoverLostImageIfKilled();
+
+      // Auto-start Live Voice when the caller requested it (e.g. the PDF
+      // viewer's "Live Voice" shortcut). Pre-warming audio on the same user
+      // gesture is important for web, where autoplay policies require it.
+      if (widget.startVoice && !controller.isVoiceMode) {
+        controller.preWarmAudio().whenComplete(() {
+          if (!mounted) return;
+          controller.startLiveVoiceMode(context);
+        });
+      }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    final oldThreadId = oldWidget.chatThread?['thread_id']?.toString();
+    final newThreadId = widget.chatThread?['thread_id']?.toString();
+
+    if (newThreadId != null && newThreadId != oldThreadId) {
+      final controller = Provider.of<ChatController>(context, listen: false);
+      final historyProvider = Provider.of<AiTutorHistoryProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      controller.loadThread(
+        newThreadId,
+        historyProvider: historyProvider,
+        userId: authProvider.userModel?.uid,
+      );
+    }
   }
 
   @override
@@ -117,10 +144,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   ? const Color(0xFF000000)
                   : theme.scaffoldBackgroundColor,
               gradient: isDark
-                  ? const RadialGradient(
+                  ? RadialGradient(
                       center: Alignment.topCenter,
                       radius: 2.5,
-                      colors: [Color(0xFF181835), Color(0xFF0A0A14)],
+                      colors: [const Color(0xFF1E293B), theme.scaffoldBackgroundColor],
                       stops: [0.0, 1.0],
                     )
                   : null,
@@ -298,6 +325,88 @@ class _ChatScreenView extends StatelessWidget {
     );
   }
 
+  Widget _buildConnectionBanner(BuildContext context, ChatController controller,
+      ThemeData theme, bool isDark) {
+    return StreamBuilder<cm.ConnectionState>(
+      stream: controller.connectionStateStream,
+      initialData: controller.connectionState,
+      builder: (context, snap) {
+        final state = snap.data ?? cm.ConnectionState.connected;
+        // Only show banner for non-connected states
+        final isOfflineNet = state == cm.ConnectionState.offline;
+        final isReconnecting = state == cm.ConnectionState.reconnecting ||
+            state == cm.ConnectionState.connecting;
+        final isDisconnected = state == cm.ConnectionState.disconnected;
+        if (state == cm.ConnectionState.connected) {
+          return const SizedBox.shrink();
+        }
+        final color = isOfflineNet
+            ? Colors.redAccent
+            : (isReconnecting ? Colors.amber.shade700 : Colors.grey.shade600);
+        final icon = isOfflineNet
+            ? CupertinoIcons.wifi_slash
+            : (isReconnecting ? CupertinoIcons.arrow_2_circlepath : CupertinoIcons.exclamationmark_triangle);
+        final label = isOfflineNet
+            ? "You're offline"
+            : (isReconnecting
+                ? 'Reconnecting…'
+                : (isDisconnected ? 'Disconnected' : 'Connecting…'));
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 6, 20, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.15 : 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+              if (isReconnecting)
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                )
+              else if (isDisconnected)
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () =>
+                      controller.wsServiceOrNull?.resetConnection(),
+                  child: Text(
+                    'Retry',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildMainChatArea(BuildContext context) {
     final theme = this.theme;
     final isDark = this.isDark;
@@ -312,6 +421,7 @@ class _ChatScreenView extends StatelessWidget {
         child: Column(
           children: [
             _buildPersistenceBanner(context, controller, theme, isDark),
+            _buildConnectionBanner(context, controller, theme, isDark),
             Expanded(
               child: Stack(
                 children: [
@@ -339,7 +449,7 @@ class _ChatScreenView extends StatelessWidget {
                           controller: controller.scrollController,
                           padding: EdgeInsets.only(
                             left: 20, right: 20, top: 24,
-                            bottom: controller.isVoiceMode ? ChatControllerLiveVoice.voiceControlBarHeight + 24 : 24,
+                            bottom: controller.isVoiceMode ? 160 : 24,
                           ),
                           itemCount: controller.messages.length +
                               (controller.isTyping &&
@@ -433,6 +543,8 @@ class _ChatScreenView extends StatelessWidget {
                               onReply: (m) => controller.replyTo = m,
                               onLongPress: () =>
                                   controller.copyToClipboard(context, message.text),
+                              onRetrySend: () =>
+                                  controller.retryFailedMessage(context, message),
                               user: authProvider.userModel,
                             );
                           },
@@ -493,6 +605,17 @@ class _ChatScreenView extends StatelessWidget {
                         ),
                       ),
                   ],
+                  
+                  // XP Award Celebrations (Global to the chat stack)
+                  ...controller.xpAwards.map((award) => Positioned(
+                    top: 100,
+                    left: 20,
+                    right: 20,
+                    child: _XpAwardCelebration(
+                      amount: award['amount'] as int,
+                      reason: award['reason'] as String,
+                    ),
+                  )),
                 ],
               ),
             ),
@@ -507,6 +630,7 @@ class _ChatScreenView extends StatelessWidget {
               isGenerating: controller.isTyping ||
                   controller.currentStreamingMessageId != null,
               isRecording: controller.isRecording,
+              isOffline: !controller.isOnline,
               suggestions: controller.dynamicSuggestions,
               placeholderMessages: controller.placeholderMessages,
               onSendMessage: () => controller.sendUserMessage(context),
@@ -690,6 +814,108 @@ class _LiveVisualPeek extends StatelessWidget {
       child: Text(
         'Tap to view content',
         style: GoogleFonts.dmSans(fontSize: 11, color: Colors.grey),
+      ),
+    );
+  }
+}
+
+class _XpAwardCelebration extends StatefulWidget {
+  final int amount;
+  final String reason;
+
+  const _XpAwardCelebration({required this.amount, required this.reason});
+
+  @override
+  State<_XpAwardCelebration> createState() => _XpAwardCelebrationState();
+}
+
+class _XpAwardCelebrationState extends State<_XpAwardCelebration> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.5, curve: Curves.easeIn)),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 300),
+            child: GlassCard(
+              padding: const EdgeInsets.all(20),
+              borderRadius: 24,
+              opacity: 0.1,
+              blur: 20,
+              border: Border.all(
+                color: Colors.amber.withValues(alpha: 0.4),
+                width: 2,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(CupertinoIcons.star_fill, color: Colors.amber, size: 32),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '+${widget.amount} XP',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.amber,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.reason,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

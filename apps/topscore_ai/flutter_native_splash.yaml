@@ -1,16 +1,16 @@
 flutter_native_splash:
   color: "#ffffff"
-  color_dark: "#121212"
-  image: "assets/images/topscore_logo.png"
+  color_dark: "#0F172A"
+  image: "assets/images/splash_screen.png"
   fullscreen: true
   icon_background_color: "#ffffff"
-  icon_background_color_dark: "#121212"
+  icon_background_color_dark: "#0F172A"
 
   android_12:
-    image: "assets/images/topscore_logo.png"
+    image: "assets/images/splash_screen.png"
     color: "#ffffff"
-    color_dark: "#121212"
+    color_dark: "#0F172A"
     icon_background_color: "#ffffff"
-    icon_background_color_dark: "#121212"
+    icon_background_color_dark: "#0F172A"
 
   web: true

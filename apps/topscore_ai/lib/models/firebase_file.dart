@@ -16,6 +16,7 @@ class FirebaseFile {
   final String type; // File extension (pdf, jpg, etc.)
   final int? size; // File size in bytes
   final String? downloadUrl;
+  final String? thumbnailUrl; // NEW
   final DateTime? uploadedAt;
   final List<String>? tags; // List of tags (e.g. "KCSE", "2023")
   final DocumentSnapshot? snapshot; // For pagination cursor
@@ -35,6 +36,7 @@ class FirebaseFile {
     this.type = 'pdf',
     this.size,
     this.downloadUrl,
+    this.thumbnailUrl, // NEW
     this.uploadedAt,
     this.tags,
     this.snapshot,
@@ -103,9 +105,11 @@ class FirebaseFile {
               .last
               .toLowerCase(),
       size: parsedSize,
-      downloadUrl: data['downloadUrl'],
-      uploadedAt: (data['uploadedAt'] as Timestamp?)?.toDate() ??
-          (data['createdAt'] as Timestamp?)?.toDate(),
+      downloadUrl: data['downloadUrl'] ?? data['url'],
+      thumbnailUrl: data['thumbnailUrl'] ?? data['thumbUrl'],
+      uploadedAt: data['uploadedAt'] != null
+          ? (data['uploadedAt'] as Timestamp).toDate()
+          : (data['createdAt'] != null ? (data['createdAt'] as Timestamp).toDate() : null),
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
       snapshot: doc,
       strand: data['strand'],

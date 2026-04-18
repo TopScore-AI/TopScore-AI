@@ -31,8 +31,27 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
     'Public Service',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    // Pre-populate with existing interests so users can edit, not start from scratch
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (user?.interests != null) {
+      _selectedInterests.addAll(user!.interests!);
+    }
+  }
+
   Future<void> _saveInterests() async {
     if (_selectedInterests.isEmpty) return;
+
+    if (widget.userId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to save your interests.')),
+        );
+      }
+      return;
+    }
 
     setState(() => _isSaving = true);
 

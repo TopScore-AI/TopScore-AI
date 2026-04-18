@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'dart:math'; // For random delays
 import 'package:firebase_database/firebase_database.dart';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import '../models/user_model.dart';
 import 'auth_headers.dart';
 
 class DiscussionService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
-  String get _aiBackendUrl => '${ApiConfig.baseUrl}/api/chat/group_moderator';
+  String get _aiBackendUrl => '${AppConfig.backendBaseUrl}/api/chat/group_moderator';
 
   String _generateMeetingCode() {
     return (100000 + DateTime.now().millisecondsSinceEpoch % 900000).toString();

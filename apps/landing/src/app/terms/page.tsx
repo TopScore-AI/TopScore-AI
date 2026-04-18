@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
-import Breadcrumbs from '@/components/Breadcrumbs';
 import styles from '@/components/LegalPage.module.css';
 
 export const metadata: Metadata = {
@@ -15,7 +14,6 @@ export default function TermsPage() {
         <main>
             <Nav />
             <div className="container mx-auto px-4 pt-32">
-                <Breadcrumbs items={[{ label: 'Terms of Service' }]} />
                 <article className={styles.legal}>
                 <h1>Terms of Service</h1>
                 <p className={styles.updated}>Last updated: February 2026</p>

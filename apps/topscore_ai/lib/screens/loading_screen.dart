@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -45,7 +44,6 @@ class _LoadingScreenState extends State<LoadingScreen> {
       
       // 2. Small delay to ensure frame is painted
       await Future.delayed(const Duration(milliseconds: 100));
-      FlutterNativeSplash.remove();
       
       // 3. Keep the animation visible for at least 2.5 seconds for premium feel
       await Future.delayed(const Duration(milliseconds: 2400));
@@ -79,7 +77,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF0A0A0F) : const Color(0xFFF8FAFC);
+    final backgroundColor = theme.scaffoldBackgroundColor;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -91,7 +89,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
               children: [
                 // 1. Pulsing Logo
                 Image.asset(
-                  'assets/images/topscore_logo.png',
+                  'assets/images/logo.png',
                   width: 120,
                   height: 120,
                 )

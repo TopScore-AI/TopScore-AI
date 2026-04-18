@@ -273,6 +273,21 @@ class FirestoreService {
     }
   }
 
+  /// Fetch a shared artifact (deck, quiz, etc.) by its ID.
+  Future<Map<String, dynamic>?> getSharedArtifact(String artifactId) async {
+    try {
+      final doc =
+          await _firestore.collection('shared_artifacts').doc(artifactId).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint("â Œ Error getting shared artifact: $e");
+      return null;
+    }
+  }
+
   // Helper for dynamic collection naming
   String _getCollectionName(String? curriculum) {
     if (curriculum == null || curriculum.isEmpty) return 'cbc_files';

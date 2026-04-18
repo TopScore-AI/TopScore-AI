@@ -46,7 +46,7 @@ class AppColors {
   static const Color surfaceElevated = white;
 
   // Dark Mode Colors - Rich Midnight Charcoal, not pure black
-  static const Color backgroundDark = Color(0xFF0A0A0F); // Deep midnight
+  static const Color backgroundDark = Color(0xFF0F172A); // Slate 900
   static const Color surfaceDark = Color(0xFF12121A); // Layered surface
   static const Color surfaceVariantDark = Color(0xFF1A1A28); // Elevated variant
   static const Color surfaceElevatedDark = Color(0xFF161622); // Cards & modals

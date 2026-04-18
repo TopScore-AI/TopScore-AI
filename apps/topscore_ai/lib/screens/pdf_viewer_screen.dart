@@ -28,6 +28,9 @@ import '../services/isar_service.dart';
 import '../services/tts_service.dart';
 import '../tutor_client/chat_screen.dart';
 import '../widgets/quick_explain_overlay.dart';
+import '../models/download_model.dart';
+import 'package:flutter/cupertino.dart';
+
 
 // ---------------------------------------------------------------------------
 // PdfViewerScreen — production-grade PDF reader
@@ -98,6 +101,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   // Context menu overlay
   OverlayEntry? _overlayEntry;
 
+  // Caching
+  Timer? _autoCacheTimer;
+  bool _isAutoCaching = false;
+
+
+
   // TTS
   bool _isSpeaking = false;
   String? _lastSelectedText;
@@ -112,6 +121,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   static const List<double> _textSizePresets = [0.75, 1.0, 1.25, 1.5, 2.0];
   int _textSizeIndex = 1; // default = 1.0x
 
+  // Night mode for long reading sessions. Inverts the PDF raster colours so
+  // bright white pages become soft dark — easier on the eyes.
+  bool _isNightMode = false;
+
   // (Animations removed to keep toolbar persistent)
 
   @override
@@ -120,12 +133,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     _loadPdfData();
     _loadBookmarks();
     _initTts();
+    _startAutoCacheTimer();
     // Configure default annotation settings
     _pdfViewerController.annotationSettings = PdfAnnotationSettings();
   }
 
   @override
   void dispose() {
+    _autoCacheTimer?.cancel();
     _dismissContextMenu();
     _searchController.dispose();
     _pageJumpController.dispose();
@@ -485,13 +500,65 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     );
   }
 
+  void _startAutoCacheTimer() {
+    if (kIsWeb || widget.url == null) return;
+    _autoCacheTimer = Timer(const Duration(seconds: 60), () {
+      if (mounted) _autoCachePdf();
+    });
+  }
+
+  Future<void> _autoCachePdf() async {
+    if (widget.url == null || _isAutoCaching) return;
+    final downloadProvider = context.read<DownloadProvider>();
+    if (downloadProvider.isDownloaded(widget.url!)) return;
+
+    setState(() => _isAutoCaching = true);
+    try {
+      await downloadProvider.downloadGenericFile(
+        id: widget.url!,
+        title: widget.title,
+        downloadUrl: widget.url!,
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint("[TOPSCORE] Auto-cache failed: $e");
+    } finally {
+      if (mounted) setState(() => _isAutoCaching = false);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // PDF Loading
   // ---------------------------------------------------------------------------
   Future<void> _loadPdfData() async {
+    setState(() => _isLoading = true);
     try {
+      // 1. Check local cache (DownloadProvider) on mobile
+      if (!kIsWeb && widget.url != null) {
+        final downloadProvider = context.read<DownloadProvider>();
+        final downloads = downloadProvider.downloads;
+        final cachedTask = downloads.firstWhere(
+          (t) => t.resourceId == widget.url || t.id == widget.url,
+          orElse: () => DownloadTaskModel(id: '', resourceId: '', localPath: '', downloadedAt: 0, filename: ''),
+        );
+        
+        if (cachedTask.localPath.isNotEmpty) {
+          final file = File(cachedTask.localPath);
+          if (await file.exists()) {
+            final loadedBytes = await file.readAsBytes();
+            if (mounted) {
+              setState(() {
+                _pdfBytes = loadedBytes;
+                _isLoading = false;
+              });
+            }
+            return;
+          }
+        }
+      }
+
       final docId =
           widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
+      if (!mounted) return;
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final canAccess = await authProvider.tryAccessDocument(docId);
 
@@ -793,7 +860,26 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     Overlay.of(context).insert(_overlayEntry!);
   }
 
-  void _openAiTutorBottomSheet({String? initialMessage, XFile? initialImage}) {
+  Future<void> _openAiTutorBottomSheet({String? initialMessage, XFile? initialImage, bool startVoice = false}) async {
+    String? resolvedDownloadUrl = widget.url;
+
+    // Resolve a fresh download URL to prevent expired token issues in the AI Tutor backend
+    try {
+      if (widget.storagePath != null) {
+        if (widget.storagePath!.startsWith('gs://')) {
+          resolvedDownloadUrl = await FirebaseStorage.instance.refFromURL(widget.storagePath!).getDownloadURL();
+        } else {
+          resolvedDownloadUrl = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL();
+        }
+      } else if (widget.url != null && widget.url!.contains('firebasestorage.googleapis.com')) {
+        resolvedDownloadUrl = await FirebaseStorage.instance.refFromURL(widget.url!).getDownloadURL();
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Could not resolve fresh downloadUrl: $e');
+    }
+
+    if (!mounted) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -833,7 +919,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   child: ChatScreen(
                     initialMessage: initialMessage,
                     initialImage: initialImage,
+                    initialFileUrl: resolvedDownloadUrl ?? widget.url,
+                    initialFileName: widget.title,
+                    initialFileType: 'application/pdf',
+                    initialFileBytes: (resolvedDownloadUrl ?? widget.url) == null ? _pdfBytes : null,
                     isEmbedded: true,
+                    startVoice: startVoice,
                   ),
                 ),
               ),
@@ -844,61 +935,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     );
   }
 
-  Future<void> _generateFlashcardFromSelection(String text) async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final uid = auth.userModel?.uid;
-    if (uid == null) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 12),
-            Text('⚡ Generating flashcards...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    try {
-      final aiService = AIService();
-      final Map<String, String> specs = AIService.mapLevelToSpecs(auth.userModel?.gradeLabel ?? 'General');
-
-      await aiService.generateFlashcards(
-        userId: uid,
-        topic: widget.title,
-        sourceText: text,
-        curriculum: specs['curriculum']!,
-        grade: specs['grade']!,
-        amount: 3,
-      );
-
-      if (mounted) {
-
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Flashcards added to your Study Library!'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
-  }
 
   void _showContextMenu(
       BuildContext context, PdfTextSelectionChangedDetails details) {
@@ -946,14 +982,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   );
                 }),
                 _divider(fg),
-                _contextBtn(Icons.volume_up_rounded, 'Read', fg, () {
-                  final text = details.selectedText;
-                  if (text != null) {
-                    _dismissContextMenu();
-                    _pdfViewerController.clearSelection();
-                    _speakText(text);
-                  }
-                }),
                 _contextBtn(FontAwesomeIcons.wandMagicSparkles, 'Explain', fg,
                     () {
                   final text = details.selectedText;
@@ -963,25 +991,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   }
                 }, isFa: true),
                 _divider(fg),
-                _contextBtn(Icons.style_rounded, 'Flashcard', fg, () {
+                _contextBtn(Icons.summarize_rounded, 'Summarize', fg, () {
                   final text = details.selectedText;
                   if (text != null) {
                     _dismissContextMenu();
                     _pdfViewerController.clearSelection();
-                    _generateFlashcardFromSelection(text);
-                  }
-                }),
-                _divider(fg),
-                _contextBtn(Icons.search_rounded, 'Search', fg, () {
-                  final text = details.selectedText;
-                  if (text != null) {
-                    _dismissContextMenu();
-                    _pdfViewerController.clearSelection();
-                    setState(() {
-                      _showSearchBar = true;
-                      _searchController.text = text;
-                    });
-                    _performSearch(text);
+                    _openAiTutorBottomSheet(
+                      initialMessage: 'Please summarize this excerpt from the PDF:\n\n"$text"',
+                    );
                   }
                 }),
               ],
@@ -1166,34 +1183,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     }
   }
 
-  Future<void> _openAiTutorDialog() async {
-    // Pass the already-loaded PDF bytes directly to the ChatScreen.
-    // This avoids all URL resolution issues (broken signed URLs, 403s from
-    // getDownloadURL, etc.) — the chat will upload the bytes to get a fresh
-    // download URL the backend can access.
-    if (!mounted) return;
 
-    showDialog(
-      context: context,
-      useSafeArea: false,
-      builder: (ctx) => Dialog.fullscreen(
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('AI Tutor'),
-            leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(ctx).pop()),
-          ),
-          body: ChatScreen(
-            initialFileBytes: _pdfBytes,
-            initialFileName: widget.title,
-            initialFileType: 'application/pdf',
-            initialInputText: 'Help me with this document',
-          ),
-        ),
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Build
@@ -1207,24 +1197,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       backgroundColor:
           isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE8E8E8),
       body: _buildBody(theme, isDark),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 70.0), // Offset to float above the bottom bar
-        child: FloatingActionButton.extended(
-          onPressed: () => _captureAndAction(),
-          heroTag: 'pdf_snap_solve',
-          icon: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
-          label: Text(
-            'Snap & Solve',
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-              color: Colors.white,
-            ),
-          ),
-          backgroundColor: theme.colorScheme.primary,
-          elevation: 8,
-        ),
-      ),
     );
   }
 
@@ -1248,7 +1220,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
           Positioned.fill(
             child: RepaintBoundary(
               key: _pdfRepaintKey,
-              child: SfPdfViewer.memory(
+              child: ColorFiltered(
+                colorFilter: _isNightMode
+                    ? const ColorFilter.matrix(<double>[
+                        // Invert + slight desaturation so blacks stay comfortable
+                        -1,  0,  0, 0, 255,
+                         0, -1,  0, 0, 255,
+                         0,  0, -1, 0, 255,
+                         0,  0,  0, 1,   0,
+                      ])
+                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                child: SfPdfViewer.memory(
                 _pdfBytes!,
                 controller: _pdfViewerController,
                 canShowPaginationDialog: false,
@@ -1302,6 +1284,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   }
                 },
               ),
+              ),
             ),
           ),
 
@@ -1353,7 +1336,160 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
             right: 0,
             child: _buildBottomBar(theme, isDark),
           ),
+
+          // AI Action Hub (NEW Floating Horizontal Bar)
+          Positioned(
+            bottom: 85, // Above bottom bar
+            left: 20,
+            right: 20,
+            child: _buildAIActionHub(theme, isDark),
+          ),
         ],
+    );
+  }
+
+  Widget _buildAIActionHub(ThemeData theme, bool isDark) {
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: isDark ? Colors.black.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _aiHubButton(
+                  icon: CupertinoIcons.sparkles,
+                  label: 'Ask AI',
+                  onTap: () => _openAiTutorBottomSheet(),
+                  color: theme.colorScheme.primary,
+                ),
+                _aiHubButton(
+                  icon: CupertinoIcons.waveform,
+                  label: 'Live',
+                  onTap: _openLiveVoiceWithPdf,
+                  color: Colors.redAccent,
+                ),
+                _aiHubButton(
+                  icon: CupertinoIcons.doc_text_viewfinder,
+                  label: 'Sum',
+                  onTap: _summarizePdf,
+                ),
+                _aiHubButton(
+                  icon: CupertinoIcons.square_stack_3d_up_fill,
+                  label: 'Cards',
+                  onTap: _generateFlashcards,
+                ),
+                _aiHubButton(
+                  icon: CupertinoIcons.question_circle_fill,
+                  label: 'Quiz',
+                  onTap: _generateQuiz,
+                ),
+                _aiHubButton(
+                  icon: CupertinoIcons.camera_viewfinder,
+                  label: 'Snap',
+                  onTap: () => _captureAndAction(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Opens the chat in an embedded overlay and auto-starts Live Voice,
+  /// passing the current PDF as context so the tutor is grounded in the file.
+  Future<void> _openLiveVoiceWithPdf() async {
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+
+    _openAiTutorBottomSheet(
+      initialMessage: 'Let\'s go through "${widget.title}" together via voice.',
+      startVoice: true,
+    );
+  }
+
+  Widget _aiHubButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isLoading = false,
+    Color? color,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final fg = color ?? (isDark ? Colors.white : Colors.black87);
+
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+              )
+            else
+              Icon(icon, color: fg, size: 20),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _summarizePdf() async {
+    HapticFeedback.mediumImpact();
+    // Route summarize action through the AI Tutor overlay to avoid Vision API crashes
+    await _openAiTutorBottomSheet(
+      initialMessage: 'Please provide a detailed summary of this document: "${widget.title}". Highlight the main concepts, key takeaways, and any important formulas or definitions.',
+    );
+  }
+
+  Future<void> _generateFlashcards() async {
+    HapticFeedback.mediumImpact();
+    // Forward directly to AI Tutor to handle generation and display in chat
+    await _openAiTutorBottomSheet(
+      initialMessage: 'Please generate 5 flashcards for this document: "${widget.title}".',
+    );
+  }
+
+  Future<void> _generateQuiz() async {
+    HapticFeedback.mediumImpact();
+    // Forward directly to AI Tutor to handle generation and display in chat
+    await _openAiTutorBottomSheet(
+      initialMessage: 'Please generate a 5-question quiz based on this document: "${widget.title}".',
     );
   }
 
@@ -1387,37 +1523,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                       onPressed: () => Navigator.of(context).pop(),
                       tooltip: 'Back',
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Visual Solver (Scanner)
-                  IconButton(
-                    icon: Icon(Icons.document_scanner_rounded,
-                        color: theme.colorScheme.primary, size: 22),
-                    tooltip: 'Capture & Solve with AI',
-                    onPressed: () => _captureAndAction(),
-                  ),
-                  const SizedBox(width: 4),
-                  // Interaction mode toggle
-                  IconButton(
-                    icon: Icon(
-                      _interactionMode == PdfInteractionMode.pan 
-                          ? Icons.pan_tool_rounded 
-                          : Icons.text_fields_rounded,
-                      color: _interactionMode == PdfInteractionMode.selection 
-                          ? theme.colorScheme.primary 
-                          : fg,
-                      size: 22,
-                    ),
-                    tooltip: _interactionMode == PdfInteractionMode.pan 
-                        ? 'Switch to Selection Mode' 
-                        : 'Switch to Pan Mode',
-                    onPressed: () {
-                      setState(() {
-                        _interactionMode = _interactionMode == PdfInteractionMode.pan 
-                            ? PdfInteractionMode.selection 
-                            : PdfInteractionMode.pan;
-                      });
-                    },
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -1470,6 +1575,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                     tooltip: 'Bookmark page',
                     onPressed: () => _toggleBookmark(_currentPage),
                   ),
+                  // Night mode toggle — inverts PDF colors for comfortable reading
+                  IconButton(
+                    icon: Icon(
+                      _isNightMode
+                          ? CupertinoIcons.moon_fill
+                          : CupertinoIcons.moon,
+                      color: _isNightMode ? theme.colorScheme.primary : fg,
+                      size: 20,
+                    ),
+                    tooltip: _isNightMode ? 'Disable night mode' : 'Night mode',
+                    onPressed: () =>
+                        setState(() => _isNightMode = !_isNightMode),
+                  ),
                   // More menu
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert_rounded, color: fg, size: 22),
@@ -1482,13 +1600,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                         case 'save':
                           _saveToLibrary();
                           break;
-                        case 'crop':
-                          _captureAndAction();
-                          break;
-                        case 'ask_ai':
-                          _openAiTutorBottomSheet(
-                              initialMessage: 'I need help with this PDF document.');
-                          break;
                         case 'read_aloud':
                           if (_isSpeaking) {
                             _stopTts();
@@ -1496,12 +1607,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                               _lastSelectedText!.isNotEmpty) {
                             _speakText(_lastSelectedText!);
                           } else {
-                            // Enhancement: Read current page if nothing selected
                             _readCurrentPage();
                           }
                           break;
                         case 'annotate':
                           _showAnnotationToolbar();
+                          break;
+                        case 'bookmark':
+                          _toggleBookmark(_currentPage);
+                          break;
+                        case 'interaction_mode':
+                          setState(() {
+                            _interactionMode = _interactionMode == PdfInteractionMode.pan 
+                                ? PdfInteractionMode.selection 
+                                : PdfInteractionMode.pan;
+                          });
                           break;
                         case 'text_size':
                           _showTextSizeDialog();
@@ -1518,15 +1638,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                     },
                     itemBuilder: (_) => [
                       PopupMenuItem(
-                          value: 'ask_ai',
-                          child: _menuItem(Icons.auto_awesome_rounded,
-                              'Ask AI Tutor', theme)),
-                      PopupMenuItem(
-                          value: 'crop',
-                          child: _menuItem(
-                              Icons.crop_rounded, 'Capture & Ask AI', theme)),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
                           value: 'read_aloud',
                           child: _menuItem(
                               _isSpeaking
@@ -1540,6 +1651,25 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                               Icons.edit_rounded,
                               _isAnnotating ? 'Annotations (on)' : 'Annotate',
                               theme)),
+                      PopupMenuItem(
+                          value: 'bookmark',
+                          child: _menuItem(
+                              _bookmarkedPages.contains(_currentPage)
+                                  ? Icons.bookmark_rounded
+                                  : Icons.bookmark_border_rounded,
+                              'Bookmark Page',
+                              theme)),
+                       PopupMenuItem(
+                          value: 'interaction_mode',
+                          child: _menuItem(
+                            _interactionMode == PdfInteractionMode.pan 
+                                ? Icons.text_fields_rounded 
+                                : Icons.pan_tool_rounded,
+                            _interactionMode == PdfInteractionMode.pan 
+                                ? 'Switch to Selection Mode' 
+                                : 'Switch to Pan mode',
+                            theme,
+                          )),
                       PopupMenuItem(
                           value: 'text_size',
                           child: _menuItem(
@@ -1718,20 +1848,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                     ),
                   ),
 
-                  const Spacer(),
-
-                  // AI Tutor button
-                  TextButton.icon(
-                    onPressed: _openAiTutorDialog,
-                    icon: const FaIcon(FontAwesomeIcons.wandMagicSparkles,
-                        size: 14),
-                    label: const Text('Ask AI'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.primary,
-                      textStyle: GoogleFonts.inter(
-                          fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                  ),
                   // Read aloud indicator / stop button
                   if (_isSpeaking)
                     IconButton(

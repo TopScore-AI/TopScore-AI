@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -95,17 +96,12 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Constrain position to screen boundaries
-    double top = widget.position.dy;
-    double left = widget.position.dx;
-    
-    const width = 320.0;
-    const height = 240.0;
+    const width = 340.0;
+    const height = 280.0;
 
-    if (left + width > size.width) left = size.width - width - 16;
-    if (left < 16) left = 16;
-    if (top + height > size.height) top = size.height - height - 100; // avoid bottom bar
-    if (top < 80) top = 80; // avoid top bar
+    // Center the overlay on screen
+    final top = (size.height - height) / 2;
+    final left = (size.width - width) / 2;
 
     return Positioned(
       top: top,
@@ -179,23 +175,25 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
                         ),
                       ),
               ),
-              // Footer
+              // Footer — Copy only
               if (_isDone || _explanation.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => widget.onOpenInChat(_explanation),
-                        icon: const Icon(Icons.forum_outlined, size: 16),
-                        label: const Text('Ask AI Tutor', style: TextStyle(fontSize: 12)),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          foregroundColor: theme.colorScheme.primary,
-                        ),
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: _explanation));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: isDark ? Colors.white60 : Colors.black54,
                       ),
-                    ],
+                    ),
                   ),
                 ),
             ],

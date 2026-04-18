@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import HowItWorks from '@/components/HowItWorks';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'How It Works',
@@ -43,11 +42,9 @@ export default function HowItWorksPage() {
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32">
-                <Breadcrumbs items={[{ label: 'How It Works' }]} />
                 <HowItWorks />
             </div>
             <Footer />
         </main>
     );
 }
-

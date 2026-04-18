@@ -12,12 +12,16 @@ extension ChatControllerAttachments on ChatController {
     }
 
     try {
-      await RecoveryService.saveNavigationState('/ai-tutor', threadId: _wsService.threadId);
-      
+      await RecoveryService.saveNavigationState('/ai-tutor',
+          threadId: _wsService.threadId);
+
       final results = await MediaPickerService.instance.pickFiles(
         allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'csv', 'md'],
         allowMultiple: true,
       );
+
+      // Back in the app — clear recovery regardless of result
+      await RecoveryService.clearRecoveryState();
 
       if (results.isNotEmpty) {
         final remainingSlots = 3 - _pendingAttachments.length;
@@ -51,6 +55,7 @@ extension ChatControllerAttachments on ChatController {
         }
       }
     } catch (e) {
+      await RecoveryService.clearRecoveryState();
       developer.log('File picker error: $e');
       _checkUploadsFinished();
       notify();
@@ -64,17 +69,22 @@ extension ChatControllerAttachments on ChatController {
     }
 
     try {
-      await RecoveryService.saveNavigationState('/ai-tutor', threadId: _wsService.threadId);
+      await RecoveryService.saveNavigationState('/ai-tutor',
+          threadId: _wsService.threadId);
 
       final results = await MediaPickerService.instance.pickImages(
         source: source,
         allowMultiple: false,
       );
 
+      // Back in the app — clear recovery regardless of result
+      await RecoveryService.clearRecoveryState();
+
       if (results.isNotEmpty) {
         await _processAndUploadMedia(results.first);
       }
     } catch (e) {
+      await RecoveryService.clearRecoveryState();
       developer.log('Image picker error: $e');
       _checkUploadsFinished();
       notify();
@@ -89,12 +99,13 @@ extension ChatControllerAttachments on ChatController {
 
       Uint8List? uploadBytes = pick.bytes;
       String? uploadPath = pick.filePath;
-      
+
       // Compression Path for Mobile Images
       if (!kIsWeb && pick.mimeType.startsWith('image/')) {
         final tempDir = await getTemporaryDirectory();
-        final targetPath = '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        
+        final targetPath =
+            '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
         final compressedFile = await FlutterImageCompress.compressAndGetFile(
           pick.filePath!,
           targetPath,
@@ -103,7 +114,7 @@ extension ChatControllerAttachments on ChatController {
           minWidth: 1024,
           minHeight: 1024,
         );
-        
+
         if (compressedFile != null) {
           uploadPath = compressedFile.path;
           uploadBytes = await compressedFile.readAsBytes();
@@ -116,8 +127,8 @@ extension ChatControllerAttachments on ChatController {
         name: pick.name,
         type: pick.mimeType,
         bytes: uploadBytes,
-        previewData: pick.mimeType.startsWith('image/') && uploadBytes != null 
-            ? 'data:${pick.mimeType};base64,${base64Encode(uploadBytes)}' 
+        previewData: pick.mimeType.startsWith('image/') && uploadBytes != null
+            ? 'data:${pick.mimeType};base64,${base64Encode(uploadBytes)}'
             : null,
         isUploaded: false,
       );
@@ -131,7 +142,7 @@ extension ChatControllerAttachments on ChatController {
         fileName: pick.name,
         mimeType: pick.mimeType,
       );
-      
+
       attachment.url = url;
       attachment.isUploaded = true;
       _checkUploadsFinished();
@@ -209,7 +220,8 @@ extension ChatControllerAttachments on ChatController {
           backgroundColor: Theme.of(context).colorScheme.secondary,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 3),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     }
@@ -253,8 +265,9 @@ extension ChatControllerAttachments on ChatController {
   Future<void> handleGenericPaste() async {
     try {
       final result = await ClipboardService.instance.readClipboard();
-      
-      if (result.type == ClipboardContentType.image && result.imageBytes != null) {
+
+      if (result.type == ClipboardContentType.image &&
+          result.imageBytes != null) {
         // Handle as image paste
         await handlePaste(CustomPasteEvent(bytes: result.imageBytes));
         return;
@@ -262,7 +275,8 @@ extension ChatControllerAttachments on ChatController {
 
       if (result.hasText) {
         // Handle as smart text paste (insert at cursor)
-        ClipboardService.instance.pasteIntoController(_textController, result.text!);
+        ClipboardService.instance
+            .pasteIntoController(_textController, result.text!);
         notify();
       }
     } catch (e) {
@@ -279,10 +293,12 @@ extension ChatControllerAttachments on ChatController {
     try {
       final user = FirebaseAuth.instance.currentUser;
       final userId = user?.uid ?? 'guest';
-      
+
       final safeFileName = fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_');
-      final ref = FirebaseStorage.instance.ref().child('uploads/$userId/chat_uploads/$safeFileName');
-      
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('uploads/$userId/chat_uploads/$safeFileName');
+
       final metadata = SettableMetadata(
         contentType: mimeType,
         customMetadata: {
@@ -290,7 +306,7 @@ extension ChatControllerAttachments on ChatController {
           'uploaded_at': DateTime.now().toIso8601String(),
         },
       );
-      
+
       UploadTask uploadTask;
       if (kIsWeb) {
         if (bytes == null) throw Exception("Bytes required for Web upload");
@@ -315,10 +331,11 @@ extension ChatControllerAttachments on ChatController {
 
   void showAttachmentMenu(BuildContext context, ThemeData theme, bool isDark) {
     // Determine position of the button
-    final RenderBox? box = _attachButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? box =
+        _attachButtonKey.currentContext?.findRenderObject() as RenderBox?;
     Offset targetOffset = const Offset(20, 90); // Fallback
     double menuWidth = 220;
-    
+
     if (box != null) {
       final position = box.localToGlobal(Offset.zero);
       // We want to be center-aligned or left-aligned with the button.
@@ -332,14 +349,19 @@ extension ChatControllerAttachments on ChatController {
       builder: (context) => Stack(
         children: [
           Positioned(
-            left: targetOffset.dx - 10, // Slight nudge left for better visual balance
-            bottom: MediaQuery.of(context).size.height - targetOffset.dy + 8, // Positioned immediately ON TOP (8px gap)
+            left: targetOffset.dx -
+                10, // Slight nudge left for better visual balance
+            bottom: MediaQuery.of(context).size.height -
+                targetOffset.dy +
+                8, // Positioned immediately ON TOP (8px gap)
             child: Material(
               color: Colors.transparent,
               child: Container(
                 width: menuWidth,
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1C1C1E).withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.9),
+                  color: isDark
+                      ? const Color(0xFF1C1C1E).withValues(alpha: 0.9)
+                      : Colors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
@@ -349,7 +371,9 @@ extension ChatControllerAttachments on ChatController {
                     ),
                   ],
                   border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.05),
                     width: 1,
                   ),
                 ),
@@ -411,10 +435,11 @@ extension ChatControllerAttachments on ChatController {
         _isUploading = true;
         notify();
 
-        final String? extractedText = await OCRService.extractTextFromPath(image.path);
-        
+        final String? extractedText =
+            await OCRService.extractTextFromPath(image.path);
+
         _isUploading = false;
-        
+
         if (extractedText != null && extractedText.trim().isNotEmpty) {
           final currentText = _textController.text;
           final space = currentText.isEmpty ? '' : '\n\n';

@@ -30,7 +30,7 @@
 
 .sub {
     font-size: 18px;
-    color: #94A3B8;
+    color: var(--text-muted);
     max-width: 600px;
     margin: 0 auto 64px;
     line-height: 1.6;
@@ -120,7 +120,7 @@
 
 .screenDesc {
     font-size: 15px;
-    color: #94A3B8;
+    color: var(--text-muted);
     line-height: 1.5;
 }
 

@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import Tools from '@/components/Tools';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'Study Tools',
@@ -42,15 +41,13 @@ const schema = {
 
 export default function ToolsPage() {
     return (
-        <main>
+        <main className="bg-black min-h-screen text-white">
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32">
-                <Breadcrumbs items={[{ label: 'Study Tools' }]} />
                 <Tools />
             </div>
             <Footer />
         </main>
     );
 }
-

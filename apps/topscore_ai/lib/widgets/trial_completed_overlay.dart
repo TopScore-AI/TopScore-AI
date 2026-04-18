@@ -2,8 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
 import '../constants/colors.dart';
 
 class TrialCompletedOverlay extends StatelessWidget {
@@ -23,11 +21,12 @@ class TrialCompletedOverlay extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
-                color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.6),
+                color: (isDark ? Colors.black : Colors.white)
+                    .withValues(alpha: 0.6),
               ),
             ),
           ),
-          
+
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -55,9 +54,9 @@ class TrialCompletedOverlay extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   // Headline
                   Text(
                     "Trial Completed",
@@ -68,44 +67,14 @@ class TrialCompletedOverlay extends StatelessWidget {
                       color: theme.colorScheme.onSurface,
                     ),
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Description
-                  Text(
-                    "You've used all your 3 free guest messages. Sign in now to unlock unlimited access and save your progress!",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 16,
-                      color: theme.hintColor.withValues(alpha: 0.9),
-                      height: 1.5,
-                    ),
-                  ),
-                  
+
                   const SizedBox(height: 48),
-                  
-                  // Google Sign In
+
+                  // Create Free Profile
                   _AuthButton(
-                    label: "Continue with Google",
-                    isGoogle: true,
-                    onTap: () => _handleGoogleSignIn(context),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Email Sign Up
-                  _AuthButton(
-                    label: "Sign up with Email",
+                    label: "Create Free Profile",
                     isPrimary: true,
                     onTap: () => context.push('/login?isRegister=true'),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Sign In
-                  _AuthButton(
-                    label: "I already have an account",
-                    onTap: () => context.push('/login?isRegister=false'),
                   ),
                 ],
               ),
@@ -115,81 +84,49 @@ class TrialCompletedOverlay extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _handleGoogleSignIn(BuildContext context) async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      await auth.signInWithGoogle();
-      // Redirect handled by router RefreshListenable
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sign in failed: $e')),
-        );
-      }
-    }
-  }
 }
 
 class _AuthButton extends StatelessWidget {
   final String label;
   final bool isPrimary;
-  final bool isGoogle;
   final VoidCallback onTap;
 
   const _AuthButton({
     required this.label,
     this.isPrimary = false,
-    this.isGoogle = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? AppColors.primaryPurple 
-              : (isGoogle ? Colors.white : Colors.transparent),
-          foregroundColor: isPrimary 
-              ? Colors.white 
-              : (isGoogle ? Colors.black87 : theme.colorScheme.onSurface),
-          elevation: isGoogle ? 1 : 0,
-          side: (!isPrimary && !isGoogle) 
-              ? BorderSide(color: theme.dividerColor.withValues(alpha: 0.2)) 
-              : (isGoogle ? BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)) : null),
+          backgroundColor:
+              isPrimary ? AppColors.primaryPurple : Colors.transparent,
+          foregroundColor:
+              isPrimary ? Colors.white : theme.colorScheme.onSurface,
+          elevation: 0,
+          side: !isPrimary
+              ? BorderSide(color: theme.dividerColor.withValues(alpha: 0.2))
+              : null,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (isGoogle) ...[
-              Image.asset(
-                'assets/images/google_logo.png',
-                height: 24,
-                width: 24,
-              ),
-              const SizedBox(width: 12),
-            ],
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
   }
 }
-

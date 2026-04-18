@@ -1,18 +1,24 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, DM_Sans, Newsreader } from 'next/font/google';
+import { Outfit, Inter, Newsreader, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { LocaleProvider } from '@/i18n';
 
-const plusJakarta = Plus_Jakarta_Sans({
+const outfit = Outfit({
   subsets: ['latin'],
   variable: '--font-display',
   display: 'swap',
 });
 
-const dmSans = DM_Sans({
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-body',
   display: 'swap',
+});
+
+const jetbrains = JetBrains_Mono({
+    subsets: ['latin'],
+    variable: '--font-mono',
+    display: 'swap',
 });
 
 const newsreader = Newsreader({
@@ -187,7 +193,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${dmSans.variable} ${newsreader.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${inter.variable} ${jetbrains.variable} ${newsreader.variable}`} suppressHydrationWarning>
       <head>
         <script
           type="application/ld+json"

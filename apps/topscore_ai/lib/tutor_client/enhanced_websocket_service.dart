@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart'; // NEW: Added firebase_auth
 
 import 'connection_manager.dart';
 import 'offline_storage.dart';
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 
 /// Enhanced WebSocket Service with retry logic, offline support, and audio queue
 class EnhancedWebSocketService {
@@ -82,15 +82,15 @@ class EnhancedWebSocketService {
   }
 
   String get _wsUrl {
-    // Clean up ApiConfig.wsUrl
-    var base = ApiConfig.wsUrl;
+    // Clean up AppConfig.wsUrl
+    var base = AppConfig.wsUrl;
     // Remove trailing slash if present
     if (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
     }
 
     // Backend expects /ws/chat/{session_id}
-    // If ApiConfig.wsUrl already ends in /ws, we don't want /ws/ws/chat
+    // If AppConfig.wsUrl already ends in /ws, we don't want /ws/ws/chat
     if (base.endsWith('/ws')) {
       return '$base/chat/$sessionId?user_id=$userId';
     } else {

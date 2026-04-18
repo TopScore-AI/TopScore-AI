@@ -85,7 +85,7 @@
 
 .gradText {
     display: block;
-    background: var(--gradient);
+    background: var(--gradient-brand);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

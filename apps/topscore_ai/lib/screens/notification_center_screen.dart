@@ -10,13 +10,13 @@ class NotificationCenterScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final provider = Provider.of<NotificationProvider>(context);
     final notifications = provider.notifications.cast<AppNotification>();
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0A0A0F) : const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("Notifications",
             style: TextStyle(fontWeight: FontWeight.bold)),

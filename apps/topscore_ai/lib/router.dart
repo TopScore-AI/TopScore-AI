@@ -4,12 +4,10 @@ import 'services/analytics_service.dart';
 import 'services/update_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'providers/auth_provider.dart';
-import 'package:provider/provider.dart';
 
 // Screens
-import 'screens/library/my_stuff_screen.dart';
-import 'screens/student/resources_screen.dart';
-import 'screens/tools/tools_screen.dart';
+import 'screens/library/your_library_screen.dart';
+import 'screens/library/library_screen.dart';
 import 'screens/profile_screen.dart' as profile_page;
 import 'screens/pdf_viewer_screen.dart';
 import 'screens/auth/auth_screen.dart';
@@ -18,25 +16,19 @@ import 'screens/auth/forgot_password_screen.dart';
 import 'widgets/splash_screen.dart';
 import 'screens/dashboard_screen.dart';
 
-// Deferred imports for heavy screens (code splitting)
-import 'tutor_client/chat_screen.dart' deferred as chat;
-import 'screens/tools/periodic_table_screen.dart' deferred as periodic_table;
-import 'screens/tools/science_lab_screen.dart' deferred as science_lab;
-import 'screens/tools/flashcard_generator_screen.dart' deferred as flashcards;
-import 'screens/tools/quiz_generator_screen.dart' deferred as quiz;
-
 // Tool Sub-screens (lightweight - no deferred loading)
-import 'screens/tools/calculator_screen.dart';
 import 'screens/tools/smart_scanner_screen.dart';
-import 'screens/tools/timetable_screen.dart';
 import 'screens/tools/pdf_summarizer_screen.dart';
+import 'screens/tools/flashcard_generator_screen.dart';
+import 'screens/tools/quiz_generator_screen.dart';
+import 'screens/share_preview_screen.dart';
 
 import 'screens/search_screen.dart';
 import 'screens/auth/onboarding_screen.dart';
 import 'screens/auth/guest_welcome_screen.dart';
 import 'screens/student/career_compass_screen.dart';
+import 'tutor_client/chat_screen.dart' deferred as chat;
 import 'screens/activity_history_screen.dart';
-import 'composition_studio/composition_studio_screen.dart';
 
 // Widget that holds the BottomNavigationBar
 import 'widgets/scaffold_with_navbar.dart';
@@ -66,23 +58,19 @@ class _DeferredLoadingScreen extends StatelessWidget {
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-
 CustomTransitionPage<void> _buildCustomTransitionPage({
   required LocalKey key,
   required Widget child,
 }) {
   return CustomTransitionPage<void>(
     key: key,
+    transitionDuration: const Duration(milliseconds: 180),
+    reverseTransitionDuration: const Duration(milliseconds: 150),
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
-        opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.98, end: 1.0).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOutCirc),
-          ),
-          child: child,
-        ),
+        opacity: CurveTween(curve: Curves.easeOut).animate(animation),
+        child: child,
       );
     },
   );
@@ -112,7 +100,7 @@ final GoRouter router = GoRouter(
     final isGuestWelcome = state.matchedLocation == '/guest-welcome';
 
     // 1. Loading Guard: Only block if we are totally unauthenticated AND initializing.
-    // If we are already logged in (firebaseUser != null), we should allow transitions 
+    // If we are already logged in (firebaseUser != null), we should allow transitions
     // to the home screen even if the profile model is still fetching.
     if (authProvider.isLoading && !isLoggedIn) return null;
 
@@ -168,7 +156,7 @@ final GoRouter router = GoRouter(
         return ScaffoldWithNavBar(navigationShell: navigationShell);
       },
       branches: [
-        // Tab 1: Home
+        // Tab 0: Home
         StatefulShellBranch(
           navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'homeShell'),
           routes: [
@@ -179,39 +167,18 @@ final GoRouter router = GoRouter(
                 child: const DashboardScreen(),
               ),
             ),
-            GoRoute(
-              path: '/my-stuff',
-              builder: (context, state) {
-                final auth = Provider.of<AuthProvider>(context, listen: false);
-                return MyStuffScreen(uid: auth.userModel?.uid ?? '');
-              },
-            ),
           ],
         ),
-        // Tab 2: Library
-        StatefulShellBranch(
-          navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'libraryShell'),
-          routes: [
-            GoRoute(
-              path: '/library',
-              pageBuilder: (context, state) => _buildCustomTransitionPage(
-                key: state.pageKey,
-                child: const ResourcesScreen(),
-              ),
-            ),
-          ],
-        ),
-        // Tab 3: AI Tutor
+        // Tab 1: AI Tutor (Center)
         StatefulShellBranch(
           navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'tutorShell'),
           routes: [
             GoRoute(
               path: '/ai-tutor',
               pageBuilder: (context, state) {
-                // Check for subject query parameter
                 final subject = state.uri.queryParameters['subject'];
-                final extra = state.extra as Map<String, dynamic>? ?? {};
-                final startVoice = extra['start_voice'] == true;
+                final extra = state.extra as Map<String, dynamic>?;
+                final startVoice = extra?['start_voice'] == true;
 
                 return NoTransitionPage(
                   child: FutureBuilder(
@@ -222,6 +189,7 @@ final GoRouter router = GoRouter(
                           chatThread: extra,
                           subject: subject,
                           startVoice: startVoice,
+                          initialMessage: extra?['initial_message'] as String?,
                         );
                       }
                       return const _DeferredLoadingScreen(
@@ -233,103 +201,37 @@ final GoRouter router = GoRouter(
             ),
           ],
         ),
-        // Tab 4: Tools
+        // Tab 2: Library (Explorer)
         StatefulShellBranch(
-          navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'toolsShell'),
+          navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'libraryShell'),
           routes: [
             GoRoute(
-              path: '/tools',
+              path: '/library',
               pageBuilder: (context, state) => _buildCustomTransitionPage(
                 key: state.pageKey,
-                child: const ToolsScreen(),
+                child: const LibraryScreen(),
               ),
-              routes: [
-                GoRoute(
-                  path: 'calculator',
-                  builder: (context, state) => const CalculatorScreen(),
-                ),
-                GoRoute(
-                  path: 'scanner',
-                  builder: (context, state) => const SmartScannerScreen(),
-                ),
-                GoRoute(
-                  path: 'flashcards',
-                  pageBuilder: (context, state) => NoTransitionPage(
-                    child: FutureBuilder(
-                      future: flashcards.loadLibrary(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.done) {
-                          return flashcards.FlashcardGeneratorScreen();
-                        }
-                        return const _DeferredLoadingScreen(
-                            message: 'Loading Flashcards...');
-                      },
-                    ),
-                  ),
-                ),
-                GoRoute(
-                  path: 'quiz',
-                  pageBuilder: (context, state) => NoTransitionPage(
-                    child: FutureBuilder(
-                      future: quiz.loadLibrary(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.done) {
-                          return quiz.QuizGeneratorScreen();
-                        }
-                        return const _DeferredLoadingScreen(
-                            message: 'Loading Quiz Generator...');
-                      },
-                    ),
-                  ),
-                ),
-                GoRoute(
-                  path: 'timetable',
-                  builder: (context, state) => const TimetableScreen(),
-                ),
-                GoRoute(
-                  path: 'science-lab',
-                  pageBuilder: (context, state) => NoTransitionPage(
-                    child: FutureBuilder(
-                      future: science_lab.loadLibrary(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.done) {
-                          return science_lab.ScienceLabScreen();
-                        }
-                        return const _DeferredLoadingScreen(
-                            message: 'Loading Science Lab...');
-                      },
-                    ),
-                  ),
-                ),
-                GoRoute(
-                  path: 'periodic-table',
-                  pageBuilder: (context, state) => NoTransitionPage(
-                    child: FutureBuilder(
-                      future: periodic_table.loadLibrary(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.done) {
-                          return periodic_table.PeriodicTableScreen();
-                        }
-                        return const _DeferredLoadingScreen(
-                            message: 'Loading Periodic Table...');
-                      },
-                    ),
-                  ),
-                ),
-                GoRoute(
-                  path: 'summarizer',
-                  builder: (context, state) => const PdfSummarizerScreen(),
-                ),
-                GoRoute(
-                  path: 'composition-studio',
-                  builder: (context, state) => const CompositionStudioScreen(),
-                ),
-
-              ],
             ),
           ],
         ),
       ],
+    ),
+    // Tool Routes (Standalone)
+    GoRoute(
+      path: '/summarizer',
+      builder: (context, state) => const PdfSummarizerScreen(),
+    ),
+    GoRoute(
+      path: '/flashcards',
+      builder: (context, state) => const FlashcardGeneratorScreen(),
+    ),
+    GoRoute(
+      path: '/quiz',
+      builder: (context, state) => const QuizGeneratorScreen(),
+    ),
+    GoRoute(
+      path: '/scanner',
+      builder: (context, state) => const SmartScannerScreen(),
     ),
     // Search
     GoRoute(
@@ -356,6 +258,11 @@ final GoRouter router = GoRouter(
       path: '/activity-history',
       builder: (context, state) => const ActivityHistoryScreen(),
     ),
+    // My Library (Personal)
+    GoRoute(
+      path: '/my-stuff',
+      builder: (context, state) => const YourLibraryScreen(),
+    ),
     // PDF Viewer
     GoRoute(
       path: '/pdf-viewer',
@@ -363,6 +270,8 @@ final GoRouter router = GoRouter(
         final extras = state.extra as Map<String, dynamic>? ?? {};
         return CustomTransitionPage(
           key: state.pageKey,
+          transitionDuration: const Duration(milliseconds: 180),
+          reverseTransitionDuration: const Duration(milliseconds: 150),
           child: PdfViewerScreen(
             url: extras['url'],
             storagePath: extras['storagePath'],
@@ -392,6 +301,14 @@ final GoRouter router = GoRouter(
                 message: 'Starting AI Tutor...');
           },
         );
+      },
+    ),
+    // Share Preview (Secure)
+    GoRoute(
+      path: '/share/:fileId',
+      builder: (context, state) {
+        final fileId = state.pathParameters['fileId']!;
+        return SharePreviewScreen(fileId: fileId);
       },
     ),
   ],

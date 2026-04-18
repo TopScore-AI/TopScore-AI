@@ -9,7 +9,7 @@ export default function Hero() {
     const { t } = useLocale();
 
     return (
-        <section className={styles.hero} id="home">
+        <section className={`${styles.hero} animate-mesh`} id="home" style={{ background: 'var(--gradient-mesh)' }}>
             <div className={styles.bg} aria-hidden />
             
             <div className={styles.container}>
@@ -23,7 +23,7 @@ export default function Hero() {
                         </AnimatedSection>
 
                         <AnimatedSection animation="fadeUp" delay="0.1s">
-                            <h1 className={`${styles.h1} font-serif`}>
+                            <h1 className={styles.h1}>
                                 {t('hero.h1a')}<span className={styles.gradText}>{t('hero.h1Grad')}</span><br />
                                 {t('hero.h1b')}
                             </h1>
@@ -64,7 +64,7 @@ export default function Hero() {
 
                     <div className={styles.visualSide}>
                         <AnimatedSection animation="fadeUp" delay="0.4s">
-                            <div className={styles.mockupContainer}>
+                            <div className={`${styles.mockupContainer} animate-float`}>
                                 <div className={styles.mockupGlow} />
                                 <Image 
                                     src="/topscore_app_mockup.png" 

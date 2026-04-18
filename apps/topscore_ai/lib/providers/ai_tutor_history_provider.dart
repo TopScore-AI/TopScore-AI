@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import '../services/auth_headers.dart';
 import '../services/isar_service.dart';
 import '../tutor_client/message_model.dart';
@@ -21,7 +21,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   DateTime? get lastFetchTime => _lastFetchTime;
 
-  String get _backendUrl => ApiConfig.baseUrl;
+  String get _backendUrl => AppConfig.backendBaseUrl;
 
   Future<void> fetchHistory(
     String userId, {

@@ -11,7 +11,7 @@
 }
 
 .card {
-    background: var(--gradient);
+    background: var(--gradient-brand);
     border-radius: 40px;
     padding: 100px 40px;
     text-align: center;

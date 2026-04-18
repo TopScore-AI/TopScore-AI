@@ -1,116 +1,53 @@
-﻿import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
-import '../models/grade_model.dart';
+import '../config/app_config.dart';
+import 'auth_headers.dart';
 
 class CareerService {
-  // Mock Data conforming to Kenyan High School grading
-  List<GradeModel> getMockGrades() {
-    return [
-      GradeModel(
-        subject: 'Mathematics',
-        percentage: 85,
-        grade: 'A',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'English',
-        percentage: 78,
-        grade: 'A-',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'Kiswahili',
-        percentage: 72,
-        grade: 'B+',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'Physics',
-        percentage: 88,
-        grade: 'A',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'Chemistry',
-        percentage: 65,
-        grade: 'B',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'Biology',
-        percentage: 82,
-        grade: 'A-',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'History',
-        percentage: 55,
-        grade: 'C',
-        term: 'Term 3',
-      ),
-      GradeModel(
-        subject: 'Geography',
-        percentage: 60,
-        grade: 'B-',
-        term: 'Term 3',
-      ),
-    ];
-  }
-
-  Future<String> analyzePerformance(List<GradeModel> grades) async {
+  /// Analyzes user interests and returns suggested career paths.
+  /// POST /career/analyze
+  Future<List<Map<String, dynamic>>> analyzeInterests(List<String> interests) async {
+    final url = Uri.parse('${AppConfig.backendBaseUrl}/career/analyze');
+    
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/career/analyze');
-
-      final gradesData = grades
-          .map((g) => {
-                'subject': g.subject,
-                'percentage': g.percentage,
-                'grade': g.grade,
-                'term': g.term,
-              })
-          .toList();
-
+      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'grades': gradesData}),
+        headers: headers,
+        body: jsonEncode({'interests': interests}),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['analysis'] ?? 'Unable to analyze grades.';
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['careers'] ?? []);
       } else {
-        if (kDebugMode) debugPrint('Career analyze API error: ${response.statusCode}');
-        return 'Error: Unable to analyze performance. Please try again.';
+        throw Exception('Career analysis failed: ${response.statusCode}');
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Error analyzing performance: $e');
-      return 'Error analyzing performance: $e';
+      throw Exception('Error connecting to career service: $e');
     }
   }
 
-  Future<String> generateRoadmap(String careerInterest) async {
+  /// Generates a detailed roadmap for a specific career path.
+  /// POST /career/roadmap
+  Future<Map<String, dynamic>> getRoadmap(String career) async {
+    final url = Uri.parse('${AppConfig.backendBaseUrl}/career/roadmap');
+    
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/career/roadmap');
-
+      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'career': careerInterest}),
+        headers: headers,
+        body: jsonEncode({'career': career}),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['roadmap'] ?? 'Unable to generate roadmap.';
+        return jsonDecode(response.body);
       } else {
-        if (kDebugMode) debugPrint('Career roadmap API error: ${response.statusCode}');
-        return 'Error: Unable to generate roadmap. Please try again.';
+        throw Exception('Roadmap generation failed: ${response.statusCode}');
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Error generating roadmap: $e');
-      return 'Error generating roadmap: $e';
+      throw Exception('Error connecting to career service: $e');
     }
   }
 }

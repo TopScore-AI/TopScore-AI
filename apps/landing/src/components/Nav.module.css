@@ -4,11 +4,9 @@
     left: 0;
     right: 0;
     z-index: 100;
-    background: rgba(0, 0, 0, 0.7);
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    transition: all 0.3s ease;
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .scrolled {
@@ -31,7 +29,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    font-family: var(--font-heading);
+    font-family: var(--font-display);
     font-weight: 800;
     font-size: 24px;
     color: #FFFFFF;
@@ -88,6 +86,24 @@
     filter: brightness(1.1);
 }
 
+.openApp {
+    border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+.openApp:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-1px);
+}
+
 .burger {
     color: var(--text);
 }
@@ -118,6 +134,17 @@
 .drawerActive {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text);
+}
+
+.drawerOpenApp {
+    margin-top: 16px;
+    border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: #fff !important;
+    padding: 14px;
+    border-radius: 12px;
+    text-align: center;
+    font-weight: 700;
 }
 
 .drawerCta {

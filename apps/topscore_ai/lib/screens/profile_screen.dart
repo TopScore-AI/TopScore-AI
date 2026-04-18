@@ -619,55 +619,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Preferences
-  // ---------------------------------------------------------------------------
   Widget _buildPreferencesSection(ThemeData theme, bool isDark) {
+    final settings = Provider.of<SettingsProvider>(context);
+    
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionLabel('Preferences'),
-      Consumer<SettingsProvider>(
-        builder: (context, settings, _) => Column(children: [
-          _tile(
-            icon: isDark ? FontAwesomeIcons.moon : FontAwesomeIcons.sun,
-            iconColor: isDark ? Colors.deepPurple : Colors.orange,
-            title: 'Dark Mode',
-            trailing: Switch.adaptive(
-              value: isDark,
-              activeTrackColor: AppColors.accentTeal,
-              onChanged: (v) =>
-                  settings.setThemeMode(v ? ThemeMode.dark : ThemeMode.light),
-            ),
-            onTap: () => settings
-                .setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
-            theme: theme,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _tile(
-            icon: FontAwesomeIcons.bolt,
-            iconColor: Colors.orange,
-            title: 'Data Saver Mode',
-            trailing: Switch.adaptive(
-              value: settings.isLiteMode,
-              activeTrackColor: AppColors.accentTeal,
-              onChanged: settings.toggleLiteMode,
-            ),
-            onTap: () => settings.toggleLiteMode(!settings.isLiteMode),
-            theme: theme,
-            isDark: isDark,
-          ),
-        ]),
+      _tile(
+        icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+        iconColor: Colors.amber,
+        title: 'Dark Mode',
+        trailing: Switch(
+          value: isDark,
+          onChanged: (v) {
+            settings.setThemeMode(v ? ThemeMode.dark : ThemeMode.light);
+          },
+          activeThumbColor: theme.colorScheme.primary,
+        ),
+        onTap: () {},
+        theme: theme,
+        isDark: isDark,
       ),
       const SizedBox(height: 10),
       _tile(
-        icon: FontAwesomeIcons.language,
-        iconColor: Colors.blueAccent,
-        title: 'Language',
-        subtitle: context.watch<SettingsProvider>().locale.languageCode == 'sw'
-            ? 'Kiswahili'
-            : 'English',
-        onTap: () => _showLanguageSelector(
-            context, context.read<SettingsProvider>().locale.languageCode),
+        icon: Icons.bolt_rounded,
+        iconColor: Colors.orange,
+        title: 'Lite Mode (Saves Data)',
+        trailing: Switch(
+          value: settings.isLiteMode,
+          onChanged: (v) => settings.toggleLiteMode(v),
+          activeThumbColor: theme.colorScheme.primary,
+        ),
+        onTap: () {},
         theme: theme,
         isDark: isDark,
       ),
@@ -1006,66 +988,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   String _formatDate(DateTime dt) => '${dt.day}/${dt.month}/${dt.year}';
-
-  void _showLanguageSelector(BuildContext context, String? currentLang) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Select Language',
-                    style: GoogleFonts.nunito(
-                        fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                _langOption(ctx, 'English', 'en', currentLang),
-                const SizedBox(height: 12),
-                _langOption(ctx, 'Kiswahili', 'sw', currentLang),
-              ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _langOption(
-      BuildContext ctx, String name, String code, String? current) {
-    final isSelected = current == code;
-    return InkWell(
-      onTap: () {
-        context.read<SettingsProvider>().setLocale(Locale(code));
-        Navigator.pop(ctx);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.accentTeal.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: isSelected
-                  ? AppColors.accentTeal
-                  : Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.15)),
-        ),
-        child:
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(name, style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
-          if (isSelected)
-            const Icon(Icons.check_circle,
-                color: AppColors.accentTeal, size: 20),
-        ]),
-      ),
-    );
-  }
 
   void _showDeleteConfirmation(BuildContext context, AuthProvider auth) {
     showDialog(

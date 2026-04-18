@@ -8,7 +8,20 @@
       "Bash(firebase deploy:*)",
       "Bash(sed:*)",
       "Bash(grep -r \"student_id\\\\|user_id\\\\|displayName\" lib/tutor_client/*.dart lib/tutor_client/parts/*.dart)",
-      "Bash(find . -name \"*.dart\" -type f -exec grep -l \"class UserModel\\\\|toMap.*displayName\" {} \\\\;)"
+      "Bash(find . -name \"*.dart\" -type f -exec grep -l \"class UserModel\\\\|toMap.*displayName\" {} \\\\;)",
+      "Bash(grep \"\\\\.py$\")",
+      "Bash(find:*)",
+      "Bash(grep -r \"class.*Agent\" /c/Users/Veldrine/Projects/TutorAgent/agent/*.py)",
+      "Bash(pip show:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('managers/pdf_cache_manager.py'\\).read\\(\\)\\); print\\('pdf_cache_manager.py: OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('routers/pdf_chat.py'\\).read\\(\\)\\); print\\('pdf_chat.py: OK'\\)\")",
+      "Bash(ls /c/Users/Veldrine/Projects/TopScore-AI/currentproblems* /c/Users/Veldrine/Projects/TopScore-AI/CURRENTPROBLEMS* /c/Users/Veldrine/Projects/TopScore-AI/*.md)",
+      "Bash(xargs cat:*)",
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('agent/voice_agent.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(flutter pub:*)"
     ]
   }
 }

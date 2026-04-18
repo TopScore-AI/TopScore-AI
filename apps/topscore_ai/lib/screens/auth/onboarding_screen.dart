@@ -23,6 +23,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final TextEditingController _nameController = TextEditingController();
   bool _nameInitialized = false;
 
+  @override
+  void initState() {
+    super.initState();
+  }
+
   final List<String> _curriculums = CurriculumData.getCurriculums();
 
   @override

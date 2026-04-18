@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class MnemonicCard extends StatefulWidget {
@@ -30,15 +30,18 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    _audioPlayer.playerStateStream.listen((state) {
+    _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) {
         setState(() {
-          _isPlaying = state.playing;
-          if (state.processingState == ProcessingState.completed) {
-            _isPlaying = false;
-            _audioPlayer.seek(Duration.zero);
-            _audioPlayer.pause();
-          }
+          _isPlaying = state == PlayerState.playing;
+        });
+      }
+    });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
         });
       }
     });
@@ -58,17 +61,14 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
     if (_isPlaying) {
       await _audioPlayer.pause();
     } else {
-      if (_audioPlayer.duration == null) {
-        setState(() => _isLoadingAudio = true);
-        try {
-          await _audioPlayer.setUrl(audioUrl);
-        } catch (e) {
-          debugPrint('Error loading mnemonic audio: $e');
-        } finally {
-          if (mounted) setState(() => _isLoadingAudio = false);
-        }
+      setState(() => _isLoadingAudio = true);
+      try {
+        await _audioPlayer.play(UrlSource(audioUrl));
+      } catch (e) {
+        debugPrint('Error loading mnemonic audio: $e');
+      } finally {
+        if (mounted) setState(() => _isLoadingAudio = false);
       }
-      await _audioPlayer.play();
     }
   }
 

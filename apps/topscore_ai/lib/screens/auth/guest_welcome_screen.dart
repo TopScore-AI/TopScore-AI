@@ -48,25 +48,14 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
     final limitReached = auth.isGuestLimitReached;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          color: Colors.black,
-          image: DecorationImage(
-            image: const AssetImage('assets/images/auth_background.png'),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black.withValues(alpha: 0.6),
-              BlendMode.darken,
-            ),
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              children: [
-                // Back / skip row
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            children: [
+              // Back / skip row
+              if (!limitReached)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -76,10 +65,10 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
                         HapticFeedback.lightImpact();
                         context.go('/login');
                       },
-                      child: const Text(
+                      child: Text(
                         'Sign in',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: theme.colorScheme.onSurface,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -115,7 +104,7 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
                     ),
                     child: ClipOval(
                       child: Image.asset(
-                        'assets/images/topscore_logo.png',
+                        'assets/images/logo.png',
                         fit: BoxFit.cover,
                       ),
                     ),
@@ -133,7 +122,7 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
                     height: 1.2,
-                    color: Colors.white,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
 
@@ -166,7 +155,7 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
                   onTap: () {
                     HapticFeedback.mediumImpact();
                     if (limitReached) {
-                      context.go('/login');
+                      context.push('/login?isRegister=true');
                     } else {
                       Provider.of<AuthProvider>(context, listen: false)
                           .enterGuestMode();
@@ -175,36 +164,26 @@ class _GuestWelcomeScreenState extends State<GuestWelcomeScreen>
                   },
                 ),
 
-                const SizedBox(height: 12),
+                if (!limitReached) ...[
+                  const SizedBox(height: 12),
 
-                // Secondary CTA — Library
-                _ActionButton(
-                  icon: Icons.library_books_rounded,
-                  label: 'Explore Educational Resources',
-                  isPrimary: false,
-                  isLoading: false,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Provider.of<AuthProvider>(context, listen: false)
-                        .enterGuestMode();
-                    context.go('/library');
-                  },
-                ),
-
-                const SizedBox(height: 32),
-
-                Text(
-                  'Your first 5 answers are on the house. ⚡',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: theme.primaryColor.withValues(alpha: 0.8),
+                  // Secondary CTA — Library
+                  _ActionButton(
+                    icon: Icons.library_books_rounded,
+                    label: 'Explore Educational Resources',
+                    isPrimary: false,
+                    isLoading: false,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Provider.of<AuthProvider>(context, listen: false)
+                          .enterGuestMode();
+                      context.go('/library');
+                    },
                   ),
-                ),
+                ],
 
                 const SizedBox(height: 24),
               ],
-            ),
           ),
         ),
       ),

@@ -21,10 +21,10 @@ class ResourcesProvider extends ChangeNotifier {
   // Helper methodologies for translating UI tabs into query scopes
   String? _getCollectionScope(String tabName) {
     if (tabName == 'All Files') return null;
-    if (tabName == '844 Files') return '844_files';
+    if (tabName == '8-4-4 Files') return '844_files';
     if (tabName == 'IGCSE Files') return 'igcse_files';
-    // CBC Files, Notes, Lesson Plans, Schemes Of Work all target cbc_files
-    return 'cbc_files';
+    if (tabName == 'CBC Files') return 'cbc_files';
+    return null;
   }
 
   String? _getPathPrefix(String tabName) {

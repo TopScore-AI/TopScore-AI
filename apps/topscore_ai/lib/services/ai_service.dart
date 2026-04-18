@@ -1,26 +1,22 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // NEW: Added firebase_auth
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import '../models/flashcard_model.dart';
 import '../models/quiz_model.dart';
 import 'auth_headers.dart';
 
-// Data models for structured responses
+// ---------------------------------------------------------------------------
+// Data models
+// ---------------------------------------------------------------------------
+
 class AIResponse {
   final String text;
   final VisualizationType? visualizationType;
   final dynamic visualizationData;
 
-  AIResponse({
-    required this.text,
-    this.visualizationType,
-    this.visualizationData,
-  });
+  AIResponse(
+      {required this.text, this.visualizationType, this.visualizationData});
 }
 
 enum VisualizationType {
@@ -29,7 +25,7 @@ enum VisualizationType {
   stepByStep,
   comparison,
   timeline,
-  chart,
+  chart
 }
 
 class VisualExample {
@@ -38,385 +34,51 @@ class VisualExample {
   final List<String> steps;
   final Map<String, dynamic>? data;
 
-  VisualExample({
+  const VisualExample({
     required this.title,
     required this.description,
     this.steps = const [],
     this.data,
   });
 
-  factory VisualExample.fromJson(Map<String, dynamic> json) {
-    return VisualExample(
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      steps: List<String>.from(json['steps'] ?? []),
-      data: json['data'],
-    );
-  }
+  factory VisualExample.fromJson(Map<String, dynamic> json) => VisualExample(
+        title: json['title'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        steps: List<String>.from(json['steps'] as List? ?? []),
+        data: json['data'] as Map<String, dynamic>?,
+      );
 }
 
+// ---------------------------------------------------------------------------
+// AIService — HTTP-only.
+//
+// All real-time chat goes through EnhancedWebSocketService (one connection).
+// This service handles stateless tool calls only: PDF summarization,
+// flashcard/quiz generation, homework analysis, document conversion, and
+// PDF chat sessions.
+// ---------------------------------------------------------------------------
+
 class AIService {
-  static const _uuid = Uuid();
-
-  WebSocketChannel? _channel;
-  StreamSubscription? _streamSubscription;
-  final Map<String, Completer<Map<String, dynamic>>> _pendingRequests = {};
-  bool _isConnecting = false;
-  int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 5;
-
-  AIService() {
-    // Lazy connection: don't connect in constructor to avoid redundant errors
-    // when only HTTP methods like generateFlashcards are used.
+  // Internal HTTP POST helper
+  Future<Map<String, dynamic>> _post(
+      String path, Map<String, dynamic> body) async {
+    final url = Uri.parse('${AppConfig.backendBaseUrl}$path');
+    final headers =
+        await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+    final response =
+        await http.post(url, headers: headers, body: jsonEncode(body));
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
+    }
+    throw Exception('$path failed (${response.statusCode}): ${response.body}');
   }
 
-  Future<void> _connect() async {
-    if (_isConnecting || (_channel != null && _channel!.closeCode == null)) return;
-    _isConnecting = true;
+  // ---------------------------------------------------------------------------
+  // Tool APIs
+  // ---------------------------------------------------------------------------
 
-    try {
-      _streamSubscription?.cancel();
-      _channel?.sink.close();
-      _channel = null;
-
-      // Fetch Firebase Token for Handshake
-      final user = FirebaseAuth.instance.currentUser;
-      String? idToken;
-      if (user != null) {
-        try {
-          idToken = await user.getIdToken(false);
-        } catch (e) {
-          if (kDebugMode) debugPrint('AIService: Failed to get auth token: $e');
-        }
-      }
-
-      final wsUrl = ApiConfig.wsUrl;
-      final uri = Uri.parse(wsUrl);
-      
-      _channel = WebSocketChannel.connect(uri);
-      _reconnectAttempts = 0;
-
-      // Send Handshake only if we have a token
-      if (idToken != null) {
-        final handshakePayload = {
-          "type": "init",
-          "auth_token": idToken,
-        };
-        _channel!.sink.add(jsonEncode(handshakePayload));
-        if (kDebugMode) debugPrint('🤝 AIService: Handshake payload sent');
-      } else {
-        if (kDebugMode) debugPrint('🤝 AIService: Connected as guest (no handshake)');
-      }
-
-      _streamSubscription = _channel!.stream.listen(
-        _onMessage,
-        onError: (error) {
-          if (kDebugMode) debugPrint('WebSocket error: $error');
-          _scheduleReconnect();
-        },
-        onDone: () {
-          if (kDebugMode) debugPrint('WebSocket closed');
-          _scheduleReconnect();
-        },
-      );
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error connecting to WebSocket: $e');
-      _scheduleReconnect();
-    } finally {
-      _isConnecting = false;
-    }
-  }
-
-  void _onMessage(dynamic rawMessage) {
-    try {
-      final data = jsonDecode(rawMessage as String) as Map<String, dynamic>;
-      
-      // Ignore system messages from handshake
-      if (data['type'] == 'system') return;
-      
-      final requestId = data['request_id'] as String?;
-
-      if (requestId != null && _pendingRequests.containsKey(requestId)) {
-        _pendingRequests[requestId]!.complete(data);
-        _pendingRequests.remove(requestId);
-      } else if (_pendingRequests.length == 1) {
-        // Fallback: if server doesn't echo request_id, complete the single pending request
-        final entry = _pendingRequests.entries.first;
-        entry.value.complete(data);
-        _pendingRequests.remove(entry.key);
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error parsing WebSocket message: $e');
-    }
-  }
-
-  void _scheduleReconnect() {
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
-      if (kDebugMode) debugPrint('Max reconnect attempts reached');
-      // Fail all pending requests
-      for (final completer in _pendingRequests.values) {
-        if (!completer.isCompleted) {
-          completer.completeError('Connection lost after $_maxReconnectAttempts attempts');
-        }
-      }
-      _pendingRequests.clear();
-      return;
-    }
-
-    _reconnectAttempts++;
-    final delay = Duration(seconds: _reconnectAttempts * 2); // Linear backoff
-    if (kDebugMode) debugPrint('Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts)');
-    Future.delayed(delay, _connect);
-  }
-
-  Future<AIResponse> sendMessage(
-    String message, {
-    Map<String, dynamic>? context,
-    Uint8List? attachmentBytes,
-    String? mimeType,
-  }) async {
-    try {
-      if (_channel == null) _connect();
-
-      final requestId = _uuid.v4();
-      final completer = Completer<Map<String, dynamic>>();
-      _pendingRequests[requestId] = completer;
-
-      final Map<String, dynamic> payload = {
-        'type': 'message',
-        'request_id': requestId,
-        'content': message,
-      };
-
-      if (context != null) {
-        payload['context'] = context;
-      }
-
-      if (attachmentBytes != null) {
-        payload['attachment'] = base64Encode(attachmentBytes);
-        payload['mimeType'] = mimeType ?? 'image/jpeg';
-      }
-
-      _channel!.sink.add(jsonEncode(payload));
-
-      final data = await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          _pendingRequests.remove(requestId);
-          throw TimeoutException('AI response timed out');
-        },
-      );
-
-      final responseText = data['text'] ??
-          "I'm having trouble thinking right now. Can you ask again?";
-
-      return _parseResponseWithVisualization(responseText);
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in sendMessage: $e');
-      return AIResponse(
-        text: "Oh no! My connection is a bit shaky. Please try again. ($e)",
-      );
-    }
-  }
-
-  // Request specific visualization for a concept
-  Future<VisualExample> requestVisualization(
-    String concept, {
-    required String subject,
-    required int grade,
-  }) async {
-    try {
-      final prompt = """
-Create a visual example for: $concept
-Subject: $subject, Grade: $grade
-
-Provide response in this format:
-TITLE: [Short title]
-DESCRIPTION: [Brief explanation]
-STEPS:
-1. [First step]
-2. [Second step]
-3. [Third step]
-DATA: [Any numbers, values, or key facts in simple format]
-""";
-
-      final response = await sendMessage(prompt);
-      return _parseVisualExample(response.text, concept);
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in requestVisualization: $e');
-      return VisualExample(
-        title: concept,
-        description: "Let's explore this concept together!",
-      );
-    }
-  }
-
-  // Get examples with diagrams
-  Future<List<VisualExample>> getExamplesWithDiagrams(
-    String topic, {
-    required int count,
-    required String subject,
-  }) async {
-    try {
-      final prompt = """
-Give me $count visual examples for: $topic (Subject: $subject)
-
-For each example, provide:
-- A title
-- Simple explanation
-- Step-by-step breakdown
-- Use Kenyan context (matatus, M-Pesa, ugali, football, etc.)
-
-Make it fun and easy to visualize!
-""";
-
-      final response = await sendMessage(prompt);
-      return _parseMultipleExamples(response.text);
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in getExamplesWithDiagrams: $e');
-      return [];
-    }
-  }
-
-  Future<String> analyzeImage(Uint8List imageBytes, String prompt) async {
-    try {
-      final response = await sendMessage(
-        prompt,
-        attachmentBytes: imageBytes,
-        mimeType: 'image/jpeg',
-      );
-      return response.text;
-    } catch (e) {
-      return "Error analyzing image: $e";
-    }
-  }
-
-  AIResponse _parseResponseWithVisualization(String responseText) {
-    if (responseText.contains('[DIAGRAM:')) {
-      final match = RegExp(r'\[DIAGRAM: ([^\]]+)\]').firstMatch(responseText);
-      if (match != null) {
-        return AIResponse(
-          text: responseText.replaceAll(match.group(0)!, '').trim(),
-          visualizationType: VisualizationType.diagram,
-          visualizationData: match.group(1),
-        );
-      }
-    }
-
-    if (responseText.contains('[STEPS:')) {
-      final match = RegExp(r'\[STEPS: ([^\]]+)\]').firstMatch(responseText);
-      if (match != null) {
-        final steps = match
-            .group(1)!
-            .split(RegExp(r'\d+\.'))
-            .where((s) => s.trim().isNotEmpty)
-            .toList();
-        return AIResponse(
-          text: responseText.replaceAll(match.group(0)!, '').trim(),
-          visualizationType: VisualizationType.stepByStep,
-          visualizationData: steps,
-        );
-      }
-    }
-
-    if (responseText.contains('[MATH:')) {
-      final match = RegExp(r'\[MATH: ([^\]]+)\]').firstMatch(responseText);
-      if (match != null) {
-        return AIResponse(
-          text: responseText.replaceAll(match.group(0)!, '').trim(),
-          visualizationType: VisualizationType.mathEquation,
-          visualizationData: match.group(1),
-        );
-      }
-    }
-
-    if (responseText.contains('[COMPARE:')) {
-      final match = RegExp(r'\[COMPARE: ([^\]]+)\]').firstMatch(responseText);
-      if (match != null) {
-        return AIResponse(
-          text: responseText.replaceAll(match.group(0)!, '').trim(),
-          visualizationType: VisualizationType.comparison,
-          visualizationData: match.group(1),
-        );
-      }
-    }
-
-    return AIResponse(text: responseText);
-  }
-
-  VisualExample _parseVisualExample(String responseText, String fallbackTitle) {
-    final titleMatch = RegExp(r'TITLE: (.+)').firstMatch(responseText);
-    final descMatch = RegExp(r'DESCRIPTION: (.+)').firstMatch(responseText);
-    final stepsMatch = RegExp(
-      r'STEPS:([\s\S]+?)(?=DATA:|$)',
-    ).firstMatch(responseText);
-
-    final steps = <String>[];
-    if (stepsMatch != null) {
-      final stepsText = stepsMatch.group(1)!;
-      steps.addAll(
-        stepsText
-            .split('\n')
-            .where((line) => line.trim().isNotEmpty)
-            .map((line) => line.replaceAll(RegExp(r'^\d+\.\s*'), '').trim())
-            .toList(),
-      );
-    }
-
-    return VisualExample(
-      title: titleMatch?.group(1)?.trim() ?? fallbackTitle,
-      description: descMatch?.group(1)?.trim() ?? '',
-      steps: steps,
-    );
-  }
-
-  List<VisualExample> _parseMultipleExamples(String responseText) {
-    final examples = <VisualExample>[];
-    final sections = responseText.split(RegExp(r'Example \d+:|##'));
-
-    for (var section in sections) {
-      if (section.trim().isEmpty) continue;
-
-      final lines =
-          section.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      if (lines.isEmpty) continue;
-
-      final title = lines.first.replaceAll(RegExp(r'^\*+\s*'), '').trim();
-      final description = lines.length > 1 ? lines[1].trim() : '';
-      final steps = lines
-          .skip(2)
-          .map((l) => l.replaceAll(RegExp(r'^\d+\.\s*[-â€¢]\s*'), '').trim())
-          .toList();
-
-      examples.add(
-        VisualExample(title: title, description: description, steps: steps),
-      );
-    }
-
-    return examples;
-  }
-
-  // Reset chat session
-  void resetChat() {
-    _pendingRequests.clear();
-    _channel?.sink.close();
-    _connect();
-  }
-
-  /// Map user-visible levels to curriculum/grade specs
-  static Map<String, String> mapLevelToSpecs(String level) {
-    if (level.contains('Primary') || level.contains('Grade')) {
-      return {'curriculum': 'CBC', 'grade': level};
-    } else if (level.contains('Form') || level.contains('844') || level.contains('KCSE')) {
-      return {'curriculum': '844', 'grade': level};
-    } else if (level.contains('Year') || level.contains('International') || level.contains('IGCSE')) {
-      return {'curriculum': 'Cambridge IGCSE', 'grade': level};
-    } else {
-      return {'curriculum': 'General', 'grade': level};
-    }
-  }
-
-  /// Generate AI-powered flashcards using the refined /api/study namespace
+  /// POST /api/study/flashcards
   Future<FlashcardSet> generateFlashcards({
     required String userId,
     required String topic,
@@ -425,38 +87,18 @@ Make it fun and easy to visualize!
     required String grade,
     String? sourceText,
   }) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/study/flashcards');
-
-    final payload = {
+    final data = await _post('/api/study/flashcards', {
       'curriculum': curriculum,
       'grade': grade,
       'topic': topic,
       'item_count': amount,
       if (sourceText != null && sourceText.isNotEmpty)
         'source_text': sourceText,
-    };
-
-    try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return FlashcardSet.fromJson(data);
-      } else {
-        throw Exception('Flashcard generation failed: ${response.body}');
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error generating flashcards: $e');
-      throw Exception('Error connecting to server: $e');
-    }
+    });
+    return FlashcardSet.fromJson(data);
   }
 
-  /// Generate an AI-powered quiz using the refined /api/study namespace
+  /// POST /api/study/quiz
   Future<Quiz> generateQuiz({
     required String userId,
     required String topic,
@@ -466,9 +108,7 @@ Make it fun and easy to visualize!
     String difficulty = 'Medium',
     String? sourceText,
   }) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/study/quiz');
-
-    final payload = {
+    final data = await _post('/api/study/quiz', {
       'curriculum': curriculum,
       'grade': grade,
       'topic': topic,
@@ -476,158 +116,196 @@ Make it fun and easy to visualize!
       'difficulty': difficulty,
       if (sourceText != null && sourceText.isNotEmpty)
         'source_text': sourceText,
-    };
-
-    try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return Quiz.fromJson(data);
-      } else {
-        throw Exception('Quiz generation failed: ${response.body}');
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error generating quiz: $e');
-      throw Exception('Error connecting to server: $e');
-    }
+    });
+    return Quiz.fromJson(data);
   }
 
-  /// Analyze a homework image using AI Vision
-  Future<String> analyzeHomework(Uint8List imageBytes) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/study/analyze-homework');
-    
-    try {
-      final headers = await AuthHeaders.getHeaders({});
-      var request = http.MultipartRequest('POST', url);
-      request.headers.addAll(headers);
-      
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file', 
-          imageBytes, 
-          filename: 'homework_${DateTime.now().millisecondsSinceEpoch}.jpg'
-        )
-      );
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['analysis'] ?? "No analysis returned.";
-      } else {
-        throw Exception("Homework analysis failed: ${response.body}");
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in analyzeHomework: $e');
-      return "Analysis failed. Please try again. ($e)";
-    }
-  }
-
-  /// Summarize a PDF using Multimodal Vision (High Fidelity)
+  /// POST /api/study/summarize-pdf-vision (multipart)
   Future<String> summarizePdfVision({
     required Uint8List pdfBytes,
     required String filename,
     String readingLevel = 'Form 4 student',
     String summaryType = 'detailed_bullet_points',
   }) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/api/study/summarize-pdf-vision');
+    final url =
+        Uri.parse('${AppConfig.backendBaseUrl}/api/study/summarize-pdf-vision');
+    final headers = await AuthHeaders.getHeaders({});
+    final request = http.MultipartRequest('POST', url)
+      ..headers.addAll(headers)
+      ..files.add(
+          http.MultipartFile.fromBytes('file', pdfBytes, filename: filename))
+      ..fields['reading_level'] = readingLevel
+      ..fields['summary_type'] = summaryType;
 
-    try {
-      final headers = await AuthHeaders.getHeaders({});
-      var request = http.MultipartRequest('POST', url);
-      request.headers.addAll(headers);
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          pdfBytes,
-          filename: filename,
-        ),
-      );
-
-      request.fields['reading_level'] = readingLevel;
-      request.fields['summary_type'] = summaryType;
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        return data['summary'] ?? "No summary returned.";
-      } else {
-        throw Exception("PDF Vision processing failed: ${response.body}");
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in summarizePdfVision: $e');
-      throw Exception("AI processing failed. Please ensure the backend is active. ($e)");
+    final response = await http.Response.fromStream(await request.send());
+    if (response.statusCode == 200) {
+      return (jsonDecode(utf8.decode(response.bodyBytes))['summary']
+              as String?) ??
+          'No summary returned.';
     }
+    throw Exception(
+        'PDF Vision failed (${response.statusCode}): ${response.body}');
   }
 
-  /// Generate an AI summary for a specific topic
-  Future<String> summarizeTopic({
-    required String topic,
-    String level = 'High School',
-    String format = 'detailed_bullet_points',
-  }) async {
-    final prompt = """
-Generate a comprehensive, high-quality executive summary for the topic: $topic.
-Audience: $level
-Format: $format
+  /// POST /api/study/analyze-homework (multipart)
+  Future<String> analyzeHomework(Uint8List imageBytes) async {
+    final url =
+        Uri.parse('${AppConfig.backendBaseUrl}/api/study/analyze-homework');
+    final headers = await AuthHeaders.getHeaders({});
+    final request = http.MultipartRequest('POST', url)
+      ..headers.addAll(headers)
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        imageBytes,
+        filename: 'homework_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      ));
 
-Use Markdown formatting. Include:
-1. Core Concepts (briefly explained)
-2. Key Facts or Formulas
-3. Summary of why this topic is important
-
-Ensure the tone is educational and encouraging.
-""";
-
-    try {
-      final response = await sendMessage(prompt);
-      return response.text;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error in summarizeTopic: $e');
-      throw Exception('Failed to generate summary: $e');
+    final response = await http.Response.fromStream(await request.send());
+    if (response.statusCode == 200) {
+      return (jsonDecode(response.body)['analysis'] as String?) ??
+          'No analysis returned.';
     }
+    return 'Analysis failed (${response.statusCode}). Please try again.';
   }
 
-  void dispose() {
-    _streamSubscription?.cancel();
-    _channel?.sink.close();
-    for (final completer in _pendingRequests.values) {
-      if (!completer.isCompleted) {
-        completer.completeError('AIService disposed');
-      }
-    }
-    _pendingRequests.clear();
-  }
-
-  /// Convert a Word document (or other supported types) to PDF using the backend
+  /// POST /documents/convert-from-url
   Future<Uint8List> convertToPdf(String fileUrl) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/documents/convert-from-url');
-    try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode({'url': fileUrl}),
-      );
+    final url =
+        Uri.parse('${AppConfig.backendBaseUrl}/documents/convert-from-url');
+    final headers =
+        await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+    final response = await http.post(url,
+        headers: headers, body: jsonEncode({'url': fileUrl}));
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw Exception(
+        'Conversion failed (${response.statusCode}): ${response.body}');
+  }
 
+  /// POST /api/study/grade-composition
+  Future<Map<String, dynamic>> gradeComposition({
+    required String text,
+    String? title,
+    String? subject,
+    String? gradeLevel,
+  }) async {
+    return _post('/api/study/grade-composition', {
+      'text': text,
+      if (title != null) 'title': title,
+      if (subject != null) 'subject': subject,
+      if (gradeLevel != null) 'grade_level': gradeLevel,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // PDF Chat Session APIs
+  // ---------------------------------------------------------------------------
+
+  /// POST /pdf-chat/start-session (multipart)
+  Future<String> startPdfSession(Uint8List pdfBytes, String filename) async {
+    final url = Uri.parse('${AppConfig.backendBaseUrl}/pdf-chat/start-session');
+    final headers = await AuthHeaders.getHeaders({});
+    final request = http.MultipartRequest('POST', url)
+      ..headers.addAll(headers)
+      ..files.add(
+          http.MultipartFile.fromBytes('file', pdfBytes, filename: filename));
+
+    final response = await http.Response.fromStream(await request.send());
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return (data['thread_id'] ?? data['session_id']) as String;
+    }
+    throw Exception(
+        'Failed to start PDF session (${response.statusCode}): ${response.body}');
+  }
+
+  /// POST /pdf-chat/message
+  Future<AIResponse> sendPdfMessage(String threadId, String message) async {
+    final data = await _post(
+        '/pdf-chat/message', {'thread_id': threadId, 'message': message});
+    final text = (data['response'] ?? data['text'] ?? '') as String;
+    return _parseResponseWithVisualization(text);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Flashcard CRUD APIs
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveFlashcardSet(FlashcardSet set) async {
+    await _post('/flashcards/save_set', set.toJson());
+  }
+
+  Future<void> updateFlashcardMastery(String cardId, int rating) async {
+    try {
+      await _post(
+          '/flashcards/update_mastery', {'card_id': cardId, 'rating': rating});
+    } catch (e) {
+      if (kDebugMode) debugPrint('updateFlashcardMastery: $e');
+    }
+  }
+
+  Future<List<FlashcardSet>> getDueFlashcards(String userId) async {
+    final url =
+        Uri.parse('${AppConfig.backendBaseUrl}/flashcards/due?user_id=$userId');
+    try {
+      final headers = await AuthHeaders.getHeaders();
+      final response = await http.get(url, headers: headers);
       if (response.statusCode == 200) {
-        return response.bodyBytes;
-      } else {
-        throw Exception('Conversion failed: ${response.statusCode} - ${response.body}');
+        return (jsonDecode(response.body) as List)
+            .map((e) => FlashcardSet.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Error in convertToPdf: $e');
-      throw Exception('Failed to convert document to PDF: $e');
+      if (kDebugMode) debugPrint('getDueFlashcards: $e');
     }
+    return [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  AIResponse _parseResponseWithVisualization(String text) {
+    for (final entry in {
+      '[DIAGRAM:': VisualizationType.diagram,
+      '[STEPS:': VisualizationType.stepByStep,
+      '[MATH:': VisualizationType.mathEquation,
+      '[COMPARE:': VisualizationType.comparison,
+    }.entries) {
+      if (text.contains(entry.key)) {
+        final tag = entry.key.replaceAll('[', r'\[');
+        final match = RegExp('$tag ([^\\]]+)\\]').firstMatch(text);
+        if (match != null) {
+          return AIResponse(
+            text: text.replaceAll(match.group(0)!, '').trim(),
+            visualizationType: entry.value,
+            visualizationData: entry.value == VisualizationType.stepByStep
+                ? match
+                    .group(1)!
+                    .split(RegExp(r'\d+\.'))
+                    .where((s) => s.trim().isNotEmpty)
+                    .toList()
+                : match.group(1),
+          );
+        }
+      }
+    }
+    return AIResponse(text: text);
+  }
+
+  static Map<String, String> mapLevelToSpecs(String level) {
+    if (level.contains('Primary') || level.contains('Grade')) {
+      return {'curriculum': 'CBC', 'grade': level};
+    }
+    if (level.contains('Form') ||
+        level.contains('844') ||
+        level.contains('KCSE')) {
+      return {'curriculum': '844', 'grade': level};
+    }
+    if (level.contains('Year') ||
+        level.contains('International') ||
+        level.contains('IGCSE')) {
+      return {'curriculum': 'Cambridge IGCSE', 'grade': level};
+    }
+    return {'curriculum': 'General', 'grade': level};
   }
 }

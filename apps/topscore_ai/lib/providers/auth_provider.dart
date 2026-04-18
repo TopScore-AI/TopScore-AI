@@ -26,9 +26,11 @@ class AuthProvider with ChangeNotifier {
 
   bool get isProfileComplete {
     final hasGrade = _userModel?.grade != null;
-    final hasPreferredName = _userModel?.preferredName != null && _userModel!.preferredName!.trim().isNotEmpty;
+    final hasPreferredName = _userModel?.preferredName != null &&
+        _userModel!.preferredName!.trim().isNotEmpty;
     return hasGrade && hasPreferredName;
   }
+
   bool get requiresEmailVerification => _requiresEmailVerification;
   bool get isGuestMode => _isGuestMode;
   bool get isGuestLimitReached => _isGuestLimitReached;
@@ -59,8 +61,15 @@ class AuthProvider with ChangeNotifier {
       if (user == null) {
         _userModel = null;
         _requiresEmailVerification = false;
-        _isInitializing = false;
-        notifyListeners();
+        // Don't set _isInitializing = false here!
+        // On web page reload, authStateChanges fires null BEFORE
+        // Firebase restores the persisted session. Setting
+        // _isInitializing = false prematurely causes the router to
+        // redirect to /guest-welcome, losing the user's current URL.
+        // init() controls the initialization lifecycle instead.
+        if (!_isInitializing) {
+          notifyListeners();
+        }
         return;
       }
 
@@ -260,6 +269,7 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       if (kDebugMode) debugPrint("AuthProvider init error: $e");
     } finally {
+      _isInitializing = false;
       _setLoading(false);
     }
   }
@@ -280,7 +290,8 @@ class AuthProvider with ChangeNotifier {
           displayName: user.displayName ?? 'New User',
           photoURL: user.photoURL,
           role: 'student', // Default opt-in role
-          grade: null, // Default to null so 'Recommended' shows all files initially
+          grade:
+              null, // Default to null so 'Recommended' shows all files initially
           schoolName: 'Self Study',
           curriculum: 'CBC', // Default baseline
         );
@@ -319,7 +330,7 @@ class AuthProvider with ChangeNotifier {
       if (!snap.exists || snap.data() == null) return;
       final updated = UserModel.fromMap(snap.data()!, uid);
       _userModel = updated;
-      // Always notify when the user document changes to ensure router redirects 
+      // Always notify when the user document changes to ensure router redirects
       // (onboarding/verification) trigger immediately.
       notifyListeners();
     }, onError: (e) {
@@ -368,7 +379,10 @@ class AuthProvider with ChangeNotifier {
         await OfflineService().setStringList('onboarding_complete', ['true']);
 
         if (wasGuest) {
-          if (kDebugMode) debugPrint("🔄 AuthProvider: Migrating guest history to ${user.uid}...");
+          if (kDebugMode) {
+            debugPrint(
+                "🔄 AuthProvider: Migrating guest history to ${user.uid}...");
+          }
           await _authService.transferGuestHistory('guest', user.uid);
         }
 
@@ -403,10 +417,10 @@ class AuthProvider with ChangeNotifier {
       }
 
       _requiresEmailVerification = false;
-      
+
       // Force refresh the token to ensure 'email_verified' claim is updated for Firestore
       await refreshedUser.getIdToken(true);
-      
+
       final wasGuest = _isGuestMode;
       exitGuestMode();
       await _ensureUserProfile(refreshedUser);
@@ -415,7 +429,10 @@ class AuthProvider with ChangeNotifier {
       await OfflineService().setStringList('onboarding_complete', ['true']);
 
       if (wasGuest) {
-        if (kDebugMode) debugPrint("🔄 AuthProvider: Migrating guest history to ${refreshedUser.uid}...");
+        if (kDebugMode) {
+          debugPrint(
+              "🔄 AuthProvider: Migrating guest history to ${refreshedUser.uid}...");
+        }
         await _authService.transferGuestHistory('guest', refreshedUser.uid);
       }
 
@@ -459,7 +476,10 @@ class AuthProvider with ChangeNotifier {
         // If they were a guest, we can attempt transfer now (associated with UID, even if not verified yet)
         if (wasGuest) {
           final uid = (_authService.currentUser ?? user).uid;
-          if (kDebugMode) debugPrint("🔄 AuthProvider: Migrating guest history to $uid (Pending verification)...");
+          if (kDebugMode) {
+            debugPrint(
+                "🔄 AuthProvider: Migrating guest history to $uid (Pending verification)...");
+          }
           await _authService.transferGuestHistory('guest', uid);
         }
 
@@ -497,10 +517,10 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
     _requiresEmailVerification = false;
-    
+
     // Force refresh the token to ensure 'email_verified' claim is updated for Firestore
     await refreshedUser.getIdToken(true);
-    
+
     await _ensureUserProfile(refreshedUser);
 
     // Mark onboarding complete
@@ -545,8 +565,7 @@ class AuthProvider with ChangeNotifier {
           'date_of_birth': dateOfBirth.millisecondsSinceEpoch,
         if (parentalConsentGiven != null)
           'parental_consent_given': parentalConsentGiven,
-        if (preferredName != null)
-          'preferred_name': preferredName,
+        if (preferredName != null) 'preferred_name': preferredName,
       };
 
       updates.removeWhere((key, value) => value == null);
@@ -663,6 +682,39 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Award XP to the user for achievements or learning progress.
+  Future<void> awardXp(int amount, String reason) async {
+    if (_userModel == null) return;
+
+    try {
+      final newXp = _userModel!.xp + amount;
+      // Simple leveling logic: every 1000 XP is a level
+      final newLevel = (newXp / 1000).floor() + 1;
+
+      await _authService.firestore
+          .collection('users')
+          .doc(_userModel!.uid)
+          .update({
+        'xp': newXp,
+        'level': newLevel,
+      });
+
+      _userModel = _userModel!.copyWith(
+        xp: newXp,
+        level: newLevel,
+      );
+
+      notifyListeners();
+
+      if (kDebugMode) {
+        debugPrint(
+            "🏆 Awarded $amount XP for: $reason. New Totals: $newXp XP (Lvl $newLevel)");
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint("Error awarding XP: $e");
+    }
+  }
+
   Future<void> reloadUser() async {
     User? user = _authService.currentUser;
     if (user != null) {
@@ -675,10 +727,10 @@ class AuthProvider with ChangeNotifier {
         return;
       }
       _requiresEmailVerification = false;
-      
+
       // Force refresh the token to ensure 'email_verified' claim is updated for Firestore
       await user.getIdToken(true);
-      
+
       await _ensureUserProfile(user);
 
       // Mark onboarding complete
@@ -689,6 +741,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   void _setLoading(bool value) {
+    if (_isLoading == value) return; // Skip if no change
     _isLoading = value;
     notifyListeners();
   }

@@ -7,7 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
-
+import '../providers/ui_provider.dart';
+import '../tutor_client/widgets/topscore_calculator.dart';
 import '../services/haptics_service.dart';
 import 'package:intl/intl.dart';
 import '../providers/ai_tutor_history_provider.dart';
@@ -15,7 +16,6 @@ import '../utils/image_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'trial_completed_overlay.dart';
-
 
 class ScaffoldWithNavBar extends StatefulWidget {
   const ScaffoldWithNavBar({required this.navigationShell, Key? key})
@@ -30,7 +30,6 @@ class ScaffoldWithNavBar extends StatefulWidget {
 class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   bool _isCollapsed = false;
 
-
   @override
   void initState() {
     super.initState();
@@ -40,9 +39,16 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   Future<void> _restoreLastTab() async {
     final prefs = await SharedPreferences.getInstance();
     final lastTab = prefs.getInt('last_tab');
-    if (lastTab != null && lastTab != widget.navigationShell.currentIndex) {
-      if (mounted) {
-        widget.navigationShell.goBranch(lastTab);
+
+    // Safety check: Ensure the saved tab index is valid for our new 3-tab layout.
+    // Invalid indices (from previous 5-tab layout) will be ignored and cleared.
+    if (lastTab != null) {
+      if (lastTab >= 0 && lastTab < 3) {
+        if (lastTab != widget.navigationShell.currentIndex && mounted) {
+          widget.navigationShell.goBranch(lastTab);
+        }
+      } else {
+        // Clear invalid index to prevent future conflicts
         await prefs.remove('last_tab');
       }
     }
@@ -50,14 +56,13 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
 
   @override
   void dispose() {
-
     super.dispose();
   }
 
   Future<void> _goBranch(int index) async {
     HapticFeedback.lightImpact();
     widget.navigationShell.goBranch(index, initialLocation: true);
-    
+
     // Persist the current tab so we can restore if the app is killed in bg
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('last_tab', index);
@@ -72,7 +77,8 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final user = Provider.of<AuthProvider>(context).userModel;
+    final user =
+        context.select<AuthProvider, dynamic>((auth) => auth.userModel);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -86,75 +92,302 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   }
 
   Widget _buildMobileLayout(bool isDark) {
-    return Consumer<AuthProvider>(
-      builder: (context, auth, child) {
-        final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
-        final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    return Selector<AuthProvider,
+            ({bool isGuestMode, bool isGuestLimitReached})>(
+        selector: (_, auth) => (
+              isGuestMode: auth.isGuestMode,
+              isGuestLimitReached: auth.isGuestLimitReached
+            ),
+        builder: (context, auth, child) {
+          final theme = Theme.of(context);
+          final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
+          final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
-        return Scaffold(
-          backgroundColor:
-              isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-          body: Stack(
-            children: [
-              Padding(
-                padding: EdgeInsets.only(bottom: isKeyboardOpen ? 0 : 90), // Buffer for floating bar
-                child: widget.navigationShell,
-              ),
-              // Floating Pill Navigation - Hide when keyboard is open
-              if (!isKeyboardOpen)
-                Positioned(
-                  bottom: 12, // Pushed a little lower
-                  left: 24,
-                  right: 24,
-                  child: SafeArea(
-                    child: _FloatingPillNavBar(
-                      currentIndex: widget.navigationShell.currentIndex,
-                      onTap: _goBranch,
-                      isDark: isDark,
+          return Scaffold(
+            backgroundColor: theme.scaffoldBackgroundColor,
+            body: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                      bottom:
+                          isKeyboardOpen ? 0 : 90), // Buffer for floating bar
+                  child: widget.navigationShell,
+                ),
+
+                // --- GLOBAL SCIENTIFIC CALCULATOR OVERLAY ---
+                Selector<UIProvider, bool>(
+                  selector: (_, ui) => ui.isCalculatorOpen,
+                  builder: (context, isOpen, _) {
+                    return AnimatedPositioned(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOutCubic,
+                      right:
+                          isOpen ? 0 : -MediaQuery.of(context).size.width * 0.9,
+                      top: 0,
+                      bottom: isKeyboardOpen
+                          ? 0
+                          : 90, // Adjusted to not overflow below nav bar
+                      width: MediaQuery.of(context).size.width > 600
+                          ? 500
+                          : MediaQuery.of(context).size.width * 0.9,
+                      child: RepaintBoundary(
+                        child: Material(
+                          elevation: 20,
+                          color: Colors.transparent,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .scaffoldBackgroundColor
+                                  .withValues(alpha: 0.95),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 30,
+                                  offset: const Offset(-5, 0),
+                                ),
+                              ],
+                            ),
+                            child: SafeArea(
+                              left: false,
+                              child: TopScoreCalculator(
+                                onClose: () => context
+                                    .read<UIProvider>()
+                                    .toggleCalculator(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // --- PERSISTENT CALCULATOR TOGGLE BUTTON ---
+                Selector<UIProvider, bool>(
+                  selector: (_, ui) => ui.isCalculatorOpen,
+                  builder: (context, isOpen, child) {
+                    if (isOpen || isKeyboardOpen) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      right: 0,
+                      top: MediaQuery.of(context).size.height * 0.4,
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticsService.instance.lightImpact();
+                          context.read<UIProvider>().toggleCalculator();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 20),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.9),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              bottomLeft: Radius.circular(20),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 10,
+                                offset: const Offset(-2, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calculate_rounded,
+                                  color: Colors.white, size: 28),
+                              SizedBox(height: 10),
+                              RotatedBox(
+                                quarterTurns: 3,
+                                child: Text(
+                                  "CALCULATOR",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // Floating Pill Navigation - Hide when keyboard is open
+                if (!isKeyboardOpen)
+                  Positioned(
+                    bottom: 12, // Pushed a little lower
+                    left: 24,
+                    right: 24,
+                    child: SafeArea(
+                      child: RepaintBoundary(
+                        child: _FloatingPillNavBar(
+                          currentIndex: widget.navigationShell.currentIndex,
+                          onTap: _goBranch,
+                          isDark: isDark,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              if (showTrialBlock)
-                const Positioned.fill(
-                  child: TrialCompletedOverlay(),
-                ),
-            ],
-          ),
-        );
-      }
-    );
+                if (showTrialBlock)
+                  const Positioned.fill(
+                    child: TrialCompletedOverlay(),
+                  ),
+              ],
+            ),
+          );
+        });
   }
 
   Widget _buildDesktopLayout(bool isDark, dynamic user) {
-    return Consumer<AuthProvider>(
-      builder: (context, auth, child) {
-        final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
+    return Selector<AuthProvider,
+            ({bool isGuestMode, bool isGuestLimitReached})>(
+        selector: (_, auth) => (
+              isGuestMode: auth.isGuestMode,
+              isGuestLimitReached: auth.isGuestLimitReached
+            ),
+        builder: (context, auth, child) {
+          final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
 
-        return Scaffold(
-          body: Stack(
-            children: [
-              Row(
-                children: [
-                  _DesktopSidebar(
-                    currentIndex: widget.navigationShell.currentIndex,
-                    onTap: _goBranch,
-                    isDark: isDark,
-                    isCollapsed: _isCollapsed,
-                    onToggle: _toggleSidebar,
-                    user: user,
-                  ),
-                  Expanded(child: widget.navigationShell),
-                ],
-              ),
-              if (showTrialBlock)
-                const Positioned.fill(
-                  child: TrialCompletedOverlay(),
+          final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
+          return Scaffold(
+            body: Stack(
+              children: [
+                Row(
+                  children: [
+                    _DesktopSidebar(
+                      currentIndex: widget.navigationShell.currentIndex,
+                      onTap: _goBranch,
+                      isDark: isDark,
+                      isCollapsed: _isCollapsed,
+                      onToggle: _toggleSidebar,
+                      user: user,
+                    ),
+                    Expanded(child: widget.navigationShell),
+                  ],
                 ),
-            ],
-          ),
-        );
-      }
-    );
+
+                // --- GLOBAL SCIENTIFIC CALCULATOR OVERLAY ---
+                Selector<UIProvider, bool>(
+                  selector: (_, ui) => ui.isCalculatorOpen,
+                  builder: (context, isOpen, _) {
+                    return AnimatedPositioned(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOutCubic,
+                      right: isOpen ? 0 : -500,
+                      top: 0,
+                      bottom: 0,
+                      width: 500,
+                      child: RepaintBoundary(
+                        child: Material(
+                          elevation: 20,
+                          color: Colors.transparent,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .scaffoldBackgroundColor
+                                  .withValues(alpha: 0.95),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 30,
+                                  offset: const Offset(-5, 0),
+                                ),
+                              ],
+                            ),
+                            child: SafeArea(
+                              left: false,
+                              child: TopScoreCalculator(
+                                onClose: () => context
+                                    .read<UIProvider>()
+                                    .toggleCalculator(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // --- PERSISTENT CALCULATOR TOGGLE BUTTON ---
+                Selector<UIProvider, bool>(
+                  selector: (_, ui) => ui.isCalculatorOpen,
+                  builder: (context, isOpen, child) {
+                    if (isOpen || isKeyboardOpen) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned(
+                      right: 0,
+                      top: MediaQuery.of(context).size.height * 0.4,
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticsService.instance.lightImpact();
+                          context.read<UIProvider>().toggleCalculator();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 20),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.9),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              bottomLeft: Radius.circular(20),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 10,
+                                offset: const Offset(-2, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calculate_rounded,
+                                  color: Colors.white, size: 28),
+                              SizedBox(height: 10),
+                              RotatedBox(
+                                quarterTurns: 3,
+                                child: Text(
+                                  "CALCULATOR",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                if (showTrialBlock)
+                  const Positioned.fill(
+                    child: TrialCompletedOverlay(),
+                  ),
+              ],
+            ),
+          );
+        });
   }
 }
 
@@ -202,10 +435,13 @@ class _FloatingPillNavBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(context, 0, CupertinoIcons.home, CupertinoIcons.house_fill, "Home"),
-              _buildNavItem(context, 1, CupertinoIcons.folder, CupertinoIcons.folder_solid, "Library"),
-              _buildNavItem(context, 2, CupertinoIcons.chat_bubble_2, CupertinoIcons.chat_bubble_2_fill, "AI Tutor"),
-              _buildNavItem(context, 3, CupertinoIcons.square_grid_2x2, CupertinoIcons.square_grid_2x2_fill, "Tools"),
+              _buildNavItem(context, 0, CupertinoIcons.home,
+                  CupertinoIcons.house_fill, "Home"),
+              _buildNavItem(context, 1, CupertinoIcons.chat_bubble_2,
+                  CupertinoIcons.chat_bubble_2_fill, "AI Tutor",
+                  isCenter: true),
+              _buildNavItem(context, 2, CupertinoIcons.folder,
+                  CupertinoIcons.folder_solid, "Library"),
             ],
           ),
         ),
@@ -213,11 +449,13 @@ class _FloatingPillNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(
-      BuildContext context, int index, IconData outlinedIcon, IconData filledIcon, String label) {
+  Widget _buildNavItem(BuildContext context, int index, IconData outlinedIcon,
+      IconData filledIcon, String label,
+      {bool isCenter = false}) {
     final isSelected = currentIndex == index;
     final icon = isSelected ? filledIcon : outlinedIcon;
-    final primaryColor = const Color(0xFF2563EB);
+    const primaryColor =
+        Color(0xFF2563EB); // Consistent Blue for all active tabs
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -226,8 +464,8 @@ class _FloatingPillNavBar extends StatelessWidget {
         onTap(index);
       },
       child: AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutCirc,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCirc,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
@@ -237,8 +475,8 @@ class _FloatingPillNavBar extends StatelessWidget {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.15),
-                    blurRadius: 12,
+                    color: primaryColor.withValues(alpha: isDark ? 0.3 : 0.2),
+                    blurRadius: 16,
                     offset: const Offset(0, 4),
                   ),
                 ]
@@ -328,29 +566,21 @@ class _DesktopSidebar extends StatelessWidget {
             isDark: isDark,
           ),
           _SidebarItem(
-            icon: CupertinoIcons.folder,
-            activeIcon: CupertinoIcons.folder_solid,
-            label: "Library",
+            icon: CupertinoIcons.chat_bubble_2,
+            activeIcon: CupertinoIcons.chat_bubble_2_fill,
+            label: "AI Tutor",
             isSelected: currentIndex == 1,
             onTap: () => onTap(1),
             isCollapsed: isCollapsed,
             isDark: isDark,
+            isPrimary: true,
           ),
           _SidebarItem(
-            icon: CupertinoIcons.chat_bubble_2,
-            activeIcon: CupertinoIcons.chat_bubble_2_fill,
-            label: "AI Tutor",
+            icon: CupertinoIcons.folder,
+            activeIcon: CupertinoIcons.folder_solid,
+            label: "Library",
             isSelected: currentIndex == 2,
             onTap: () => onTap(2),
-            isCollapsed: isCollapsed,
-            isDark: isDark,
-          ),
-          _SidebarItem(
-            icon: CupertinoIcons.square_grid_2x2,
-            activeIcon: CupertinoIcons.square_grid_2x2_fill,
-            label: "Tools",
-            isSelected: currentIndex == 3,
-            onTap: () => onTap(3),
             isCollapsed: isCollapsed,
             isDark: isDark,
           ),
@@ -372,7 +602,7 @@ class _DesktopSidebar extends StatelessWidget {
             isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
           if (!isCollapsed) ...[
-            Image.asset('assets/images/topscore_logo.png',
+            Image.asset('assets/images/logo.png',
                 width: 28, height: 28),
             const SizedBox(width: 12),
             Expanded(
@@ -501,6 +731,7 @@ class _SidebarItem extends StatefulWidget {
   final VoidCallback onTap;
   final bool isCollapsed;
   final bool isDark;
+  final bool isPrimary;
 
   const _SidebarItem({
     required this.icon,
@@ -510,6 +741,7 @@ class _SidebarItem extends StatefulWidget {
     required this.onTap,
     this.isCollapsed = false,
     required this.isDark,
+    this.isPrimary = false,
   });
 
   @override
@@ -522,7 +754,7 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final activeColor = widget.isSelected
-        ? const Color(0xFF2563EB)
+        ? (widget.isPrimary ? const Color(0xFF6366F1) : const Color(0xFF2563EB))
         : (widget.isDark ? Colors.white60 : Colors.black54);
 
     return Padding(
@@ -553,7 +785,8 @@ class _SidebarItemState extends State<_SidebarItem> {
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                Icon(widget.isSelected ? widget.activeIcon : widget.icon, size: 20, color: activeColor),
+                Icon(widget.isSelected ? widget.activeIcon : widget.icon,
+                    size: 20, color: activeColor),
                 if (!widget.isCollapsed) ...[
                   const SizedBox(width: 12),
                   Expanded(

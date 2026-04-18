@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import CtaBanner from '@/components/CtaBanner';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'Download TopScore AI — Free',
@@ -41,11 +40,9 @@ export default function DownloadPage() {
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32 pb-20">
-                <Breadcrumbs items={[{ label: 'Download' }]} />
                 <CtaBanner />
             </div>
             <Footer />
         </main>
     );
 }
-

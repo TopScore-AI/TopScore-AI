@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="font-size: 20px; color: #0f172a; margin-top: 0;">Subscription Invoice: {{ plan_name }}</h2>
+
+<p>Hello,</p>
+<p>Thank you for choosing TopScore AI Pro. This is your invoice for the subscription you just initiated.</p>
+
+<div style="background-color: #f1f5f9; border-radius: 8px; padding: 24px; margin: 24px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Description:</td>
+            <td style="padding: 8px 0; text-align: right; font-weight: 600;">{{ plan_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Amount:</td>
+            <td style="padding: 8px 0; text-align: right; font-weight: 600;">KES {{ amount }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Reference:</td>
+            <td style="padding: 8px 0; text-align: right; font-family: monospace;">{{ reference }}</td>
+        </tr>
+        <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 16px 0 0 0; font-weight: 700;">Total:</td>
+            <td style="padding: 16px 0 0 0; text-align: right; font-size: 18px; font-weight: 700; color: #2563eb;">KES {{ amount }}</td>
+        </tr>
+    </table>
+</div>
+
+<p>Your subscription will be activated automatically as soon as your payment is confirmed.</p>
+
+<div style="text-align: center;">
+    <a href="https://topscoreapp.ai/subscription" class="button">View Payment Status</a>
+</div>
+
+<p style="margin-top: 32px; font-size: 14px; color: #64748b;">Need help with your payment? Replied to this email or contact support at subscriptions@topscoreapp.ai</p>
+
+<p>Best regards,<br><strong>TopScore AI Billing</strong></p>
+{% endblock %}

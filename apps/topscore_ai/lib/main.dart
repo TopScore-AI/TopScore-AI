@@ -1,12 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui';
-// import 'package:seo/seo.dart';
-// import 'package:path_provider/path_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:app_links/app_links.dart';
@@ -23,6 +22,7 @@ import 'providers/ai_tutor_history_provider.dart';
 import 'providers/tutor_connection_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/ui_provider.dart';
 
 import 'tutor_client/chat_controller.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -55,38 +55,63 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-  
-  await IsarService().init();
 
   // Enable clean URLs for web (removes # from URLs)
   usePathUrlStrategy();
 
-  // Initialize Firebase with error handling
-  try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      if (kDebugMode) {
-        await AnalyticsService.instance.enableDebugMode();
-      }
-      
-      // Initialize Firebase Crashlytics
-      if (!kIsWeb) {
-        FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-        PlatformDispatcher.instance.onError = (error, stack) {
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-          return true;
-        };
-      }
-    }
-  } catch (e, stackTrace) {
-    if (kDebugMode) {
-      debugPrint('[TOPSCORE] Firebase init error: $e\n$stackTrace');
-    }
-  }
+  // Parallel Initialization: Run independent core services simultaneously to speed up boot.
+  // We wait for these critical core services before rendering the first frame.
+  await Future.wait([
+    // 1. Isar Service (Local Database)
+    IsarService().init(),
 
-  // Firestore offline persistence
+    // 2. Firebase Initialization (handled with error safety)
+    () async {
+      try {
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+          if (kDebugMode) {
+            await AnalyticsService.instance.enableDebugMode();
+          }
+
+          // Initialize Firebase Crashlytics (Non-web only)
+          if (!kIsWeb) {
+            FlutterError.onError =
+                FirebaseCrashlytics.instance.recordFlutterFatalError;
+            PlatformDispatcher.instance.onError = (error, stack) {
+              FirebaseCrashlytics.instance
+                  .recordError(error, stack, fatal: true);
+              return true;
+            };
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[TOPSCORE] Firebase init error: $e');
+      }
+    }(),
+
+    // 3. Offline Service (Hive/Prefs)
+    () async {
+      try {
+        await OfflineService().init();
+      } catch (e) {
+        if (kDebugMode) debugPrint('Offline init error: $e');
+      }
+    }(),
+
+    // 4. Study Repository (Isar/Prefs)
+    () async {
+      try {
+        studyDb = await createStudyRepository();
+      } catch (e) {
+        if (kDebugMode) debugPrint('Study Repository init error: $e');
+      }
+    }(),
+  ]);
+
+  // Non-parallel dependencies (these require Firebase to be initialized first)
   try {
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
@@ -95,7 +120,7 @@ void main() async {
     if (kDebugMode) debugPrint('Firestore settings error: $e');
   }
 
-  // Init Notifications (skip on web to avoid blocking)
+  // Init Notifications (Skip on web, non-blocking sequence)
   if (!kIsWeb) {
     try {
       final notificationService = NotificationService();
@@ -105,15 +130,6 @@ void main() async {
       if (kDebugMode) debugPrint('Notification init error: $e');
     }
   }
-
-  // Init Offline Storage
-  try {
-    await OfflineService().init();
-  } catch (e) {
-    if (kDebugMode) debugPrint('Offline init error: $e');
-  }
-
-  studyDb = await createStudyRepository();
 
   // Global error handler for uncaught Flutter widget errors
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -125,16 +141,57 @@ void main() async {
   ErrorWidget.builder =
       (FlutterErrorDetails details) => AppErrorWidget(details: details);
 
+  // Pre-load Google Fonts to avoid FOUT (flash of unstyled text) on first render.
+  // This runs after Firebase so it doesn't block the critical path.
+  if (!kIsWeb) {
+    try {
+      await Future.wait([
+        GoogleFonts.pendingFonts([
+          GoogleFonts.poppins(),
+          GoogleFonts.nunito(),
+          GoogleFonts.inter(),
+        ]),
+      ]);
+    } catch (_) {
+      // Non-fatal: fonts will load lazily if pre-cache fails
+    }
+  }
+
   runApp(const MyApp());
 }
 
 Future<void> setupInteractedMessage() async {
+  // Handle background/terminated messages
   RemoteMessage? initialMessage =
       await FirebaseMessaging.instance.getInitialMessage();
   if (initialMessage != null) {
     _handleMessage(initialMessage);
   }
   FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+
+  // Handle foreground messages
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    final notification = message.notification;
+    if (notification != null) {
+      // Personalize with student name if available
+      String body = notification.body ?? "";
+      try {
+        final auth = AuthProvider.instance;
+        final name = auth.userModel?.displayName.split(' ')[0];
+        if (name != null && name.isNotEmpty) {
+          body = "Hi $name, $body";
+        }
+      } catch (e) {
+        // Fallback to original body if name lookup fails
+      }
+
+      await NotificationService().showNotification(
+        id: notification.hashCode,
+        title: notification.title ?? "TopScore AI Update",
+        body: body,
+      );
+    }
+  });
 }
 
 void _handleMessage(RemoteMessage message) {
@@ -179,7 +236,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _aiTutorHistoryProvider = AiTutorHistoryProvider();
     _tutorConnectionProvider = TutorConnectionProvider();
 
-
     UpdateService().startAutoCheck();
 
     // Initialize deep link handling for app shortcuts
@@ -190,6 +246,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     // Defer initialization until after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Remove native splash immediately — don't rely on individual screens
+      FlutterNativeSplash.remove();
+
       _authProvider.init();
       _downloadProvider.init();
       _navigationProvider.init();
@@ -197,14 +256,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       // Set analytics user properties once auth resolves
       _authProvider.addListener(_syncAnalyticsUser);
-      
+
       // Initialize sharing intent listener (Mobile Only)
       if (!kIsWeb) {
         SharingService.init(context);
       }
 
-      // Initialization complete - splash removal is now handled by the dashboard
-      // to ensure immediate UI rendering without thread blocking.
       Future.delayed(const Duration(milliseconds: 500), () {
         if (!mounted) return;
         LauncherService.instance.init(context);
@@ -256,17 +313,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       AnalyticsService.instance.setUserId(user.uid);
       AnalyticsService.instance.setUserRole(user.role);
 
-
-
-
       // Only record the app-visit XP once per sign-in session.
       // _authProvider fires notifyListeners() multiple times during sign-in
       // (profile fetch start, profile write, listener attach), which would
       // cause concurrent transactions on users/{uid} → failed-precondition.
       if (_lastSyncedUid == user.uid) return;
       _lastSyncedUid = user.uid;
-
-
 
       // Fast load recent 10 chats first
       _aiTutorHistoryProvider.fetchHistory(user.uid, limit: 10);
@@ -279,8 +331,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _tutorConnectionProvider.updateUserId(user.uid);
     } else {
       _lastSyncedUid = null;
-
-
     }
   }
 
@@ -328,21 +378,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider<TutorConnectionProvider>.value(
             value: _tutorConnectionProvider),
         ChangeNotifierProvider<SearchProvider>(create: (_) => SearchProvider()),
-        ChangeNotifierProvider<NotificationProvider>(
-            create: (_) => NotificationProvider()),
-
-
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => UIProvider()),
         ChangeNotifierProvider<ChatController>(
             create: (context) => ChatController()),
       ],
-      child: Consumer<SettingsProvider>(
+      child: Selector<
+          SettingsProvider,
+          ({
+            double fontSize,
+            double lineHeight,
+            ThemeMode themeMode,
+            Locale locale
+          })>(
+        selector: (_, s) => (
+          fontSize: s.fontSize,
+          lineHeight: s.lineHeight,
+          themeMode: s.themeMode,
+          locale: s.locale
+        ),
         builder: (context, settings, _) {
           return UpdateBanner(
             child: MaterialApp.router(
               title: 'TopScore AI',
               debugShowCheckedModeBanner: false,
-              theme: AppTheme.lightTheme(settings.fontSize, settings.lineHeight),
-              darkTheme: AppTheme.darkTheme(settings.fontSize, settings.lineHeight),
+              theme:
+                  AppTheme.lightTheme(settings.fontSize, settings.lineHeight),
+              darkTheme:
+                  AppTheme.darkTheme(settings.fontSize, settings.lineHeight),
               themeMode: settings.themeMode,
               locale: settings.locale,
               supportedLocales: const [Locale('en'), Locale('sw')],
@@ -367,8 +430,8 @@ class AuthWrapper extends StatelessWidget {
     }
 
     // Force a minimum splash duration if it's the first load
-    // We can use a FutureBuilder or a state flag. For simplicity, we'll assume 
-    // the LandingScreen has its own internal timer or the authProvider.isLoading 
+    // We can use a FutureBuilder or a state flag. For simplicity, we'll assume
+    // the LandingScreen has its own internal timer or the authProvider.isLoading
     // covers the initial setup time.
 
     if (authProvider.requiresEmailVerification) {

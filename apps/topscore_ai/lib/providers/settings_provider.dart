@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../config/app_theme.dart';
 import '../services/offline_service.dart';
 
 class SettingsProvider with ChangeNotifier {
@@ -36,6 +37,7 @@ class SettingsProvider with ChangeNotifier {
 
   void setThemeMode(ThemeMode mode) {
     _themeMode = mode;
+    AppTheme.clearCache();
     notifyListeners();
   }
 
@@ -50,12 +52,16 @@ class SettingsProvider with ChangeNotifier {
   }
 
   void setFontSize(double size) {
+    if (_fontSize == size) return;
     _fontSize = size;
+    AppTheme.clearCache();
     notifyListeners();
   }
 
   void setLineHeight(double height) {
+    if (_lineHeight == height) return;
     _lineHeight = height;
+    AppTheme.clearCache();
     notifyListeners();
   }
 }

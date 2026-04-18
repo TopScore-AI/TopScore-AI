@@ -45,7 +45,7 @@ export default function Nav() {
     return (
         <>
             <header
-                className={`${styles.nav} ${scrolled ? styles.scrolled : ''}`}
+                className={`${styles.nav} ${scrolled ? 'glass-dark' : ''}`}
             >
                 <div className={styles.inner}>
                     {/* Mobile menu on the Left */}
@@ -73,6 +73,11 @@ export default function Nav() {
                                             {t(key)}
                                         </Link>
                                     ))}
+                                    <Button asChild variant="outline" className={styles.drawerOpenApp}>
+                                        <a href="https://app.topscoreapp.ai" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>
+                                            Open App
+                                        </a>
+                                    </Button>
                                     <Button asChild className={styles.drawerCta}>
                                         <Link href="/download" onClick={() => setOpen(false)}>
                                             {t('nav.downloadMobile')}
@@ -96,6 +101,11 @@ export default function Nav() {
                             </Link>
                         ))}
                         <div className="flex items-center gap-3 ml-4 border-l pl-4 border-border/50">
+                            <Button asChild variant="outline" className={styles.openApp}>
+                                <a href="https://app.topscoreapp.ai" target="_blank" rel="noopener noreferrer">
+                                    Open App
+                                </a>
+                            </Button>
                             <Button asChild className={styles.cta}>
                                 <Link href="/download">
                                     {t('nav.download')}

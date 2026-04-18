@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:home_widget/home_widget.dart';
@@ -12,7 +13,7 @@ class LauncherService {
 
   /// Initialize Home Screen Quick Actions (Long-press shortcuts)
   void init(BuildContext context) {
-    if (_initialized) return;
+    if (kIsWeb || _initialized) return;
     _initialized = true;
 
     _quickActions.setShortcutItems(<ShortcutItem>[
@@ -67,6 +68,7 @@ class LauncherService {
     required double progress,
     required String statusText,
   }) async {
+    if (kIsWeb) return;
     try {
       await HomeWidget.saveWidgetData<String>('study_subject', subject);
       await HomeWidget.saveWidgetData<double>('study_progress', progress);

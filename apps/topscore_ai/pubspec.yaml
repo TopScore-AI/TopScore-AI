@@ -28,17 +28,12 @@ dependencies:
   firebase_core: ^4.5.0
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
-  cloud_functions: ^6.0.6
   firebase_storage: ^13.1.0
   firebase_database: ^12.1.2
   firebase_messaging: ^16.1.1
-  firebase_in_app_messaging: ^0.9.1
   firebase_analytics: ^12.2.0
-    # --- Google & AI ---
+    # --- Google ---
   google_sign_in: ^7.2.0
-  google_generative_ai: ^0.4.0
-  googleapis: ^15.0.0
-  extension_google_sign_in_as_googleapis_auth: ^3.0.0
 
   # --- Modern Web Support (The Fix for your errors) ---
   web: ^1.1.0               # Forces modern web support
@@ -66,14 +61,10 @@ dependencies:
   # --- In-app WebView (Paystack checkout) ---
   webview_flutter: ^4.10.0
 
-  # --- UI Components ---
-  percent_indicator: ^4.2.3
-  fluttertoast: ^9.0.0
   google_fonts: ^8.0.0
   cupertino_icons: ^1.0.6
   font_awesome_flutter: ^10.7.0
   flip_card: ^0.7.0
-  confetti: ^0.8.0
   fl_chart: ^1.1.1
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
@@ -108,8 +99,6 @@ dependencies:
   syncfusion_flutter_core: any
   # For the "Lens" UI
   croppy: ^1.4.1
-  # For copying images - simpler package that works
-  clipboard: ^3.0.14
   file_picker: ^10.3.8
   pdf: ^3.11.0
 
@@ -119,8 +108,6 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.0
 
   image: ^4.3.0
-  open_file: ^3.3.0
-  screenshot: ^3.0.0
 
   # --- Storage ---
   hive: ^2.2.3
@@ -129,10 +116,8 @@ dependencies:
   video_player: ^2.8.6
   chewie: ^1.8.1
   timezone: ^0.10.1
-  just_audio: ^0.10.5
   shimmer: ^3.0.0
   lottie: ^3.1.0
-  haptic_feedback: ^0.5.1+1
   isar: ^3.1.0+1
   isar_flutter_libs: ^3.1.0+1
 
@@ -142,15 +127,10 @@ dependencies:
   easy_debounce: ^2.0.3
   path: ^1.9.0
 
-  # --- Composition Studio ---
-  flutter_quill: ^11.5.0
-  flutter_quill_extensions: ^11.0.0
-
   flutter_image_compress: ^2.3.0
   firebase_crashlytics: ^5.1.0
   photo_view: ^0.15.0
   flutter_inappwebview: ^6.1.5
-  flutter_blurhash: ^0.9.1
   receive_sharing_intent: ^1.6.3
   flutter_native_splash: ^2.4.7
   home_widget: ^0.9.0

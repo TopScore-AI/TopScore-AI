@@ -15,4 +15,11 @@ class NotificationService {
     required String timeString,
   }) async {}
   Future<void> cancelNotification(int id) async {}
+
+  Future<void> showNotification({
+    int id = 0,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {}
 }

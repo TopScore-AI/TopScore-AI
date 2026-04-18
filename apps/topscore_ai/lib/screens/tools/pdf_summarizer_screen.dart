@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../main.dart'; // To access studyDb
 import '../../utils/curriculum_utils.dart';
 import '../../services/analytics_service.dart';
+import '../../services/recovery_service.dart';
 
 class PdfSummarizerScreen extends StatefulWidget {
   const PdfSummarizerScreen({super.key});
@@ -33,8 +34,9 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
   String _summaryType = 'detailed_bullet_points';
 
   final List<String> _curriculums = CurriculumData.getCurriculums();
-  
-  List<String> get _availableGrades => CurriculumData.getGradesForCurriculum(_selectedCurriculum);
+
+  List<String> get _availableGrades =>
+      CurriculumData.getGradesForCurriculum(_selectedCurriculum);
 
   @override
   void initState() {
@@ -47,11 +49,13 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
           final cur = user.curriculum == '8-4-4' ? '844' : user.curriculum!;
           if (_curriculums.contains(cur)) {
             _selectedCurriculum = cur;
-            
+
             final userGradeLabel = user.gradeLabel.split(' ').last;
-            final normalizedGrade = CurriculumData.normalizeGrade(userGradeLabel, _selectedCurriculum);
-            
-            if (normalizedGrade != null && _availableGrades.contains(normalizedGrade)) {
+            final normalizedGrade = CurriculumData.normalizeGrade(
+                userGradeLabel, _selectedCurriculum);
+
+            if (normalizedGrade != null &&
+                _availableGrades.contains(normalizedGrade)) {
               _selectedGrade = normalizedGrade;
             } else {
               _selectedGrade = _availableGrades.first;
@@ -63,23 +67,33 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
   }
 
   final List<String> _formats = [
-    'detailed_bullet_points', 'study_notes', 'flashcard_format', 'executive_summary'
+    'detailed_bullet_points',
+    'study_notes',
+    'flashcard_format',
+    'executive_summary'
   ];
 
   Future<void> _pickAndUploadPdf() async {
     try {
+      // Save recovery state so Android relaunch returns here instead of /home
+      await RecoveryService.saveNavigationState('/summarizer');
+
       final results = await MediaPickerService.instance.pickFiles(
         allowedExtensions: ['pdf'],
         allowMultiple: false,
         withData: true,
       );
 
+      // Clear recovery state — we're back in the app with a result (or cancelled)
+      await RecoveryService.clearRecoveryState();
+
       if (results.isEmpty) return;
       final picked = results.first;
 
       setState(() {
         _isUploading = true;
-        _statusText = "Analyzing ${picked.name}... this might take a minute depending on the PDF size.";
+        _statusText =
+            "Analyzing ${picked.name}... this might take a minute depending on the PDF size.";
         _summaryMarkdown = null;
       });
 
@@ -119,7 +133,7 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
         _isUploading = false;
         _statusText = "Summary Ready!";
       });
-      
+
       AnalyticsService.instance.logMaterialGenerated(
         type: 'pdf_summary',
         topic: picked.name.replaceAll('.pdf', ''),
@@ -136,9 +150,11 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
         jsonData: jsonEncode({'summary': summary}),
       );
     } catch (e) {
+      await RecoveryService.clearRecoveryState();
       if (mounted) {
         setState(() {
-          _statusText = "Upload failed. Please ensure the backend is running.\n\nError: $e";
+          _statusText =
+              "Upload failed. Please ensure the backend is running.\n\nError: $e";
           _isUploading = false;
         });
       }
@@ -151,7 +167,8 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+        border: Border.all(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -162,25 +179,35 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Curriculum", style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text("Curriculum",
+                        style: GoogleFonts.nunito(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedCurriculum,
                           isExpanded: true,
-                          items: _curriculums.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                          onChanged: _isUploading ? null : (v) {
-                            setState(() {
-                              _selectedCurriculum = v!;
-                              _selectedGrade = _availableGrades.first;
-                            });
-                          },
+                          items: _curriculums
+                              .map((c) =>
+                                  DropdownMenuItem(value: c, child: Text(c)))
+                              .toList(),
+                          onChanged: _isUploading
+                              ? null
+                              : (v) {
+                                  setState(() {
+                                    _selectedCurriculum = v!;
+                                    _selectedGrade = _availableGrades.first;
+                                  });
+                                },
                         ),
                       ),
                     ),
@@ -192,20 +219,30 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Grade/Level", style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text("Grade/Level",
+                        style: GoogleFonts.nunito(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedGrade,
                           isExpanded: true,
-                          items: _availableGrades.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                          onChanged: _isUploading ? null : (v) => setState(() => _selectedGrade = v!),
+                          items: _availableGrades
+                              .map((g) =>
+                                  DropdownMenuItem(value: g, child: Text(g)))
+                              .toList(),
+                          onChanged: _isUploading
+                              ? null
+                              : (v) => setState(() => _selectedGrade = v!),
                         ),
                       ),
                     ),
@@ -215,30 +252,45 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text("Summary Format", style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.bold)),
+          Text("Summary Format",
+              style: GoogleFonts.nunito(
+                  fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _summaryType,
                 isExpanded: true,
-                items: _formats.map((f) => DropdownMenuItem(value: f, child: Text(f.replaceAll('_', ' ')))).toList(),
-                onChanged: _isUploading ? null : (v) => setState(() => _summaryType = v!),
+                items: _formats
+                    .map((f) => DropdownMenuItem(
+                        value: f, child: Text(f.replaceAll('_', ' '))))
+                    .toList(),
+                onChanged: _isUploading
+                    ? null
+                    : (v) => setState(() => _summaryType = v!),
               ),
             ),
           ),
           const SizedBox(height: 16),
           // The Upload Button
           ElevatedButton.icon(
-            icon: _isUploading 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            icon: _isUploading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
                 : const Icon(Icons.upload_file),
-            label: Text(_isUploading ? "Summarizing..." : "Select PDF Document"),
+            label:
+                Text(_isUploading ? "Summarizing..." : "Select PDF Document"),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: const Color(0xFF2563EB),
@@ -255,7 +307,8 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Document Summarizer", style: GoogleFonts.nunito(fontWeight: FontWeight.bold)),
+        title: Text("Document Summarizer",
+            style: GoogleFonts.nunito(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -278,7 +331,10 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+                  border: Border.all(
+                      color: Theme.of(context)
+                          .dividerColor
+                          .withValues(alpha: 0.1)),
                 ),
                 child: _summaryMarkdown != null
                     ? SingleChildScrollView(
@@ -291,19 +347,27 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
                           },
                           extensionSet: markdown.ExtensionSet(
                             [
-                              ...markdown.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                              ...markdown
+                                  .ExtensionSet.gitHubFlavored.blockSyntaxes,
                               MermaidBlockSyntax()
                             ],
                             [
                               markdown.EmojiSyntax(),
                               LatexSyntax(),
-                              ...markdown.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+                              ...markdown
+                                  .ExtensionSet.gitHubFlavored.inlineSyntaxes,
                             ],
                           ),
                           styleSheet: MarkdownStyleSheet(
                             p: const TextStyle(fontSize: 16, height: 1.5),
-                            h1: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                            h2: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            h1: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B)),
+                            h2: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2563EB)),
                           ),
                         ),
                       )
@@ -311,12 +375,14 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.description_outlined, size: 64, color: Colors.grey.shade400),
+                            Icon(Icons.description_outlined,
+                                size: 64, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
                             Text(
                               _statusText,
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                              style: TextStyle(
+                                  color: Colors.grey.shade600, fontSize: 16),
                             ),
                           ],
                         ),

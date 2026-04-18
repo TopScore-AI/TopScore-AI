@@ -169,14 +169,14 @@ const en = {
     'pricing.titleBr': 'pricing for everyone.',
     'pricing.sub': 'Start for free — upgrade to Pro when you are ready for premium features.',
     'pricing.monthly': 'Monthly',
-    'pricing.annual': 'Annual',
-    'pricing.save': 'Save 20%',
+    'pricing.weekly': 'Weekly',
+    'pricing.save': 'Best Value',
     'pricing.mo': 'mo',
-    'pricing.yr': 'yr',
+    'pricing.wk': 'wk',
 
     'pricing.0.name': 'Basic (Freemium)',
     'pricing.0.priceMonthly': 'KES 0',
-    'pricing.0.priceAnnual': 'KES 0',
+    'pricing.0.priceWeekly': 'KES 0',
     'pricing.0.period': 'forever',
     'pricing.0.cta': 'Get Started Free',
     'pricing.0.badge': '',
@@ -184,10 +184,10 @@ const en = {
 
     'pricing.1.name': 'TopScore AI Pro',
     'pricing.1.priceMonthly': 'KES 1,000',
-    'pricing.1.priceAnnual': 'KES 10,000',
-    'pricing.1.period': 'month',
-    'pricing.1.cta': 'Start 7-Day Free Trial',
-    'pricing.1.badge': 'Recommended',
+    'pricing.1.priceWeekly': 'KES 300',
+    'pricing.1.period': 'period',
+    'pricing.1.cta': 'Start Premium Access',
+    'pricing.1.badge': 'Best Value',
     'pricing.1.features': 'Unlimited AI documents & library|Unlimited AI tutor messages|Live Voice Tutor included|AI Composition & Insha grading|Offline access for all content',
 
     // ── FAQ ──

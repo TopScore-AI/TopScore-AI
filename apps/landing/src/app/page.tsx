@@ -8,6 +8,7 @@ import ActiveVoiceShowcase from '@/components/ActiveVoiceShowcase';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
 import Safety from '@/components/Safety';
+import BentoFeatures from '@/components/BentoFeatures';
 
 export const metadata: Metadata = {
   alternates: { canonical: 'https://topscoreapp.ai' },
@@ -50,6 +51,7 @@ export default function Home() {
       <div className="flex-grow flex flex-col">
         <Hero />
         <TrustedBy />
+        <BentoFeatures />
         <ActiveVoiceShowcase />
         <Safety />
       </div>

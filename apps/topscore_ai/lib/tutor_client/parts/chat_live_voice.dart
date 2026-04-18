@@ -3,6 +3,7 @@ part of '../chat_controller.dart';
 extension ChatControllerLiveVoice on ChatController {
   // --- Constants ---
   static const Duration _silenceTimeout = Duration(seconds: 12);
+  static const Duration _inactivityTimeout = Duration(minutes: 2);
 
   /// Robust permission check before starting the voice session.
   /// Handles "Denied" and "Permanently Denied" (Blocked) states with clean UX.
@@ -156,7 +157,7 @@ extension ChatControllerLiveVoice on ChatController {
 
       final userId = authProvider.isGuestMode ? authProvider.deviceId : (authProvider.userModel?.uid ?? 'guest');
       final threadId = _wsService.threadId;
-      var url = '${ApiConfig.liveVoiceUrl}?student_id=$userId&thread_id=$threadId';
+      var url = '${AppConfig.liveVoiceUrl}?student_id=$userId&thread_id=$threadId';
       if (feynmanMode) {
         url += '&feynman_mode=true';
       }
@@ -181,6 +182,8 @@ extension ChatControllerLiveVoice on ChatController {
 
       // --- Event Handling (Interruptions, Tool Calls, Turn Complete) ---
       _liveGeminiEventSubscription = _geminiLiveService.events.listen((event) {
+        final bool wasNudge = _isSystemNudgeTurn;
+
         switch (event.type) {
           case GeminiLiveEventType.error:
             developer.log('Live Voice Session Error: ${event.error}');
@@ -191,10 +194,16 @@ extension ChatControllerLiveVoice on ChatController {
           case GeminiLiveEventType.interrupted:
             developer.log('Live Voice: AI was interrupted (barge-in)');
             _audioOutput.flushBuffer(); 
+            _isSystemNudgeTurn = false;
+            _resetInactivityTimer();
             break;
           case GeminiLiveEventType.turnComplete:
             developer.log('Live Voice: Turn complete');
             _resetSilenceTimer(); 
+            if (!wasNudge) {
+              _resetInactivityTimer();
+            }
+            _isSystemNudgeTurn = false;
             break;
           case GeminiLiveEventType.toolCall:
             _handleLiveToolCall(event);
@@ -241,6 +250,7 @@ extension ChatControllerLiveVoice on ChatController {
       Future.delayed(const Duration(seconds: 2), () {
         if (_isVoiceMode) {
           _startSilenceTimer();
+          _startInactivityTimer();
         }
       });
       
@@ -265,7 +275,26 @@ extension ChatControllerLiveVoice on ChatController {
     );
   }
 
-  // --- Awkward Silence Handler ---
+  // --- Awkward Silence & Inactivity Handlers ---
+  void _startInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(_inactivityTimeout, () {
+      if (!_isVoiceMode) return;
+      developer.log('💤 Inactivity timeout reached. Stopping voice mode.', name: 'ChatController');
+      if (scaffoldKey.currentContext != null && scaffoldKey.currentContext!.mounted) {
+        _showErrorSnackBar(scaffoldKey.currentContext!, 'Live Voice session closed due to inactivity.');
+      }
+      stopLiveVoiceMode();
+    });
+  }
+
+  void _resetInactivityTimer() {
+    _inactivityTimer?.cancel();
+    if (_isVoiceMode) {
+      _startInactivityTimer();
+    }
+  }
+
   void _startSilenceTimer() {
     _silenceTimer?.cancel();
     _silenceTimer = Timer(_silenceTimeout, () {
@@ -284,6 +313,8 @@ extension ChatControllerLiveVoice on ChatController {
       
       developer.log('🤫 Awkward silence detected after ${_silenceTimeout.inSeconds}s. Sending hint nudge.', name: 'ChatController');
       
+      _isSystemNudgeTurn = true;
+
       // Send a system injection to the Live API so the AI proactively helps
       _geminiLiveService.sendSystemContext(
         '[SYSTEM INSTRUCTION: The student has been silent for ${_silenceTimeout.inSeconds} seconds. '
@@ -356,14 +387,17 @@ extension ChatControllerLiveVoice on ChatController {
     _liveVideoSubscription?.cancel();
     _liveGeminiAudioSubscription?.cancel();
     _liveGeminiEventSubscription?.cancel();
-    
-    _silenceTimer = null;
+    _silenceTimer?.cancel();
+    _inactivityTimer?.cancel();
+    _appVisionTimer?.cancel();
     _voiceSessionStartTime = null;
     _appVisionTimer = null;
     _liveAudioSubscription = null;
     _liveVideoSubscription = null;
     _liveGeminiAudioSubscription = null;
     _liveGeminiEventSubscription = null;
+    _silenceTimer = null;
+    _inactivityTimer = null;
 
     try {
       await _audioInput.stopRecording();

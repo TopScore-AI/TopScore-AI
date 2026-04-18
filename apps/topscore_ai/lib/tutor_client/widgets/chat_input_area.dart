@@ -17,6 +17,7 @@ class ChatInputArea extends StatefulWidget {
   final bool isTyping;
   final bool isGenerating;
   final bool isRecording;
+  final bool isOffline;
   final List<Map<String, String>> suggestions;
   final List<String> placeholderMessages;
   final VoidCallback onSendMessage;
@@ -44,6 +45,7 @@ class ChatInputArea extends StatefulWidget {
     required this.isTyping,
     required this.isGenerating,
     required this.isRecording,
+    this.isOffline = false,
     required this.suggestions,
     required this.placeholderMessages,
     required this.onSendMessage,
@@ -96,6 +98,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   }
 
   String get _effectiveHint {
+    if (widget.isOffline) return "You're offline…";
     if (widget.isUploading) return 'Uploading...';
     final base = widget.placeholderMessages.isNotEmpty
         ? widget.placeholderMessages[0]
@@ -206,7 +209,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                                       ? TextInputAction.send
                                       : TextInputAction.newline,
                                   onSubmitted: (_) {
-                                    if (_hasTextContent && !widget.isGenerating && !isAnyAttachmentUploading) {
+                                    if (_hasTextContent && !widget.isGenerating && !isAnyAttachmentUploading && !widget.isOffline) {
                                       widget.onSendMessage();
                                     }
                                   },
@@ -240,6 +243,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                               isGenerating: widget.isGenerating,
                               isUploading: isAnyAttachmentUploading,
                               isRecording: widget.isRecording,
+                              isOffline: widget.isOffline,
                               isDark: isDark,
                               theme: theme,
                               onStopGeneration: widget.onStopGeneration,
@@ -268,6 +272,7 @@ class _DynamicRightActions extends StatelessWidget {
   final bool isGenerating;
   final bool isUploading;
   final bool isRecording;
+  final bool isOffline;
   final bool isDark;
   final ThemeData theme;
   final VoidCallback onStopGeneration;
@@ -282,6 +287,7 @@ class _DynamicRightActions extends StatelessWidget {
     required this.isGenerating,
     required this.isUploading,
     required this.isRecording,
+    required this.isOffline,
     required this.isDark,
     required this.theme,
     required this.onStopGeneration,
@@ -309,24 +315,30 @@ class _DynamicRightActions extends StatelessWidget {
     }
 
     if (hasContent) {
+      final disabled = isUploading || isOffline;
       return Semantics(
-        label: 'Send message',
+        label: isOffline ? "You're offline" : 'Send message',
         button: true,
         child: Container(
           margin: const EdgeInsets.only(bottom: 2, right: 2),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isUploading 
-                ? theme.disabledColor.withValues(alpha: 0.1) 
+            color: disabled
+                ? theme.disabledColor.withValues(alpha: 0.1)
                 : theme.colorScheme.primary,
           ),
           child: IconButton(
-            icon: const Icon(Icons.arrow_upward, size: 20),
-            color: isUploading 
-                ? theme.disabledColor 
+            icon: Icon(
+              isOffline ? CupertinoIcons.wifi_slash : Icons.arrow_upward,
+              size: 20,
+            ),
+            color: disabled
+                ? theme.disabledColor
                 : theme.colorScheme.onPrimary,
-            tooltip: isUploading ? 'Waiting for uploads…' : 'Send',
-            onPressed: isUploading ? null : () {
+            tooltip: isOffline
+                ? "You're offline"
+                : (isUploading ? 'Waiting for uploads…' : 'Send'),
+            onPressed: disabled ? null : () {
               HapticFeedback.lightImpact();
               onSendMessage();
             },

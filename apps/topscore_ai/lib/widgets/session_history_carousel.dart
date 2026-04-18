@@ -118,7 +118,7 @@ class SessionHistoryCarousel extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     final title = chat['title'] ?? 'AI Tutor Chat';
     final color = _colorFromTitle(title);
@@ -128,7 +128,7 @@ class SessionHistoryCarousel extends StatelessWidget {
 
     return BounceWrapper(
       onTap: () {
-        context.push('/ai-tutor', extra: {
+        context.go('/ai-tutor', extra: {
           'thread_id': chat['thread_id'],
           'title': chat['title'],
         });
@@ -199,7 +199,7 @@ class SessionHistoryCarousel extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     // Determine icon based on type
     IconData icon = Icons.description;
@@ -293,7 +293,7 @@ class SessionHistoryCarousel extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     final colors = [
       const Color(0xFF8B5CF6),

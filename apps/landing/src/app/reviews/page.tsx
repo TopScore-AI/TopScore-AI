@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import Testimonials from '@/components/Testimonials';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 import Safety from '@/components/Safety';
 import ReviewsCta from '@/components/ReviewsCta';
 
@@ -27,7 +26,6 @@ export default function ReviewsPage() {
             <Nav />
             <div className="container mx-auto px-6 pt-32 pb-24">
                 <div className="max-w-7xl mx-auto">
-                    <Breadcrumbs items={[{ label: 'Reviews' }]} />
                     <Testimonials />
                     <Safety />
                     <ReviewsCta />

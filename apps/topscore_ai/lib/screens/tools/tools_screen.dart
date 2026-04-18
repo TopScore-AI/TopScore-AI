@@ -3,10 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 
-import 'calculator_screen.dart';
 import 'smart_scanner_screen.dart';
-import 'timetable_screen.dart';
-import 'study_library_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Data
@@ -32,16 +29,10 @@ class _Tool {
 }
 
 const _allTools = [
-  _Tool(id: 'science_lab', title: 'Science Lab', description: 'Virtual experiments with AI guidance', icon: Icons.science_rounded, color: Color(0xFF6C63FF), category: 'Science'),
-  _Tool(id: 'periodic_table', title: 'Periodic Table', description: 'All 118 elements with properties', icon: Icons.grid_4x4_rounded, color: Color(0xFFE91E63), category: 'Science'),
-  _Tool(id: 'calculator', title: 'Scientific Calc', description: 'Trig, logs, history & more', icon: Icons.calculate_rounded, color: Color(0xFF4A90E2), category: 'Math'),
   _Tool(id: 'flashcards', title: 'AI Flashcards', description: 'Generate study cards from any topic', icon: Icons.flash_on_rounded, color: Color(0xFFA389F4), category: 'Study'),
   _Tool(id: 'quiz', title: 'AI Quiz', description: 'Test your knowledge with AI', icon: Icons.quiz_rounded, color: Color(0xFF00BCD4), category: 'Study', isPrimary: true),
   _Tool(id: 'scanner', title: 'Doc Scanner', description: 'Digitize notes & solve problems', icon: Icons.document_scanner_rounded, color: Color(0xFF4ECDC4), category: 'Utility'),
-  _Tool(id: 'timetable', title: 'Smart Timetable', description: 'Plan your week with reminders', icon: Icons.calendar_month_rounded, color: Color(0xFFFFD93D), category: 'Utility'),
-  _Tool(id: 'database', title: 'TopScore Hub', description: 'Discover past papers from schools across the country', icon: Icons.school_rounded, color: Color(0xFF10B981), category: 'Library'),
   _Tool(id: 'summarizer', title: 'PDF Summarizer', description: 'AI extracts notes from your PDFs', icon: Icons.summarize_rounded, color: Color(0xFFF59E0B), category: 'Study', isPrimary: true),
-  _Tool(id: 'composition_studio', title: 'Composition Studio', description: 'Practice writing with AI-powered grading (Grade out of 40)', icon: Icons.edit_note_rounded, color: Color(0xFF1092B9), category: 'Study'),
 ];
 
 // ---------------------------------------------------------------------------
@@ -121,10 +112,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
 
     Widget? screen;
     switch (tool.id) {
-      case 'calculator': screen = const CalculatorScreen(); break;
       case 'scanner': screen = const SmartScannerScreen(); break;
-      case 'timetable': screen = const TimetableScreen(); break;
-      case 'database': screen = const StudyLibraryScreen(); break;
     }
     if (screen != null) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));

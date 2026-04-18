@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../../config/api_config.dart';
+import '../../config/app_config.dart';
 import 'chat_media_viewers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +24,7 @@ import '../../widgets/quiz_widget.dart';
 import '../../widgets/flashcard_artifact_widget.dart';
 import '../../widgets/math_stepper_widget.dart';
 
-import '../../widgets/virtual_lab/video_carousel.dart';
+import '../../widgets/shared/video_carousel.dart';
 import '../../utils/markdown/mermaid_builder.dart';
 import '../../utils/markdown/table_builder.dart';
 import '../../utils/markdown/desmos_builder.dart';
@@ -67,6 +67,7 @@ class ChatMessageBubble extends StatefulWidget {
   final Function(String) onDownloadImageUrl;
   final Function(ChatMessage) onReply;
   final VoidCallback onLongPress;
+  final VoidCallback? onRetrySend;
 
   const ChatMessageBubble({
     super.key,
@@ -97,6 +98,7 @@ class ChatMessageBubble extends StatefulWidget {
     required this.onLongPress,
     this.status,
     this.user,
+    this.onRetrySend,
   });
 
   @override
@@ -249,9 +251,55 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                   },
                 ),
               ),
+            if (widget.message.status == MessageStatus.error)
+              _buildDeliveryErrorRow(theme),
             _buildUserActions(theme),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDeliveryErrorRow(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, right: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.exclamationmark_circle_fill,
+              size: 14, color: Colors.redAccent.shade200),
+          const SizedBox(width: 4),
+          Text(
+            'Not delivered',
+            style: GoogleFonts.nunito(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.redAccent.shade200,
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (widget.onRetrySend != null)
+            GestureDetector(
+              onTap: widget.onRetrySend,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.arrow_clockwise,
+                      size: 13, color: theme.colorScheme.primary),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Retry',
+                    style: GoogleFonts.nunito(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -428,7 +476,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final userId = authProvider.userModel?.uid ?? 'guest';
     
     final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/documents/convert-from-url'),
+      Uri.parse('${AppConfig.backendBaseUrl}/documents/convert-from-url'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'file_url': originalUrl,

@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../models/quiz_model.dart';
 
 
@@ -29,23 +33,34 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
   bool _showResult = false;
   int _score = 0;
   List<int?> _userAnswers = [];
- // guard — award XP only once per quiz
+
+  /// Maps the on-screen question index to the *original* question index
+  /// in `widget.offlineQuiz.questions`. Enables shuffle while preserving
+  /// original order for review / retry-wrong.
+  List<int> _order = [];
 
   Timer? _timer;
   int _secondsLeft = 30;
   late AnimationController _progressAnim;
-  final bool _timerEnabled = true;
 
-  static const _secondsPerQuestion = 30;
+  // Configurable settings (previously hard-coded).
+  bool _timerEnabled = true;
+  int _secondsPerQuestion = 30;
+  bool _shuffleEnabled = false;
 
   @override
   void initState() {
     super.initState();
+    _order = List<int>.generate(widget.offlineQuiz.questions.length, (i) => i);
     _userAnswers = List.filled(widget.offlineQuiz.questions.length, null);
     _progressAnim = AnimationController(
-        vsync: this, duration: const Duration(seconds: _secondsPerQuestion));
+        vsync: this, duration: Duration(seconds: _secondsPerQuestion));
     _startTimer();
   }
+
+  /// Returns the question at the current *on-screen* index, honoring shuffle.
+  QuizQuestion get _currentQuestion =>
+      widget.offlineQuiz.questions[_order[_currentQuestionIndex]];
 
   @override
   void dispose() {
@@ -55,9 +70,14 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
   }
 
   void _startTimer() {
-    if (!_timerEnabled) return;
+    if (!_timerEnabled) {
+      _timer?.cancel();
+      _progressAnim.stop();
+      return;
+    }
     _timer?.cancel();
     _secondsLeft = _secondsPerQuestion;
+    _progressAnim.duration = Duration(seconds: _secondsPerQuestion);
     _progressAnim.forward(from: 0);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
@@ -81,6 +101,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
     if (_selectedAnswerIndex == null) {
       _userAnswers[_currentQuestionIndex] = -1;
     }
+    // Auto-submit = no answer selected, so it's wrong. No score increment.
     setState(() => _showResult = true);
   }
 
@@ -99,18 +120,18 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
       return;
     }
     _stopTimer();
-    final currentQuestion = widget.offlineQuiz.questions[_currentQuestionIndex];
-    if (_selectedAnswerIndex == currentQuestion.correctIndex) _score++;
+    if (_selectedAnswerIndex == _currentQuestion.correctIndex) _score++;
     setState(() => _showResult = true);
   }
 
   void _nextQuestion() {
-    if (_currentQuestionIndex >= widget.offlineQuiz.questions.length - 1) {
+    if (_currentQuestionIndex >= _order.length - 1) {
       return;
     }
     setState(() {
       _currentQuestionIndex++;
       _selectedAnswerIndex = _userAnswers[_currentQuestionIndex];
+      // Treat sentinel -1 (auto-submit with no answer) as already-answered.
       _showResult = _userAnswers[_currentQuestionIndex] != null;
     });
     if (!_showResult) _startTimer();
@@ -129,13 +150,152 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
   void _resetQuiz() {
     _stopTimer();
     setState(() {
+      _order = List<int>.generate(widget.offlineQuiz.questions.length, (i) => i);
+      if (_shuffleEnabled) _order.shuffle(Random());
       _currentQuestionIndex = 0;
       _selectedAnswerIndex = null;
       _showResult = false;
       _score = 0;
-      _userAnswers = List.filled(widget.offlineQuiz.questions.length, null);
+      _userAnswers = List.filled(_order.length, null);
     });
     _startTimer();
+  }
+
+  /// Re-take only the questions the user got wrong last time.
+  /// Questions answered correctly are excluded from the new deck.
+  void _retryWrongOnly() {
+    final wrong = <int>[];
+    for (int i = 0; i < _order.length; i++) {
+      final originalIndex = _order[i];
+      final answer = _userAnswers[i];
+      final correct =
+          widget.offlineQuiz.questions[originalIndex].correctIndex;
+      if (answer == null || answer != correct) {
+        wrong.add(originalIndex);
+      }
+    }
+    if (wrong.isEmpty) return;
+    _stopTimer();
+    setState(() {
+      _order = wrong;
+      if (_shuffleEnabled) _order.shuffle(Random());
+      _currentQuestionIndex = 0;
+      _selectedAnswerIndex = null;
+      _showResult = false;
+      _score = 0;
+      _userAnswers = List.filled(_order.length, null);
+    });
+    _startTimer();
+  }
+
+  Future<void> _shareResult() async {
+    final pct = (_score / _order.length * 100).round();
+    final text =
+        'I scored $_score/${_order.length} ($pct%) on "${widget.topic}" in TopScore AI! 🎯';
+    try {
+      await SharePlus.instance.share(ShareParams(text: text));
+    } catch (_) {
+      // Sharing failed silently — nothing to recover from.
+    }
+  }
+
+  Future<void> _showSettingsSheet() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setSheetState) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Quiz settings',
+                    style: GoogleFonts.nunito(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Timer',
+                      style:
+                          GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                      _timerEnabled
+                          ? '$_secondsPerQuestion seconds per question'
+                          : 'No time limit',
+                      style: GoogleFonts.nunito(
+                          color: Colors.grey[600], fontSize: 13)),
+                  value: _timerEnabled,
+                  onChanged: (v) {
+                    setSheetState(() {});
+                    setState(() {
+                      _timerEnabled = v;
+                      if (v && !_showResult) {
+                        _startTimer();
+                      } else {
+                        _stopTimer();
+                      }
+                    });
+                  },
+                ),
+                if (_timerEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [20, 30, 60].map((s) {
+                        final selected = _secondsPerQuestion == s;
+                        return ChoiceChip(
+                          label: Text('${s}s'),
+                          selected: selected,
+                          onSelected: (_) {
+                            setSheetState(() {});
+                            setState(() {
+                              _secondsPerQuestion = s;
+                              if (!_showResult) _startTimer();
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                const Divider(height: 24),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Shuffle questions',
+                      style:
+                          GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+                  subtitle: Text('Applied on next restart',
+                      style: GoogleFonts.nunito(
+                          color: Colors.grey[600], fontSize: 13)),
+                  value: _shuffleEnabled,
+                  onChanged: (v) {
+                    setSheetState(() {});
+                    setState(() => _shuffleEnabled = v);
+                  },
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
   }
 
   Color _getDifficultyColor(String difficulty) {
@@ -155,7 +315,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
     final isDark = theme.brightness == Brightness.dark;
     final quiz = widget.offlineQuiz;
 
-    final isLastQuestion = _currentQuestionIndex == quiz.questions.length - 1;
+    final isLastQuestion = _currentQuestionIndex == _order.length - 1;
     final allAnswered = !_userAnswers.contains(null);
 
     return Scaffold(
@@ -171,6 +331,10 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
         ),
         actions: [
           IconButton(
+              icon: const Icon(CupertinoIcons.settings),
+              onPressed: _showSettingsSheet,
+              tooltip: 'Settings'),
+          IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _resetQuiz,
               tooltip: 'Retry Quiz'),
@@ -184,7 +348,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
 
   Widget _buildQuizView(
       ThemeData theme, bool isDark, Quiz quiz, bool isLastQuestion) {
-    final currentQuestion = quiz.questions[_currentQuestionIndex];
+    final currentQuestion = _currentQuestion;
     final timerColor = _secondsLeft > 10 ? const Color(0xFF6C63FF) : Colors.red;
 
     return Column(
@@ -240,7 +404,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
             ),
             const SizedBox(height: 10),
             Row(children: [
-              Text('${_currentQuestionIndex + 1} / ${quiz.questions.length}',
+              Text('${_currentQuestionIndex + 1} / ${_order.length}',
                   style: GoogleFonts.nunito(
                       color: Colors.grey[600],
                       fontWeight: FontWeight.w600,
@@ -250,7 +414,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: (_currentQuestionIndex + 1) / quiz.questions.length,
+                    value: (_currentQuestionIndex + 1) / _order.length,
                     minHeight: 6,
                     backgroundColor: Colors.grey[300],
                     valueColor:
@@ -466,7 +630,8 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
 
   Widget _buildResultsView(ThemeData theme, bool isDark) {
     final quiz = widget.offlineQuiz;
-    final percentage = (_score / quiz.questions.length * 100).round();
+    final percentage = (_score / _order.length * 100).round();
+    final wrongCount = _order.length - _score;
     final Color gradeColor;
     final String gradeText;
     final IconData gradeIcon;
@@ -508,7 +673,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
             const SizedBox(height: 8),
             Text('You scored',
                 style: GoogleFonts.nunito(color: Colors.white70, fontSize: 16)),
-            Text('$_score / ${quiz.questions.length}',
+            Text('$_score / ${_order.length}',
                 style: GoogleFonts.nunito(
                     color: Colors.white,
                     fontSize: 48,
@@ -538,12 +703,57 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
             const SizedBox(height: 16),
             _buildSummaryRow('Topic', widget.topic),
             _buildSummaryRow('Difficulty', quiz.difficulty),
-            _buildSummaryRow('Questions', '${quiz.questions.length}'),
+            _buildSummaryRow('Questions', '${_order.length}'),
             _buildSummaryRow('Correct', '$_score'),
-            _buildSummaryRow('Incorrect', '${quiz.questions.length - _score}'),
+            _buildSummaryRow('Incorrect', '$wrongCount'),
           ]),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        // Secondary actions — Review answers / Share / Retry wrong only
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          alignment: WrapAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _showReviewSheet(theme, isDark),
+              icon: const Icon(CupertinoIcons.list_bullet, size: 16),
+              label: const Text('Review answers'),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _shareResult,
+              icon: const Icon(CupertinoIcons.share, size: 16),
+              label: const Text('Share result'),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            if (wrongCount > 0)
+              OutlinedButton.icon(
+                onPressed: _retryWrongOnly,
+                icon: const Icon(CupertinoIcons.refresh_bold, size: 16),
+                label: Text('Retry $wrongCount wrong'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange.shade700,
+                  side: BorderSide(color: Colors.orange.shade300),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
         Row(children: [
           Expanded(
               child: OutlinedButton(
@@ -574,6 +784,190 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
           )),
         ]),
       ]),
+    );
+  }
+
+  /// Bottom-sheet that walks the user through each question with their
+  /// answer vs the correct answer highlighted.
+  Future<void> _showReviewSheet(ThemeData theme, bool isDark) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (ctx, scrollController) {
+            return Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    Icon(CupertinoIcons.list_bullet,
+                        color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Text('Review answers',
+                        style: GoogleFonts.nunito(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded)),
+                  ]),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: _order.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, i) {
+                      final q =
+                          widget.offlineQuiz.questions[_order[i]];
+                      final userIdx = _userAnswers[i];
+                      final isCorrect =
+                          userIdx != null && userIdx == q.correctIndex;
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color:
+                              isDark ? Colors.grey[850] : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: (isCorrect
+                                      ? Colors.green
+                                      : Colors.red)
+                                  .withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Icon(
+                                  isCorrect
+                                      ? Icons.check_circle
+                                      : Icons.cancel,
+                                  color: isCorrect
+                                      ? Colors.green
+                                      : Colors.red,
+                                  size: 18),
+                              const SizedBox(width: 6),
+                              Text('Q${i + 1}',
+                                  style: GoogleFonts.nunito(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                      fontSize: 13)),
+                            ]),
+                            const SizedBox(height: 8),
+                            Text(q.questionText,
+                                style: GoogleFonts.nunito(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3)),
+                            const SizedBox(height: 10),
+                            ...List.generate(q.options.length, (oi) {
+                              final isAnswer = oi == q.correctIndex;
+                              final isUserPick =
+                                  userIdx != null && userIdx == oi;
+                              Color? bg;
+                              Color? border;
+                              if (isAnswer) {
+                                bg = Colors.green.withValues(alpha: 0.1);
+                                border = Colors.green;
+                              } else if (isUserPick) {
+                                bg = Colors.red.withValues(alpha: 0.1);
+                                border = Colors.red;
+                              }
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: border != null
+                                      ? Border.all(color: border)
+                                      : null,
+                                ),
+                                child: Row(children: [
+                                  Text(
+                                      '${String.fromCharCode(65 + oi)}. ',
+                                      style: GoogleFonts.nunito(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13)),
+                                  Expanded(
+                                      child: Text(q.options[oi],
+                                          style: GoogleFonts.nunito(
+                                              fontSize: 14))),
+                                  if (isAnswer)
+                                    const Icon(Icons.check,
+                                        color: Colors.green, size: 16)
+                                  else if (isUserPick)
+                                    const Icon(Icons.close,
+                                        color: Colors.red, size: 16),
+                                ]),
+                              );
+                            }),
+                            if (userIdx == null || userIdx == -1)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text('Not answered',
+                                    style: GoogleFonts.nunito(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic)),
+                              ),
+                            if (q.explanation.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.blue.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.lightbulb_outline,
+                                          color: Colors.blue, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                          child: Text(q.explanation,
+                                              style: GoogleFonts.nunito(
+                                                  fontSize: 13,
+                                                  color: Colors.blue[900],
+                                                  height: 1.3))),
+                                    ]),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

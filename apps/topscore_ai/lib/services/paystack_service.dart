@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import 'auth_headers.dart';
 
 /// Response from POST /paystack/initialize
@@ -69,7 +69,7 @@ class PaystackService {
     String currency = "KES",
     String? callbackUrl,
   }) async {
-    final url = Uri.parse(ApiConfig.paystackInitialize);
+    final url = Uri.parse(AppConfig.paystackInitialize);
 
     try {
       final body = <String, dynamic>{
@@ -105,7 +105,7 @@ class PaystackService {
   /// GET /paystack/verify/{reference}
   /// Verifies a transaction by reference after checkout redirect.
   Future<PaystackVerifyResult> verifyTransaction(String reference) async {
-    final url = Uri.parse('${ApiConfig.paystackVerify}/$reference');
+    final url = Uri.parse('${AppConfig.paystackVerify}/$reference');
 
     try {
       final headers = await AuthHeaders.getHeaders();

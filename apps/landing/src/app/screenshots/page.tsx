@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import Screenshots from '@/components/Screenshots';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'App Preview',
@@ -24,7 +23,6 @@ export default function ScreenshotsPage() {
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32 pb-20">
-                <Breadcrumbs items={[{ label: 'Screenshots' }]} />
                 <div className="text-center mb-16">
                     <h1 className="text-4xl md:text-5xl font-bold mb-6">Designed for <span className="text-primary">Excellence</span></h1>
                     <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">

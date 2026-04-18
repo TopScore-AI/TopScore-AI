@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="font-size: 20px; color: #0f172a; margin-top: 0;">Payment Confirmed! 🚀</h2>
+
+<p>Hello,</p>
+<p>Success! We've received your payment of <strong>KES {{ amount }}</strong> for the <strong>{{ plan_name }}</strong> plan. Your TopScore Premium benefits are now active.</p>
+
+<div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 20px; margin: 24px 0;">
+    <p style="margin: 0; color: #166534; font-weight: 600;">Full Premium Access Granted</p>
+    <p style="margin: 8px 0 0 0; color: #166534; font-size: 14px;">Your subscription is valid until: <strong>{{ expiry_date }}</strong></p>
+</div>
+
+<p>You now have unlimited access to:</p>
+<ul style="padding-left: 20px; margin-bottom: 24px;">
+    <li>Unlimited AI Tutor sessions & document chat.</li>
+    <li>Pro Composition Grading with detailed feedback.</li>
+    <li>Full Resource Library (CBC, KCSE, IGCSE).</li>
+    <li>Offline learning & offline document viewing.</li>
+</ul>
+
+<div style="text-align: center;">
+    <a href="https://topscoreapp.ai/library" class="button">Start Learning Now</a>
+</div>
+
+<p style="margin-top: 32px; font-size: 14px; color: #64748b;">Transaction Reference: {{ reference }}</p>
+
+<p>Best regards,<br><strong>TopScore AI Payments</strong></p>
+{% endblock %}

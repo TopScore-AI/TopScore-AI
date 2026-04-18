@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/painting.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 
 /// Result from media picking operations
@@ -23,7 +24,8 @@ class MediaPickResult {
   });
 
   String? get base64Data => bytes != null ? base64Encode(bytes!) : null;
-  String? get dataUri => bytes != null ? 'data:$mimeType;base64,${base64Encode(bytes!)}' : null;
+  String? get dataUri =>
+      bytes != null ? 'data:$mimeType;base64,${base64Encode(bytes!)}' : null;
 }
 
 /// Shared media picker service for images and files
@@ -50,7 +52,7 @@ class MediaPickerService {
         final List<XFile> pickedFiles = await _imagePicker.pickMultiImage(
           imageQuality: 85,
         );
-        
+
         List<MediaPickResult> results = [];
         for (var file in pickedFiles) {
           final res = await _processXFile(file);
@@ -70,7 +72,8 @@ class MediaPickerService {
         }
       }
     } catch (e) {
-      developer.log('Error picking image: $e', name: 'MediaPickerService', level: 900);
+      developer.log('Error picking image: $e',
+          name: 'MediaPickerService', level: 900);
     }
     return [];
   }
@@ -78,14 +81,21 @@ class MediaPickerService {
   Future<List<MediaPickResult>> pickFiles({
     List<String>? allowedExtensions,
     bool allowMultiple = false,
-    bool withData = false, // Allow forcing data load on mobile (e.g. for AI tools)
+    bool withData =
+        false, // Allow forcing data load on mobile (e.g. for AI tools)
   }) async {
     _clearMemory();
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: allowedExtensions != null ? FileType.custom : FileType.any,
         allowedExtensions: allowedExtensions,
-        withData: kIsWeb || withData, 
+        // Always load bytes on Android: the activity can be killed while the
+        // system file picker is open, and the temp file path becomes invalid
+        // after relaunch. Bytes survive in memory and are returned via
+        // FilePicker's own lost-data mechanism.
+        withData: kIsWeb ||
+            withData ||
+            (!kIsWeb && defaultTargetPlatform == TargetPlatform.android),
         allowMultiple: allowMultiple,
       );
 
@@ -94,7 +104,7 @@ class MediaPickerService {
         for (var file in result.files) {
           final extension = file.extension?.toLowerCase() ?? '';
           final mimeType = _getMimeType(extension);
-          
+
           results.add(MediaPickResult(
             bytes: file.bytes,
             name: file.name,
@@ -106,7 +116,8 @@ class MediaPickerService {
         return results;
       }
     } catch (e) {
-      developer.log('Error picking file: $e', name: 'MediaPickerService', level: 900);
+      developer.log('Error picking file: $e',
+          name: 'MediaPickerService', level: 900);
     }
     return [];
   }
@@ -127,16 +138,25 @@ class MediaPickerService {
 
   String _getMimeType(String extension) {
     switch (extension) {
-      case 'pdf': return 'application/pdf';
-      case 'doc': return 'application/msword';
-      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'txt': return 'text/plain';
-      case 'csv': return 'text/csv';
-      case 'md': return 'text/markdown';
-      case 'png': return 'image/png';
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt':
+        return 'text/plain';
+      case 'csv':
+        return 'text/csv';
+      case 'md':
+        return 'text/markdown';
+      case 'png':
+        return 'image/png';
       case 'jpg':
-      case 'jpeg': return 'image/jpeg';
-      default: return 'application/octet-stream';
+      case 'jpeg':
+        return 'image/jpeg';
+      default:
+        return 'application/octet-stream';
     }
   }
 }

@@ -7,7 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart' as gsis;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -212,7 +212,7 @@ class AuthService {
     try {
       final idToken = await currentUser!.getIdToken();
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications/register-token'),
+        Uri.parse('${AppConfig.backendBaseUrl}/notifications/register-token'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $idToken',
@@ -233,7 +233,7 @@ class AuthService {
     try {
       final idToken = await currentUser!.getIdToken();
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/api/history/transfer'),
+        Uri.parse('${AppConfig.backendBaseUrl}/api/history/transfer'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $idToken',

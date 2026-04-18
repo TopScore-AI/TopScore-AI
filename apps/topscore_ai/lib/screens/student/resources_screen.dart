@@ -11,7 +11,6 @@ import '../../config/app_theme.dart';
 import '../../constants/colors.dart';
 import '../../widgets/resources/resource_file_card.dart';
 import '../../widgets/resources/resource_states.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 class ResourcesScreen extends StatefulWidget {
   const ResourcesScreen({super.key});
@@ -29,17 +28,14 @@ class _ResourcesScreenState extends State<ResourcesScreen>
     'All Files',
     'CBC Files',
     'IGCSE Files',
-    'Notes',
-    'Lesson Plans',
-    'Schemes Of Work',
     '844 Files',
+    'Revision Kits',
   ];
 
 
   @override
   void initState() {
     super.initState();
-    FlutterNativeSplash.remove();
     _tabController = TabController(length: _categories.length, vsync: this);
     _tabController.addListener(_handleTabChange);
 

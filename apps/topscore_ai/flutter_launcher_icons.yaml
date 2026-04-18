@@ -1,7 +1,7 @@
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/images/topscore_logo.png"
+  image_path: "assets/images/topscore_logo_transparent.png"
   min_sdk_android: 21 # android min sdk min:16, default:21
   web:
     generate: true
@@ -9,4 +9,6 @@ flutter_launcher_icons:
     background_color: "#ffffff"
     theme_color: "#2563EB"
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/images/topscore_logo.png"
+  adaptive_icon_foreground: "assets/images/topscore_logo_transparent.png"
+  adaptive_icon_monochrome: "assets/images/topscore_logo_transparent.png"
+  remove_alpha_ios: true

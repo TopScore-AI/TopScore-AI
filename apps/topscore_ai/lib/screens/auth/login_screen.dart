@@ -51,153 +51,138 @@ class _LoginScreenState extends State<LoginScreen> {
     final isLoading = Provider.of<AuthProvider>(context).isLoading;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          color: Colors.black, // Fallback color
-          image: DecorationImage(
-            image: const AssetImage('assets/images/auth_background.png'),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black.withValues(alpha: 0.4),
-              BlendMode.darken,
-            ),
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ScrollConfiguration(
-              behavior:
-                  ScrollConfiguration.of(context).copyWith(scrollbars: false),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(
-                  left: 24.0,
-                  right: 24.0,
-                  top: 16.0,
-                  bottom: 80.0,
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Logo Section
-                      _buildLogoSection(theme),
-                      const SizedBox(height: 24),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Center(
+          child: ScrollConfiguration(
+            behavior:
+                ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(
+                left: 24.0,
+                right: 24.0,
+                top: 16.0,
+                bottom: 80.0,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Logo Section
+                    _buildLogoSection(theme),
+                    const SizedBox(height: 24),
 
-                      // Login Form Card
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: isDark 
-                              ? Colors.black.withValues(alpha: 0.6) 
-                              : Colors.white.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
+                    // Login Form Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                            blurRadius: 30,
+                            offset: const Offset(0, 10),
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              _isRegister ? "Create Account" : "Welcome Back",
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: isDark ? Colors.white : AppColors.edupoaBlue,
-                                letterSpacing: -0.5,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              "Sign in to continue learning",
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.hintColor,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Google Sign In Button
-                            _buildGoogleButton(context, theme, isLoading),
-
-                            const SizedBox(height: 12),
-
-                            // Divider with "or"
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: theme.dividerColor.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: Text(
-                                    'or',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.hintColor,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Divider(
-                                    color: theme.dividerColor.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            _buildEmailPasswordForm(context, theme, isLoading),
-                          ],
+                        ],
+                        border: Border.all(
+                          color: theme.dividerColor.withValues(alpha: isDark ? 0.1 : 0.5),
                         ),
                       ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            _isRegister ? "Create Account" : "Welcome Back",
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Sign in to continue learning",
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.hintColor,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
 
-                      // ── Guest mode CTA ──────────────────────────────
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: () {
-                          Provider.of<AuthProvider>(context, listen: false)
-                              .enterGuestMode();
-                          context.go('/guest-welcome');
-                        },
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(color: theme.hintColor),
+                          // Google Sign In Button
+                          _buildGoogleButton(context, theme, isLoading),
+
+                          const SizedBox(height: 12),
+
+                          // Divider with "or"
+                          Row(
                             children: [
-                              const TextSpan(text: 'Have a problem due now? '),
-                              TextSpan(
-                                text: 'Solve it first →',
-                                style: TextStyle(
-                                  color: theme.primaryColor,
-                                  fontWeight: FontWeight.w600,
+                              Expanded(
+                                child: Divider(
+                                  color: theme.dividerColor.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Text(
+                                  'or',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.hintColor,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: theme.dividerColor.withValues(
+                                    alpha: 0.3,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
+
+                          const SizedBox(height: 12),
+
+                          _buildEmailPasswordForm(context, theme, isLoading),
+                        ],
+                      ),
+                    ),
+
+                    // ── Guest mode CTA ──────────────────────────────
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () {
+                        Provider.of<AuthProvider>(context, listen: false)
+                            .enterGuestMode();
+                        context.go('/guest-welcome');
+                      },
+                      child: RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: theme.hintColor),
+                          children: [
+                            const TextSpan(text: 'Have a problem due now? '),
+                            TextSpan(
+                              text: 'Solve it first →',
+                              style: TextStyle(
+                                color: theme.primaryColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -211,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Hero(
       tag: 'app_logo',
       child: Image.asset(
-        'assets/images/topscore_logo.png', // Main logo without padding for UI
+        'assets/images/logo.png', // Main logo without padding for UI
         height: 100,
         fit: BoxFit.contain,
       ),

@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import Pricing from '@/components/Pricing';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'Pricing',
@@ -37,7 +36,6 @@ export default function PricingPage() {
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32">
-                <Breadcrumbs items={[{ label: 'Pricing' }]} />
                 <Pricing />
             </div>
             <Footer />

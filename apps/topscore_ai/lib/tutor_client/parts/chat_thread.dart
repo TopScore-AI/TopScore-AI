@@ -34,7 +34,7 @@ extension ChatControllerThread on ChatController {
         // Fetch messages from backend API
         try {
           final response = await http.get(
-            Uri.parse('${ApiConfig.baseUrl}/api/chat/$threadId'),
+            Uri.parse('${AppConfig.backendBaseUrl}/api/chat/$threadId'),
             headers: await AuthHeaders.getHeaders(),
           );
           

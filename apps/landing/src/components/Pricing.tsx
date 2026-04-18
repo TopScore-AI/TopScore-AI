@@ -13,7 +13,7 @@ const plans: { idx: number; featured: boolean }[] = [
 
 export default function Pricing() {
     const { t } = useLocale();
-    const [period, setPeriod] = useState<'monthly' | 'annual'>('monthly');
+    const [period, setPeriod] = useState<'monthly' | 'weekly'>('weekly');
 
     return (
         <section id="pricing" className={styles.wrapper}>
@@ -29,16 +29,16 @@ export default function Pricing() {
 
                     <div className={styles.toggle}>
                         <div 
+                            className={`${styles.toggleLabel} ${period === 'weekly' ? styles.toggleActive : ''}`}
+                            onClick={() => setPeriod('weekly')}
+                        >
+                            {t('pricing.weekly')}
+                        </div>
+                        <div 
                             className={`${styles.toggleLabel} ${period === 'monthly' ? styles.toggleActive : ''}`}
                             onClick={() => setPeriod('monthly')}
                         >
                             {t('pricing.monthly')}
-                        </div>
-                        <div 
-                            className={`${styles.toggleLabel} ${period === 'annual' ? styles.toggleActive : ''}`}
-                            onClick={() => setPeriod('annual')}
-                        >
-                            {t('pricing.annual')}
                             <span className={styles.save}>{t('pricing.save')}</span>
                         </div>
                     </div>
@@ -47,7 +47,7 @@ export default function Pricing() {
                 <div className={styles.grid}>
                     {plans.map((p, i) => {
                         const nameKey = `pricing.${p.idx}.name` as TranslationKey;
-                        const priceKey = (period === 'monthly' ? `pricing.${p.idx}.priceMonthly` : `pricing.${p.idx}.priceAnnual`) as TranslationKey;
+                        const priceKey = (period === 'monthly' ? `pricing.${p.idx}.priceMonthly` : `pricing.${p.idx}.priceWeekly`) as TranslationKey;
                         const periodLabelKey = `pricing.${p.idx}.period` as TranslationKey;
                         const ctaKey = `pricing.${p.idx}.cta` as TranslationKey;
                         const featuresKey = `pricing.${p.idx}.features` as TranslationKey;
@@ -63,7 +63,7 @@ export default function Pricing() {
                                     <h3 className={styles.planName}>{t(nameKey)}</h3>
                                     <div className={styles.price}>
                                         {t(priceKey)}
-                                        <span className={styles.period}>/{period === 'monthly' ? t('pricing.mo' as any) : t('pricing.yr' as any)}</span>
+                                        <span className={styles.period}>/{period === 'monthly' ? t('pricing.mo' as any) : t('pricing.wk' as any)}</span>
                                     </div>
                                     <ul className={styles.features}>
                                         {t(featuresKey).split('|').map((f: string) => (

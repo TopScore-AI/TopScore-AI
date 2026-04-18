@@ -45,9 +45,10 @@ import '../services/auth_headers.dart';
 import '../utils/text_utils.dart';
 import '../services/recovery_service.dart';
 import '../router.dart' as app_router;
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import 'message_model.dart';
 import 'enhanced_websocket_service.dart';
+import 'connection_manager.dart' as cm;
 import 'utils/audio_input.dart';
 import 'utils/audio_output.dart';
 import 'utils/video_input.dart';
@@ -146,6 +147,7 @@ class ChatController extends ChangeNotifier {
   Timer? _appVisionTimer;
   bool videoIsInitialized = false;
   bool liveStopRequested = false;
+  bool isStoppingVoiceMode = false;
   final StreamController<wf.Amplitude> _aiAmplitudeController = StreamController<wf.Amplitude>.broadcast();
   bool _isPlayingAudio = false;
   String? _playingAudioMessageId;
@@ -156,6 +158,7 @@ class ChatController extends ChangeNotifier {
   bool _isTtsPaused = false;
   String? _liveVoiceErrorMessage;
   ChatMessage? _lastVisualMessage; // The most recent rich/visual message received during voice mode
+  final List<Map<String, dynamic>> _xpAwards = []; // Active XP awards to show as overlays
 
   // Attachment state
   bool _isUploading = false;
@@ -193,8 +196,10 @@ class ChatController extends ChangeNotifier {
   StreamSubscription? _liveGeminiEventSubscription;
   Timer? _typingTimer;
   Timer? _silenceTimer;
+  Timer? _inactivityTimer;
   Timer? _transcriptionDebounce;
   DateTime? _voiceSessionStartTime;
+  bool _isSystemNudgeTurn = false;
 
   // --- GETTERS ---
   List<ChatMessage> get messages => _messages;
@@ -220,6 +225,10 @@ class ChatController extends ChangeNotifier {
   double get aiAmplitude => 0.0; 
   Stream<wf.Amplitude> get aiAmplitudeStream => _aiAmplitudeController.stream;
   EnhancedWebSocketService? get wsServiceOrNull => _wsService;
+  bool get isOnline => _wsService.hasInternet && _wsService.isConnected;
+  bool get hasInternet => _wsService.hasInternet;
+  Stream<cm.ConnectionState> get connectionStateStream => _wsService.connectionStateStream;
+  cm.ConnectionState get connectionState => _wsService.connectionState;
 
   bool get isLoadingHistory => _isLoadingHistory;
   bool get isLoadingMessages => _isLoadingMessages;
@@ -242,6 +251,7 @@ class ChatController extends ChangeNotifier {
   String get historySearchQuery => _historySearchQuery;
   String? get liveVoiceErrorMessage => _liveVoiceErrorMessage;
   ChatMessage? get lastVisualMessage => _lastVisualMessage;
+  List<Map<String, dynamic>> get xpAwards => _xpAwards;
   bool get dismissedPersistenceBanner => _dismissedPersistenceBanner;
 
   void dismissPersistenceBanner() {
@@ -249,7 +259,14 @@ class ChatController extends ChangeNotifier {
     notify();
   }
 
-
+  void reset() {
+    _messages.clear();
+    _wsService.setThreadId(const Uuid().v4());
+    _currentStreamingMessageId = null;
+    _isTyping = false;
+    _currentAiStatus = null;
+    notify();
+  }
 
   void clearVisualMessage() {
     _lastVisualMessage = null;
@@ -336,7 +353,13 @@ class ChatController extends ChangeNotifier {
         finalizeTurn(null);
         addSystemMessage('Connection lost. Retrying...');
       }
+      // Notify so UI (send-button/offline icon/banner) updates.
+      notify();
     });
+
+    // Drive the offline banner / send-button disable off the richer state
+    // (connecting / reconnecting / offline / disconnected / connected).
+    _wsService.connectionStateStream.listen((_) => notify());
 
     if (chatThread != null) {
       loadThread(chatThread!['thread_id']);
@@ -509,6 +532,24 @@ class ChatController extends ChangeNotifier {
       developer.log('Error attaching file from path: $e', name: 'ChatController');
     }
   }
+
+  void addXpAward(int amount, String reason) {
+    final award = {
+      'id': const Uuid().v4(),
+      'amount': amount,
+      'reason': reason,
+      'timestamp': DateTime.now(),
+    };
+    _xpAwards.add(award);
+    notify();
+
+    // Auto-dismiss after 4 seconds
+    Timer(const Duration(seconds: 4), () {
+      _xpAwards.removeWhere((a) => a['id'] == award['id']);
+      notify();
+    });
+  }
+
 
   @override
   void dispose() {

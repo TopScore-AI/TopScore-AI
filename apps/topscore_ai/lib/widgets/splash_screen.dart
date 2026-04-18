@@ -41,7 +41,7 @@ class SplashScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Image.asset(
-                  'assets/images/topscore_logo.png',
+                  'assets/images/logo.png',
                   width: 160,
                   height: 160,
                 )

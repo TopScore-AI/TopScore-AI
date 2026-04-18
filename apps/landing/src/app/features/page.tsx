@@ -6,7 +6,6 @@ import CompositionShowcase from '@/components/CompositionShowcase';
 import Personalization from '@/components/Personalization';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const metadata: Metadata = {
     title: 'Features',
@@ -40,7 +39,6 @@ export default function FeaturesPage() {
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32 space-y-24 pb-20">
-                <Breadcrumbs items={[{ label: 'Features' }]} />
                 <Features />
                 <ActiveVoiceShowcase />
                 <Personalization />

@@ -75,4 +75,34 @@ class NotificationService {
   Future<void> cancelNotification(int id) async {
     await _localNotifications.cancel(id);
   }
+
+  /// Displays a local notification immediately.
+  /// Uses the app icon (@mipmap/ic_launcher) by default.
+  Future<void> showNotification({
+    int id = 0,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'high_importance_channel',
+      'High Importance Notifications',
+      channelDescription: 'This channel is used for important notifications.',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+    );
+
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+
+    await _localNotifications.show(id, title, body, details, payload: payload);
+  }
 }

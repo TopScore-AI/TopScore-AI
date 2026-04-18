@@ -5,7 +5,7 @@ import '../utils/cors_proxy_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../config/api_config.dart';
+import '../config/app_config.dart';
 import 'interactive_desmos_graph.dart';
 
 class GraphArtifactWidget extends StatefulWidget {
@@ -59,7 +59,7 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
     
     // Resolve relative URLs from backend
     if (imageUrl != null && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
-      final base = ApiConfig.baseUrl;
+      final base = AppConfig.backendBaseUrl;
       imageUrl = base + (imageUrl.startsWith('/') ? '' : '/') + imageUrl;
     }
 

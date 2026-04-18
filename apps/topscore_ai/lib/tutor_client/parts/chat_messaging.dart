@@ -740,6 +740,26 @@ extension ChatControllerMessaging on ChatController {
   Future<void> sendUserMessage(BuildContext context, {String? text, List<ChatAttachmentMetadata>? attachments, String? messageId}) async {
     final authProvider = context.read<AuthProvider>();
 
+    // --- OFFLINE GUARD: Block sending when not connected ---
+    if (!isOnline) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              Icon(CupertinoIcons.wifi_slash, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Expanded(child: Text("You're offline. Reconnect to send.")),
+            ],
+          ),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     // --- GUEST LIMIT: Per-thread count enforcement ---
     if (authProvider.isGuestMode) {
       final userMessageCount = _messages.where((m) => m.isUser).length;
@@ -909,10 +929,65 @@ extension ChatControllerMessaging on ChatController {
       final idx = _messages.indexWhere((m) => m.id == pendingId);
       if (idx != -1) {
         _messages[idx] = _messages[idx].copyWith(status: MessageStatus.error);
-        notify();
       }
-      addSystemMessage('Failed to send: $e');
+      // Clean up the AI thinking placeholder so the user doesn't see a hung
+      // "thinking" bubble under a failed message.
+      _messages.removeWhere((m) => m.isThinking && m.isTemporary);
+      _currentStreamingMessageId = null;
+      _isTyping = false;
+      _currentAiStatus = null;
+      notify();
+      if (context.mounted) {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.showSnackBar(
+          SnackBar(
+            content: const Text('Message failed to send. Tap the message to retry.'),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
+  }
+
+  /// Retry sending a user message that previously failed (status == error).
+  /// Restores it to pending and calls the send pipeline again with the same id.
+  Future<void> retryFailedMessage(BuildContext context, ChatMessage message) async {
+    if (!message.isUser) return;
+    if (!isOnline) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text("Still offline — can't retry yet."),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    final idx = _messages.indexWhere((m) => m.id == message.id);
+    if (idx == -1) return;
+
+    // Remove any trailing thinking/AI placeholder that may have been left behind
+    final trailing = _messages.sublist(idx + 1);
+    for (final m in trailing) {
+      if (m.isTemporary || m.isThinking) {
+        _isarService.deleteMessage(m.id).catchError((e) => developer.log('Isar Delete Error: $e'));
+      }
+    }
+    _messages.removeRange(idx + 1, _messages.length);
+    // Reset this one to pending
+    _messages[idx] = _messages[idx].copyWith(status: MessageStatus.pending);
+    _messages.removeAt(idx);
+    notify();
+
+    await sendUserMessage(
+      context,
+      text: message.text,
+      attachments: message.attachments,
+      messageId: message.id,
+    );
   }
 
   void handleUserEdit(BuildContext context, ChatMessage message) {
