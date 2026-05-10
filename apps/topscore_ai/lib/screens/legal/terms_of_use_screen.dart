@@ -15,7 +15,7 @@ class TermsOfUseScreen extends StatelessWidget {
           "Terms of Use",
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : Colors.black,
+            color: isDark ? Colors.white : AppColors.text,
           ),
         ),
         backgroundColor: Colors.transparent,
@@ -23,7 +23,7 @@ class TermsOfUseScreen extends StatelessWidget {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios,
-            color: isDark ? Colors.white : Colors.black,
+            color: isDark ? Colors.white : AppColors.text,
           ),
           onPressed: () => Navigator.pop(context),
         ),

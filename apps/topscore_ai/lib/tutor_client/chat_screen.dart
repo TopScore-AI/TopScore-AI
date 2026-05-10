@@ -1,25 +1,28 @@
 // Removed dart:io import to ensure Web compatibility
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../constants/colors.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:typed_data';
-
+import 'package:shimmer/shimmer.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/ai_tutor_history_provider.dart';
+import '../services/recovery_service.dart';
 import 'message_model.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_history_sidebar.dart';
 import 'widgets/empty_state_widget.dart';
 import '../widgets/glass_card.dart';
+import '../providers/tutor_connection_provider.dart';
+import '../widgets/trial_completed_overlay.dart';
 
 import 'chat_controller.dart';
-import 'connection_manager.dart' as cm;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:topscore_ai/tutor_client/connection_manager.dart' as cm;
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? chatThread;
@@ -59,9 +62,54 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = Provider.of<ChatController>(context, listen: false);
-      final historyProvider = Provider.of<AiTutorHistoryProvider>(context, listen: false);
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final tutorConn =
+          Provider.of<TutorConnectionProvider>(context, listen: false);
+
       controller.setHistoryProvider(historyProvider);
+
+      final wsService = tutorConn.wsService;
+      if (wsService != null) {
+        wsService.userName = authProvider.userModel?.preferredName ??
+            authProvider.userModel?.displayName;
+        controller.init(wsService);
+      }
+
+      // Re-init if service changes (e.g. Guest -> Auth upgrade)
+      tutorConn.addListener(() {
+        if (!mounted) return;
+        final newWs = tutorConn.wsService;
+        if (newWs != null && newWs != controller.wsServiceOrNull) {
+          if (kDebugMode) {
+            debugPrint(
+                '[ChatScreen] WebSocket service replaced, re-initializing controller');
+          }
+          newWs.userName = authProvider.userModel?.preferredName ??
+              authProvider.userModel?.displayName;
+          controller.init(newWs);
+        }
+      });
+
+      // Listen for limit reached events and show popup dialog
+      controller.limitReached.addListener(() {
+        if (controller.limitReached.value != null) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => TrialCompletedOverlay(
+                requiresAccount: authProvider.userModel == null,
+              ),
+            ).then((_) {
+              // Clear the limit so it can be triggered again if needed
+              controller.limitReached.value = null;
+            });
+          }
+        }
+      });
+
       final userId = authProvider.userModel?.uid;
 
       final threadId = widget.chatThread?['thread_id']?.toString();
@@ -72,17 +120,39 @@ class _ChatScreenState extends State<ChatScreen> {
           userId: userId,
         );
       }
-      
+
       // Handle initial resources (e.g. from PDF Snap & Solve)
-      if (widget.initialImage != null || widget.initialMessage != null || widget.initialInputText != null) {
+      if (widget.initialImage != null ||
+          widget.initialMessage != null ||
+          widget.initialInputText != null ||
+          widget.initialFileUrl != null ||
+          widget.initialFileBytes != null) {
         controller.handleInitialResources(
           image: widget.initialImage,
           text: widget.initialInputText ?? widget.initialMessage,
+          fileUrl: widget.initialFileUrl,
+          fileName: widget.initialFileName,
+          fileType: widget.initialFileType,
+          fileBytes: widget.initialFileBytes,
         );
+
+        // AUTO-SEND: If an initial message is provided (e.g. from Summarize/Flashcards)
+        // and it's not a voice-mode request, send it immediately for instant feedback.
+        if (widget.initialMessage != null && !widget.startVoice) {
+          // Use a small delay to ensure the UI has registered the handleInitialResources notify()
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              controller.sendUserMessage(context);
+            }
+          });
+        }
       }
 
-      // THE LIFELINE: Check for recovered images from Background Kill
-      controller.recoverLostImageIfKilled();
+      // THE LIFELINE: Check for recovered images from Background Kill routed from main.dart
+      if (RecoveryService.recoveredFile != null) {
+        controller.handleInitialResources(image: RecoveryService.recoveredFile);
+        RecoveryService.recoveredFile = null; // consume it
+      }
 
       // Auto-start Live Voice when the caller requested it (e.g. the PDF
       // viewer's "Live Voice" shortcut). Pre-warming audio on the same user
@@ -99,19 +169,31 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void didUpdateWidget(covariant ChatScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     final oldThreadId = oldWidget.chatThread?['thread_id']?.toString();
     final newThreadId = widget.chatThread?['thread_id']?.toString();
 
     if (newThreadId != null && newThreadId != oldThreadId) {
       final controller = Provider.of<ChatController>(context, listen: false);
-      final historyProvider = Provider.of<AiTutorHistoryProvider>(context, listen: false);
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
+
       controller.loadThread(
         newThreadId,
         historyProvider: historyProvider,
         userId: authProvider.userModel?.uid,
+      );
+    }
+
+    // Handle updates to initial resources (e.g. if a URL resolves after the sheet is opened)
+    if (widget.initialFileUrl != oldWidget.initialFileUrl &&
+        widget.initialFileUrl != null) {
+      final controller = Provider.of<ChatController>(context, listen: false);
+      controller.handleInitialResources(
+        fileUrl: widget.initialFileUrl,
+        fileName: widget.initialFileName,
+        fileType: widget.initialFileType,
       );
     }
   }
@@ -123,9 +205,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final controller = context.watch<ChatController>();
 
     if (widget.isEmbedded) {
-      return Container(
-        color: isDark ? const Color(0xFF000000) : theme.scaffoldBackgroundColor,
-        child: _ChatScreenView(controller: controller, theme: theme, isDark: isDark),
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: _ChatScreenView(
+            controller: controller, theme: theme, isDark: isDark),
       );
     }
 
@@ -134,27 +217,12 @@ class _ChatScreenState extends State<ChatScreen> {
         final isDesktop = constraints.maxWidth > 700;
         return Scaffold(
           key: controller.scaffoldKey,
-          backgroundColor: Colors.transparent,
+          backgroundColor: theme.scaffoldBackgroundColor,
           extendBodyBehindAppBar: true,
           drawer: _buildMobileDrawer(context, controller, theme, isDark),
           appBar: _buildAppBar(context, controller, theme, isDark, isDesktop),
-          body: Container(
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF000000)
-                  : theme.scaffoldBackgroundColor,
-              gradient: isDark
-                  ? RadialGradient(
-                      center: Alignment.topCenter,
-                      radius: 2.5,
-                      colors: [const Color(0xFF1E293B), theme.scaffoldBackgroundColor],
-                      stops: [0.0, 1.0],
-                    )
-                  : null,
-            ),
-            child: SafeArea(
-                child: _ChatScreenView(controller: controller, theme: theme, isDark: isDark)),
-          ),
+          body: _ChatScreenView(
+              controller: controller, theme: theme, isDark: isDark),
         );
       },
     );
@@ -165,12 +233,17 @@ class _ChatScreenState extends State<ChatScreen> {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
       centerTitle: true,
-      leading: IconButton(
-        icon: Icon(CupertinoIcons.line_horizontal_3,
-            color: theme.colorScheme.primary),
-        onPressed: () => controller.toggleSidebar(),
-      ),
+      leading: context.canPop()
+          ? BackButton(color: theme.colorScheme.primary)
+          : IconButton(
+              icon: Icon(CupertinoIcons.line_horizontal_3,
+                  color: theme.colorScheme.primary),
+              onPressed: () => controller.toggleSidebar(),
+            ),
+
       title: Text(
         controller.stripMarkdown(controller.currentTitle),
         maxLines: 1,
@@ -210,12 +283,18 @@ class _ChatScreenState extends State<ChatScreen> {
         onCloseSidebar: () => Navigator.pop(context),
         onStartNewChat: ({bool closeDrawer = true}) =>
             controller.startNewChat(closeDrawer: closeDrawer),
-        onLoadThread: (id) => controller.loadThread(
-          id,
-          historyProvider: historyProvider,
-          userId: Provider.of<AuthProvider>(context, listen: false).userModel?.uid,
-        ),
-        onRenameThread: (id, title) => controller.showRenameDialog(context, id, title),
+        onLoadThread: (id) {
+          controller.loadThread(
+            id,
+            historyProvider: historyProvider,
+            userId: Provider.of<AuthProvider>(context, listen: false)
+                .userModel
+                ?.uid,
+          );
+          Navigator.pop(context); // Close drawer after selection
+        },
+        onRenameThread: (id, title) =>
+            controller.showRenameDialog(context, id, title),
         onDeleteThread: (id) => controller.confirmDeleteThread(context, id),
         onDeleteAllThreads: () => controller.deleteAllChatHistory(context),
         onFinishLesson: () => controller.showRatingDialog(context),
@@ -240,90 +319,6 @@ class _ChatScreenView extends StatelessWidget {
   Widget build(BuildContext context) {
     return _buildMainChatArea(context);
   }
-  Widget _buildPersistenceBanner(BuildContext context, ChatController controller,
-      ThemeData theme, bool isDark) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
-    // Only show if: Web + Guest + Not Dismissed
-    if (!kIsWeb || !authProvider.isGuestMode || controller.dismissedPersistenceBanner) {
-      return const SizedBox.shrink();
-    }
-
-    return GlassCard(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      opacity: 0.05,
-      borderRadius: 16,
-      border: Border.all(
-        color: Colors.amber.withValues(alpha: isDark ? 0.2 : 0.4),
-        width: 1,
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.warning_amber_rounded, 
-              color: Colors.amber, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Unsaved History',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-                Text(
-                  'Refreshing your browser will clear this chat.',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: theme.hintColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).exitGuestMode();
-              context.go('/login');
-            },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              'Sign Up to Save',
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: theme.primaryColor,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16),
-            onPressed: () => controller.dismissPersistenceBanner(),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            splashRadius: 16,
-            color: theme.hintColor,
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildConnectionBanner(BuildContext context, ChatController controller,
       ThemeData theme, bool isDark) {
@@ -337,7 +332,11 @@ class _ChatScreenView extends StatelessWidget {
         final isReconnecting = state == cm.ConnectionState.reconnecting ||
             state == cm.ConnectionState.connecting;
         final isDisconnected = state == cm.ConnectionState.disconnected;
-        if (state == cm.ConnectionState.connected) {
+
+        // Hide transient connection states to make background persistence feel seamless
+        if (state == cm.ConnectionState.connected ||
+            isReconnecting ||
+            isDisconnected) {
           return const SizedBox.shrink();
         }
         final color = isOfflineNet
@@ -345,7 +344,9 @@ class _ChatScreenView extends StatelessWidget {
             : (isReconnecting ? Colors.amber.shade700 : Colors.grey.shade600);
         final icon = isOfflineNet
             ? CupertinoIcons.wifi_slash
-            : (isReconnecting ? CupertinoIcons.arrow_2_circlepath : CupertinoIcons.exclamationmark_triangle);
+            : (isReconnecting
+                ? CupertinoIcons.arrow_2_circlepath
+                : CupertinoIcons.exclamationmark_triangle);
         final label = isOfflineNet
             ? "You're offline"
             : (isReconnecting
@@ -413,22 +414,18 @@ class _ChatScreenView extends StatelessWidget {
     final controller = this.controller;
     final authProvider = Provider.of<AuthProvider>(context);
 
-    return Center(
-      child: RepaintBoundary(
-        key: controller.appRepaintBoundaryKey,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 850),
+    final content = RepaintBoundary(
+      key: controller.appRepaintBoundaryKey,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 850),
         child: Column(
           children: [
-            _buildPersistenceBanner(context, controller, theme, isDark),
             _buildConnectionBanner(context, controller, theme, isDark),
             Expanded(
               child: Stack(
                 children: [
                   if (controller.isLoadingMessages)
-                    Center(
-                        child: CircularProgressIndicator(
-                            color: theme.primaryColor))
+                    _buildLoadingSkeleton(isDark)
                   else if (controller.messages.isEmpty)
                     EmptyStateWidget(
                       isDark: isDark,
@@ -447,9 +444,15 @@ class _ChatScreenView extends StatelessWidget {
                             .copyWith(scrollbars: false),
                         child: ListView.builder(
                           controller: controller.scrollController,
+                          physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics()),
                           padding: EdgeInsets.only(
-                            left: 20, right: 20, top: 24,
-                            bottom: controller.isVoiceMode ? 160 : 24,
+                            left: 20,
+                            right: 20,
+                            top: MediaQuery.of(context).padding.top +
+                                kToolbarHeight +
+                                16,
+                            bottom: controller.isVoiceMode ? 160 : 20,
                           ),
                           itemCount: controller.messages.length +
                               (controller.isTyping &&
@@ -468,10 +471,13 @@ class _ChatScreenView extends StatelessWidget {
                                   isComplete: false,
                                   isTemporary: true,
                                   timestamp: DateTime.now(),
-                                  threadId: controller.wsServiceOrNull?.threadId ?? '',
+                                  threadId:
+                                      controller.wsServiceOrNull?.threadId ??
+                                          '',
                                 ),
                                 isStreaming: true,
-                                status: controller.currentAiStatus ?? 'Thinking...',
+                                status:
+                                    controller.currentAiStatus ?? 'Thinking...',
                                 onPlayVoice: () {},
                                 onPauseVoice: () {},
                                 onResumeVoice: () {},
@@ -527,30 +533,58 @@ class _ChatScreenView extends StatelessWidget {
                               onStopTts: () => controller.stopTts(),
                               onPauseTts: () => controller.pauseTts(),
                               onResumeTts: () => controller.resumeTts(),
-                                onCopy: () =>
-                                  controller.copyToClipboard(context, message.text),
+                              onCopy: () => controller.copyToClipboard(
+                                  context, message.text),
                               onToggleBookmark: () =>
                                   controller.toggleBookmark(message),
                               onShare: () =>
                                   controller.shareMessage(message.text),
-                              onRegenerate: () =>
-                                  controller.regenerateResponse(context, message),
+                              onRegenerate: () => controller.regenerateResponse(
+                                  context, message),
                               onFeedback: (feedback) =>
                                   controller.provideFeedback(message, feedback),
-                              onEdit: () => controller.handleUserEdit(context, message),
-                              onDownloadImageUrl: (url) => controller
-                                  .downloadImage(context, url),
+                              onEdit: () =>
+                                  controller.handleUserEdit(context, message),
+                              onDownloadImageUrl: (url) =>
+                                  controller.downloadImage(context, url),
                               onReply: (m) => controller.replyTo = m,
-                              onLongPress: () =>
-                                  controller.copyToClipboard(context, message.text),
-                              onRetrySend: () =>
-                                  controller.retryFailedMessage(context, message),
+                              onLongPress: () => controller.copyToClipboard(
+                                  context, message.text),
+                              onRetrySend: () => controller.retryFailedMessage(
+                                  context, message),
                               user: authProvider.userModel,
                             );
                           },
                         ),
                       ),
                     ),
+
+                  // Top Gradient Overlay (Invisible Border)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: MediaQuery.of(context).padding.top +
+                        kToolbarHeight +
+                        16,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              theme.scaffoldBackgroundColor,
+                              theme.scaffoldBackgroundColor.withValues(alpha: 0.9),
+                              theme.scaffoldBackgroundColor.withValues(alpha: 0.0),
+                            ],
+                            stops: const [0.0, 0.7, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   if (controller.showScrollDownButton)
                     Positioned(
                       bottom: 16,
@@ -573,13 +607,18 @@ class _ChatScreenView extends StatelessWidget {
                         right: 20,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: [controller.buildVoiceIndicatorBadge(context)!],
+                          children: [
+                            controller.buildVoiceIndicatorBadge(context)!
+                          ],
                         ),
                       ),
                     // Floating camera preview
                     if (controller.buildCameraPreview(context) != null)
                       Positioned(
-                        bottom: MediaQuery.of(context).padding.bottom + 10 + ChatControllerLiveVoice.voiceControlBarHeight + 10,
+                        bottom: MediaQuery.of(context).padding.bottom +
+                            10 +
+                            ChatControllerLiveVoice.voiceControlBarHeight +
+                            10,
                         left: 20,
                         child: controller.buildCameraPreview(context)!,
                       ),
@@ -591,7 +630,8 @@ class _ChatScreenView extends StatelessWidget {
                       child: controller.buildVoiceControlBar(context, theme),
                     ),
                     // Live Visual Peek Overlay (NEW)
-                    if (controller.isVoiceMode && controller.lastVisualMessage != null)
+                    if (controller.isVoiceMode &&
+                        controller.lastVisualMessage != null)
                       Positioned(
                         top: MediaQuery.of(context).padding.top + 70,
                         right: 20,
@@ -600,75 +640,158 @@ class _ChatScreenView extends StatelessWidget {
                           onDismiss: () => controller.clearVisualMessage(),
                           onView: () {
                             controller.scrollToBottom();
-                            // Keep peek open so they can still see it while talking
                           },
                         ),
                       ),
                   ],
-                  
-                  // XP Award Celebrations (Global to the chat stack)
+
                   ...controller.xpAwards.map((award) => Positioned(
-                    top: 100,
-                    left: 20,
-                    right: 20,
-                    child: _XpAwardCelebration(
-                      amount: award['amount'] as int,
-                      reason: award['reason'] as String,
-                    ),
-                  )),
+                        top: 100,
+                        left: 20,
+                        right: 20,
+                        child: _XpAwardCelebration(
+                          amount: award['amount'] as int,
+                          reason: award['reason'] as String,
+                        ),
+                      )),
                 ],
               ),
             ),
-            if (!controller.isVoiceMode) ChatInputArea(
-              textController: controller.textController,
-              messageFocusNode: controller.messageFocusNode,
-              attachButtonKey: controller.attachButtonKey,
-              pendingAttachments: controller.pendingAttachments,
-              onRemoveAttachment: (id) => controller.removeAttachment(id),
-              isUploading: controller.isUploading,
-              isTyping: controller.isTyping,
-              isGenerating: controller.isTyping ||
-                  controller.currentStreamingMessageId != null,
-              isRecording: controller.isRecording,
-              isOffline: !controller.isOnline,
-              suggestions: controller.dynamicSuggestions,
-              placeholderMessages: controller.placeholderMessages,
-              onSendMessage: () => controller.sendUserMessage(context),
-              onSendMessageWithText: ({String? text}) =>
-                  controller.sendUserMessage(context, text: text),
-              onShowAttachmentMenu: () =>
-                  controller.showAttachmentMenu(context, theme, isDark),
-              onPaste: () => controller.handleGenericPaste(),
-              onStopGeneration: () => controller.stopGeneration(),
-              onStopListeningAndSend: () => controller.stopDictationAndSend(context),
-              onStartLiveVoiceMode: () => controller.startLiveVoiceMode(context),
-              onStartFeynmanMode: () => controller.startLiveVoiceMode(context, feynmanMode: true),
-              onClearPendingAttachment: () =>
-                  controller.clearPendingAttachment(),
-              onShuffleQuestions: () {},
-              onDictation: () => controller.startDictation(context),
-              replyingToMessage: controller.replyTo,
-              onCancelReply: () => controller.cancelReply(),
-              amplitudeStream: controller.aiAmplitudeStream,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12, top: 4),
-              child: Text(
-                'TopScore AI can make mistakes, please verify important information.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  fontWeight: FontWeight.w500,
+            if (!controller.isVoiceMode)
+              Container(
+                decoration: const BoxDecoration(
+                  color: Colors.transparent,
+                ),
+                child: Column(
+                  children: [
+                    ChatInputArea(
+                      textController: controller.textController,
+                      messageFocusNode: controller.messageFocusNode,
+                      attachButtonKey: controller.attachButtonKey,
+                      pendingAttachments: controller.pendingAttachments,
+                      onRemoveAttachment: (id) =>
+                          controller.removeAttachment(id),
+                      isUploading: controller.isUploading,
+                      isTyping: controller.isTyping,
+                      isGenerating: controller.isTyping ||
+                          controller.currentStreamingMessageId != null,
+                      isRecording: controller.isRecording,
+                      isLocked: !authProvider.canSendMessage,
+                      isOffline: controller.isOffline,
+                      isConnecting: controller.isConnecting,
+                      suggestions: controller.dynamicSuggestions,
+                      placeholderMessages: controller.placeholderMessages,
+                      onSendMessage: () =>
+                          controller.sendUserMessage(context),
+                      onSendMessageWithText: ({String? text}) =>
+                          controller.sendUserMessage(context, text: text),
+                      onShowAttachmentMenu: () =>
+                          controller.showAttachmentMenu(context, theme, isDark),
+                      onPaste: () => controller.handleGenericPaste(),
+                      onStopGeneration: () => controller.stopGeneration(),
+                      onStopListeningAndSend: () =>
+                          controller.stopDictationAndSend(context),
+                      onStartLiveVoiceMode: () =>
+                          controller.startLiveVoiceMode(context),
+                      onStartFeynmanMode: () =>
+                          controller.startLiveVoiceMode(context, feynmanMode: true),
+                      onClearPendingAttachment: () =>
+                          controller.clearPendingAttachment(),
+                      onShuffleQuestions: () {},
+                      onDictation: () => controller.startDictation(context),
+                      replyingToMessage: controller.replyTo,
+                      onCancelReply: () => controller.cancelReply(),
+                      amplitudeStream: controller.aiAmplitudeStream,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, top: 4),
+                      child: Text(
+                        'TopScore AI can make mistakes, please verify important information.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+
+    if (controller.isEmbedded) {
+      return content;
+    }
+
+    return Center(child: content);
+  }
+
+  Widget _buildLoadingSkeleton(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: List.generate(
+            5,
+            (index) => Padding(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  child: Shimmer.fromColors(
+                    baseColor: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.grey[300]!,
+                    highlightColor: isDark
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : Colors.grey[100]!,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: const BoxDecoration(
+                                  color: Colors.white, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 100,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(5)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          height: 14,
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: "80%".contains('%')
+                              ? 250
+                              : 250, // Simple placeholder for width
+                          height: 14,
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(7)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
+      ),
+    );
+  }
 }
 
 class _LiveVisualPeek extends StatelessWidget {
@@ -702,78 +825,81 @@ class _LiveVisualPeek extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: theme.primaryColor.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: theme.primaryColor.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(CupertinoIcons.sparkles,
+                          size: 14, color: theme.primaryColor),
                     ),
-                    child: Icon(CupertinoIcons.sparkles, 
-                      size: 14, color: theme.primaryColor),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Visual Shared',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: isDark ? Colors.white : Colors.black87,
+                    const SizedBox(width: 8),
+                    Text(
+                      'Visual Shared',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: onDismiss,
-                child: Icon(CupertinoIcons.xmark_circle_fill, 
-                  size: 20, color: theme.hintColor.withValues(alpha: 0.5)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 140,
-              width: double.infinity,
-              color: isDark ? Colors.black26 : Colors.grey[100],
-              child: _buildPreviewContent(context),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: onDismiss,
+                  child: Icon(CupertinoIcons.xmark_circle_fill,
+                      size: 20, color: theme.hintColor.withValues(alpha: 0.5)),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              color: theme.primaryColor,
+            const SizedBox(height: 12),
+            ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              onPressed: onView,
-              child: Text(
-                'Focus View',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.white,
+              child: Container(
+                height: 140,
+                width: double.infinity,
+                color: isDark
+                    ? AppColors.text.withValues(alpha: 0.26)
+                    : Colors.grey[100],
+                child: _buildPreviewContent(context),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                color: theme.primaryColor,
+                borderRadius: BorderRadius.circular(12),
+                onPressed: onView,
+                child: Text(
+                  'Focus View',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildPreviewContent(BuildContext context) {
     if (message.imageUrl != null) {
       return Image.network(
         message.imageUrl!,
         fit: BoxFit.cover,
-        errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image)),
+        errorBuilder: (c, e, s) =>
+            const Center(child: Icon(Icons.broken_image)),
       );
     }
     if (message.quizDataJson != null) {
@@ -782,28 +908,13 @@ class _LiveVisualPeek extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.question_circle, size: 32, color: Colors.orange),
+            const Icon(CupertinoIcons.question_circle,
+                size: 32, color: Colors.orange),
             const SizedBox(height: 8),
             Text(
               'Interactive Quiz',
-              style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-    if (message.desmosDataJson != null || message.graphDataJson != null) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(CupertinoIcons.graph_square, size: 32, color: Colors.blue),
-            const SizedBox(height: 8),
-            Text(
-              'Dynamic Graph',
-              style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.bold),
+              style:
+                  GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
           ],
@@ -829,7 +940,8 @@ class _XpAwardCelebration extends StatefulWidget {
   State<_XpAwardCelebration> createState() => _XpAwardCelebrationState();
 }
 
-class _XpAwardCelebrationState extends State<_XpAwardCelebration> with SingleTickerProviderStateMixin {
+class _XpAwardCelebrationState extends State<_XpAwardCelebration>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
@@ -848,7 +960,9 @@ class _XpAwardCelebrationState extends State<_XpAwardCelebration> with SingleTic
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.5, curve: Curves.easeIn)),
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0.0, 0.5, curve: Curves.easeIn)),
     );
 
     _controller.forward();
@@ -890,7 +1004,8 @@ class _XpAwardCelebrationState extends State<_XpAwardCelebration> with SingleTic
                       color: Colors.amber.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(CupertinoIcons.star_fill, color: Colors.amber, size: 32),
+                    child: const Icon(CupertinoIcons.star_fill,
+                        color: Colors.amber, size: 32),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -908,7 +1023,12 @@ class _XpAwardCelebrationState extends State<_XpAwardCelebration> with SingleTic
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : Colors.black54,
+                      color: isDark
+                          ? Colors.white70
+                          : Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
                     ),
                   ),
                 ],

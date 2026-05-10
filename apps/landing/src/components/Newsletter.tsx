@@ -1,5 +1,7 @@
 'use client';
 import { useState } from 'react';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useLocale } from '@/i18n';
 import AnimatedSection from './AnimatedSection';
 import { Button } from "@/components/ui/button";
@@ -11,23 +13,36 @@ export default function Newsletter() {
     const [email, setEmail] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email || loading) return;
 
         setLoading(true);
-        // Simulate a tiny networking delay for better perceived feedback
-        await new Promise(r => setTimeout(r, 800));
+        setError('');
 
         try {
-            const list = JSON.parse(localStorage.getItem('topscore_newsletter') ?? '[]');
-            list.push({ email, date: new Date().toISOString() });
-            localStorage.setItem('topscore_newsletter', JSON.stringify(list));
-        } catch { /* noop */ }
+            await addDoc(collection(db, 'newsletter_subscribers'), {
+                email: email.trim().toLowerCase(),
+                subscribedAt: serverTimestamp(),
+                source: 'landing_page',
+            });
 
-        setLoading(false);
-        setSubmitted(true);
+            // Also keep a local record so we don't re-prompt on the same device
+            try {
+                const list = JSON.parse(localStorage.getItem('topscore_newsletter') ?? '[]');
+                list.push({ email, date: new Date().toISOString() });
+                localStorage.setItem('topscore_newsletter', JSON.stringify(list));
+            } catch { /* noop */ }
+
+            setSubmitted(true);
+        } catch (err) {
+            console.error('Newsletter subscribe error:', err);
+            setError(t('newsletter.error' as any) || 'Something went wrong. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -57,6 +72,9 @@ export default function Newsletter() {
                             <Button type="submit" className={styles.btn} disabled={loading} size="lg">
                                 {loading ? '...' : t('newsletter.cta')}
                             </Button>
+                            {error && (
+                                <p className={styles.error ?? 'text-red-500 text-sm mt-2'}>{error}</p>
+                            )}
                         </form>
                     )}
                 </AnimatedSection>

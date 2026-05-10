@@ -1,6 +1,6 @@
 .wrapper {
     padding: 100px 24px;
-    background: #000;
+    background: var(--bg-subtle);
     border-top: 1px solid var(--border);
 }
 

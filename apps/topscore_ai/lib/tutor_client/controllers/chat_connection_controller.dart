@@ -80,14 +80,14 @@ class ChatConnectionController extends ChangeNotifier {
   // Getter for underlying service (for AudioController compatibility)
   EnhancedWebSocketService get wsService => _wsService;
 
-  void init() {
-    _wsService.connect();
-
+  Future<void> init() async {
     _connectionSub = _wsService.isConnectedStream.listen((connected) {
       notifyListeners();
     });
-
     _messageSub = _wsService.messageStream.listen(_handleRawMessage);
+
+    await _wsService.initialize();
+    await _wsService.connect();
   }
 
   void setThreadId(String id) {

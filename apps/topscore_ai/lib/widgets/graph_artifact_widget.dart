@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../widgets/app_spinner.dart';
 import '../utils/cors_proxy_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../config/app_config.dart';
-import 'interactive_desmos_graph.dart';
 
 class GraphArtifactWidget extends StatefulWidget {
   final String graphDataJson;
@@ -21,10 +21,9 @@ class GraphArtifactWidget extends StatefulWidget {
 }
 
 class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
-  bool _showCode = false;
-  bool _isInteractive = false;
   late Map<String, dynamic> _data;
   String? _extractedEquations;
+  bool _copied = false;
 
   @override
   void initState() {
@@ -48,12 +47,40 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
     }
   }
 
+  String _cleanText(String text) {
+    if (text.isEmpty) return text;
+    
+    // Remove triple backticks
+    var cleaned = text.replaceAll('```python', '').replaceAll('```', '');
+    
+    // Split into lines and filter out obvious code lines
+    final lines = cleaned.split('\n');
+    final filteredLines = lines.where((line) {
+      final l = line.trim().toLowerCase();
+      // Heuristics for Python code
+      if (l.startsWith('import ') || l.startsWith('from ')) return false;
+      if (l.contains('plt.') || l.contains('np.') || l.contains('sns.')) return false;
+      if (l.contains('matplotlib') || l.contains('numpy')) return false;
+      if (l.startsWith('def ') || l.startsWith('class ')) return false;
+      if (l.contains('= np.') || l.contains('= pd.')) return false;
+      if (l.contains('plt.show()') || l.contains('plt.title(')) return false;
+      return true;
+    });
+
+    return filteredLines.join('\n').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final title = _data['title'] ?? _data['topic'] ?? 'Generated Graph';
-    final description = _data['description'] ?? _data['explanation'] ?? '';
+    
+    var title = _data['title'] ?? _data['topic'] ?? 'Generated Graph';
+    var description = _data['description'] ?? _data['explanation'] ?? '';
+    
+    title = _cleanText(title);
+    description = _cleanText(description);
+
     String? imageUrl = _data['url'] ?? _data['image_url'] ?? _data['graph_url'];
     final base64Image = _data['image_base64'] ?? _data['base64_image'] ?? _data['image_data'];
     
@@ -63,25 +90,6 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
       imageUrl = base + (imageUrl.startsWith('/') ? '' : '/') + imageUrl;
     }
 
-    final pythonCode = _data['python_code'] ?? _data['code'] ?? _data['title'] ?? '';
-
-    if (_isInteractive && _extractedEquations != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(theme, title, isDark, true),
-          const SizedBox(height: 12),
-          InteractiveDesmosGraph(
-            config: {
-              'expression': _extractedEquations,
-              'settings': {'showGrid': true}
-            },
-          ),
-          const SizedBox(height: 8),
-          _buildFooter(theme, isDark),
-        ],
-      );
-    }
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
@@ -131,7 +139,7 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
                     placeholder: (context, url) => Container(
                       height: 150,
                       color: isDark ? Colors.grey[900] : Colors.grey[200],
-                      child: const Center(child: CircularProgressIndicator()),
+                      child: AppSpinner.center(),
                     ),
                     errorWidget: (context, url, error) => Container(
                       height: 150,
@@ -154,39 +162,7 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
                   ),
                 ),
               ),
-            if (_showCode)
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: isDark ? Colors.black.withValues(alpha: 0.3) : Colors.grey[50],
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.code, size: 14, color: theme.primaryColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          'MATPLOTLIB SOURCE',
-                          style: GoogleFonts.firaCode(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            color: theme.primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SelectableText(
-                      pythonCode,
-                      style: GoogleFonts.firaCode(
-                        fontSize: 12,
-                        color: isDark ? Colors.tealAccent : Colors.teal.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
             _buildActionFooter(theme, isDark),
           ],
         ),
@@ -235,12 +211,6 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
               ],
             ),
           ),
-          if (interactive)
-            IconButton(
-              icon: const Icon(CupertinoIcons.xmark, size: 18),
-              onPressed: () => setState(() => _isInteractive = false),
-              tooltip: 'Close Interactive Mode',
-            ),
         ],
       ),
     );
@@ -259,34 +229,16 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          if (_extractedEquations != null)
-            TextButton.icon(
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                setState(() => _isInteractive = true);
-              },
-              icon: const Icon(CupertinoIcons.bolt_fill, size: 16),
-              label: const Text('Interactive'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.amber.shade700,
-                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-            ),
-          const SizedBox(width: 4),
-          TextButton.icon(
-            onPressed: () => setState(() => _showCode = !_showCode),
-            icon: Icon(_showCode ? CupertinoIcons.eye_slash : Icons.code, size: 16),
-            label: Text(_showCode ? 'Hide Code' : 'View Code'),
-            style: TextButton.styleFrom(
-              iconColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              textStyle: const TextStyle(fontSize: 13),
-            ),
-          ),
+
           const SizedBox(width: 4),
           IconButton(
             onPressed: _copyDescription,
-            icon: const Icon(CupertinoIcons.doc_on_clipboard, size: 16),
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _copied
+                  ? const Icon(CupertinoIcons.checkmark_alt, key: ValueKey('check'), color: Colors.green, size: 16)
+                  : const Icon(CupertinoIcons.doc_on_clipboard, key: ValueKey('copy'), size: 16),
+            ),
             tooltip: 'Copy Description',
           ),
         ],
@@ -294,27 +246,16 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
     );
   }
 
-  Widget _buildFooter(ThemeData theme, bool isDark) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: TextButton.icon(
-        onPressed: () => setState(() => _isInteractive = false),
-        icon: const Icon(CupertinoIcons.photo, size: 14),
-        label: const Text('Switch to Static Image'),
-        style: TextButton.styleFrom(
-          foregroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-          textStyle: const TextStyle(fontSize: 11),
-        ),
-      ),
-    );
-  }
 
   void _copyDescription() {
+    if (_copied) return;
     final text = _data['description'] ?? _data['title'] ?? '';
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
-    );
+    HapticFeedback.lightImpact();
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
   }
 
   void _showFullScreenImage(BuildContext context, String imageUrl, {bool isBase64 = false}) {

@@ -8,11 +8,8 @@ import '../providers/auth_provider.dart';
 import '../../widgets/session_history_carousel.dart';
 import '../../widgets/bounce_wrapper.dart';
 import '../../constants/colors.dart';
-import 'notification_center_screen.dart';
 import '../../providers/notification_provider.dart';
 import '../tutor_client/chat_controller.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:shimmer/shimmer.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -22,7 +19,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -32,11 +28,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
-    final subtextColor =
-        isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = theme.colorScheme.onSurface;
+    final subtextColor = theme.textTheme.bodyMedium?.color ??
+        (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
 
     return Selector<AuthProvider,
         ({String? displayName, String? photoURL, bool isLoading})>(
@@ -99,14 +95,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Selector<NotificationProvider, int>(
                             selector: (_, p) => p.unreadCount,
                             builder: (context, unreadCount, _) {
-                              return GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  CupertinoPageRoute(
-                                    builder: (context) =>
-                                        const NotificationCenterScreen(),
-                                  ),
-                                ),
+                              return BounceWrapper(
+                                onTap: () => context.push('/notifications'),
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
@@ -116,7 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         color: isDark
                                             ? Colors.white
                                                 .withValues(alpha: 0.05)
-                                            : Colors.black
+                                            : theme.colorScheme.onSurface
                                                 .withValues(alpha: 0.03),
                                         shape: BoxShape.circle,
                                       ),
@@ -125,7 +115,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         size: 20,
                                         color: isDark
                                             ? Colors.white70
-                                            : Colors.black54,
+                                            : theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.6),
                                       ),
                                     ),
                                     if (unreadCount > 0)
@@ -158,7 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(width: 12),
                           // Profile avatar
-                          GestureDetector(
+                          BounceWrapper(
                             onTap: () => context.push('/profile'),
                             child: Container(
                               width: 42,
@@ -178,7 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ? null
                                     : LinearGradient(
                                         colors: [
-                                          const Color(0xFF2563EB)
+                                          AppColors.primary
                                               .withValues(alpha: 0.15),
                                           const Color(0xFF8B5CF6)
                                               .withValues(alpha: 0.1),
@@ -189,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: Border.all(
                                   color: isDark
                                       ? Colors.white.withValues(alpha: 0.08)
-                                      : const Color(0xFF2563EB)
+                                      : AppColors.primary
                                           .withValues(alpha: 0.15),
                                   width: 1.5,
                                 ),
@@ -203,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ? firstName[0].toUpperCase()
                                             : 'S',
                                         style: GoogleFonts.poppins(
-                                          color: const Color(0xFF2563EB),
+                                          color: AppColors.primary,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 16,
                                         ),
@@ -244,111 +235,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (userData.isLoading)
-                      _buildSkeletonGrid(isDark)
-                    else
-                      Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Upload PDF",
-                                  CupertinoIcons.doc_text_fill,
-                                  const Color(0xFF8B5CF6),
-                                  const Color(0xFFA78BFA),
-                                  isDark,
-                                  '/summarizer',
-                                ),
+                    Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Upload PDF",
+                                CupertinoIcons.doc_text_fill,
+                                const Color(0xFF8B5CF6),
+                                const Color(0xFFA78BFA),
+                                isDark,
+                                '/summarizer',
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Flashcards",
-                                  CupertinoIcons.rectangle_on_rectangle_angled,
-                                  const Color(0xFFF59E0B),
-                                  const Color(0xFFFBBF24),
-                                  isDark,
-                                  '/flashcards',
-                                ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Flashcards",
+                                CupertinoIcons.rectangle_on_rectangle_angled,
+                                const Color(0xFFF59E0B),
+                                const Color(0xFFFBBF24),
+                                isDark,
+                                '/flashcards',
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Take a Quiz",
-                                  CupertinoIcons.checkmark_seal_fill,
-                                  const Color(0xFF10B981),
-                                  const Color(0xFF34D399),
-                                  isDark,
-                                  '/quiz',
-                                ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Take a Quiz",
+                                CupertinoIcons.checkmark_seal_fill,
+                                const Color(0xFF10B981),
+                                const Color(0xFF34D399),
+                                isDark,
+                                '/quiz',
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Doc Scanner",
-                                  Icons.document_scanner_rounded,
-                                  const Color(0xFF06B6D4),
-                                  const Color(0xFF22D3EE),
-                                  isDark,
-                                  '/scanner',
-                                  onTap: () {
-                                    if (kIsWeb) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: const Text(
-                                              'Document scanning is only available on our mobile app.'),
-                                          behavior: SnackBarBehavior.floating,
-                                          backgroundColor: Colors.blueGrey[900],
-                                        ),
-                                      );
-                                    } else {
-                                      context.push('/scanner');
-                                    }
-                                  },
-                                ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Doc Scanner",
+                                Icons.document_scanner_rounded,
+                                const Color(0xFF06B6D4),
+                                const Color(0xFF22D3EE),
+                                isDark,
+                                '/scanner',
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Your Library",
-                                  CupertinoIcons.folder_badge_person_crop,
-                                  const Color(0xFF10B981),
-                                  const Color(0xFF34D399),
-                                  isDark,
-                                  '/my-stuff',
-                                ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Your Library",
+                                CupertinoIcons.folder_badge_person_crop,
+                                const Color(0xFF8B5CF6),
+                                const Color(0xFFA78BFA),
+                                isDark,
+                                '/my-stuff',
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: _buildActionCard(
-                                  context,
-                                  "Career Compass",
-                                  Icons.explore_rounded,
-                                  const Color(0xFF6366F1),
-                                  const Color(0xFF818CF8),
-                                  isDark,
-                                  '/career-compass',
-                                ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _buildActionCard(
+                                context,
+                                "Career Compass",
+                                Icons.explore_rounded,
+                                const Color(0xFF6366F1),
+                                const Color(0xFF818CF8),
+                                isDark,
+                                '/career-compass',
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -366,14 +339,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(
                       color: isDark
-                          ? const Color(0xFF2563EB).withValues(alpha: 0.1)
-                          : Colors.black.withValues(alpha: 0.04),
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.04),
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: isDark
-                            ? const Color(0xFF2563EB).withValues(alpha: 0.06)
-                            : Colors.black.withValues(alpha: 0.03),
+                            ? AppColors.primary.withValues(alpha: 0.06)
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.03),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -401,7 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF2563EB),
+                                color: AppColors.primary,
                               ),
                             ),
                           ),
@@ -437,14 +413,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF2563EB), Color(0xFF1E40AF), Color(0xFF1E3A8A)],
+            colors: [AppColors.primary, Color(0xFF1E40AF), Color(0xFF1E3A8A)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2563EB)
+              color: AppColors.primary
                   .withValues(alpha: isDark ? 0.2 : 0.25),
               blurRadius: 32,
               offset: const Offset(0, 12),
@@ -468,14 +444,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF4ADE80),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+                        const _LivePulseIndicator(),
                         const SizedBox(width: 6),
                         Text(
                           "LIVE",
@@ -512,21 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(width: 16),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                ),
-              ),
-              child: const Icon(
-                CupertinoIcons.waveform,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
+            const _LiveWaveformIcon(),
           ],
         ),
       ),
@@ -543,89 +498,247 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String route, {
     VoidCallback? onTap,
   }) {
-    return BounceWrapper(
-      onTap: onTap ?? () => context.push(route),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: isDark
-                ? colorStart.withValues(alpha: 0.1)
-                : Colors.black.withValues(alpha: 0.04),
+    return _AnimatedActionCard(
+      title: title,
+      icon: icon,
+      colorStart: colorStart,
+      colorEnd: colorEnd,
+      isDark: isDark,
+      route: route,
+      onTap: onTap,
+    );
+  }
+}
+
+class _LivePulseIndicator extends StatefulWidget {
+  const _LivePulseIndicator();
+
+  @override
+  State<_LivePulseIndicator> createState() => _LivePulseIndicatorState();
+}
+
+class _LivePulseIndicatorState extends State<_LivePulseIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: const Color(0xFF4ADE80),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF4ADE80).withValues(alpha: _pulseAnimation.value * 0.8),
+                blurRadius: 10 * _pulseAnimation.value,
+                spreadRadius: 4 * _pulseAnimation.value,
+              ),
+            ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? colorStart.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.03),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [colorStart, colorEnd],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        );
+      },
+    );
+  }
+}
+
+class _LiveWaveformIcon extends StatefulWidget {
+  const _LiveWaveformIcon();
+
+  @override
+  State<_LiveWaveformIcon> createState() => _LiveWaveformIconState();
+}
+
+class _LiveWaveformIconState extends State<_LiveWaveformIcon>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: (_scaleAnimation.value - 0.95) * 0.4),
+                  blurRadius: 16,
+                  spreadRadius: 2,
                 ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: Colors.white, size: 22),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color:
-                    isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
-              ),
+            child: const Icon(
+              CupertinoIcons.waveform,
+              color: Colors.white,
+              size: 28,
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
+}
 
-  Widget _buildSkeletonGrid(bool isDark) {
-    return Shimmer.fromColors(
-      baseColor:
-          isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[300]!,
-      highlightColor:
-          isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey[100]!,
-      child: Column(
-        children: List.generate(
-            3,
-            (index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildSkeletonCard()),
-                      const SizedBox(width: 14),
-                      Expanded(child: _buildSkeletonCard()),
-                    ],
+class _AnimatedActionCard extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final Color colorStart;
+  final Color colorEnd;
+  final bool isDark;
+  final String route;
+  final VoidCallback? onTap;
+
+  const _AnimatedActionCard({
+    required this.title,
+    required this.icon,
+    required this.colorStart,
+    required this.colorEnd,
+    required this.isDark,
+    required this.route,
+    this.onTap,
+  });
+
+  @override
+  State<_AnimatedActionCard> createState() => _AnimatedActionCardState();
+}
+
+class _AnimatedActionCardState extends State<_AnimatedActionCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: BounceWrapper(
+        onTap: widget.onTap ?? () => context.push(widget.route),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.identity()
+            ..translateByDouble(0.0, _isHovered ? -4.0 : 0.0, 0.0, 1.0),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: widget.isDark ? AppColors.surfaceElevatedDark : Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: widget.isDark
+                  ? (_isHovered
+                      ? widget.colorStart.withValues(alpha: 0.3)
+                      : widget.colorStart.withValues(alpha: 0.1))
+                  : (_isHovered
+                      ? widget.colorStart.withValues(alpha: 0.2)
+                      : Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.04)),
+              width: _isHovered ? 1.5 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.isDark
+                    ? widget.colorStart.withValues(alpha: _isHovered ? 0.12 : 0.06)
+                    : Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: _isHovered ? 0.08 : 0.03),
+                blurRadius: _isHovered ? 24 : 16,
+                offset: Offset(0, _isHovered ? 10 : 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [widget.colorStart, widget.colorEnd],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                )),
-      ),
-    );
-  }
-
-  Widget _buildSkeletonCard() {
-    return Container(
-      height: 120, // Match typical card height
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: _isHovered
+                      ? [
+                          BoxShadow(
+                            color: widget.colorStart.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          )
+                        ]
+                      : [],
+                ),
+                child: Icon(widget.icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                widget.title,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: widget.isDark
+                      ? const Color(0xFFF8FAFC)
+                      : AppColors.surfaceElevatedDark,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+

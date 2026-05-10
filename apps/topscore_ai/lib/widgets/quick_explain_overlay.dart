@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'gpt_markdown_wrapper.dart';
 import '../providers/auth_provider.dart';
 import '../tutor_client/enhanced_websocket_service.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
 class QuickExplainOverlay extends StatefulWidget {
   final String text;
   final Offset position;
   final VoidCallback onClose;
   final Function(String) onOpenInChat;
+  final EnhancedWebSocketService? externalWsService;
 
   const QuickExplainOverlay({
     super.key,
@@ -19,6 +20,7 @@ class QuickExplainOverlay extends StatefulWidget {
     required this.position,
     required this.onClose,
     required this.onOpenInChat,
+    this.externalWsService,
   });
 
   @override
@@ -27,8 +29,10 @@ class QuickExplainOverlay extends StatefulWidget {
 
 class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
   late EnhancedWebSocketService _wsService;
+  bool _isExternalWs = false;
   String _explanation = '';
   bool _isDone = false;
+  bool _copied = false;
   bool _hasError = false;
   String? _errorMsg;
   StreamSubscription? _msgSub;
@@ -50,13 +54,21 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
       return;
     }
 
-    _wsService = EnhancedWebSocketService(userId: user.uid);
-    // Use a transient thread ID for statelessness
-    _wsService.setThreadId('quick_explain_${DateTime.now().millisecondsSinceEpoch}');
+    if (widget.externalWsService != null) {
+      _wsService = widget.externalWsService!;
+      _isExternalWs = true;
+    } else {
+      _wsService = EnhancedWebSocketService(userId: user.uid);
+      // Use a transient thread ID for statelessness
+      _wsService
+          .setThreadId('quick_explain_${DateTime.now().millisecondsSinceEpoch}');
+      await _wsService.initialize();
+      await _wsService.connect();
+    }
 
     _msgSub = _wsService.messageStream.listen((data) {
       if (!mounted) return;
-      
+
       final type = data['type'];
       if (type == 'chunk') {
         setState(() {
@@ -74,8 +86,17 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
       }
     });
 
-    // Wait for connection (roughly) then send
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Wait until the socket reports connected (or fall back after 5s and let
+    // sendMessage queue it offline).
+    if (!_wsService.isConnected) {
+      try {
+        await _wsService.isConnectedStream
+            .firstWhere((c) => c)
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Fall through — sendMessage will queue offline if still disconnected.
+      }
+    }
     _wsService.sendMessage(
       message: widget.text,
       userId: user.uid,
@@ -86,7 +107,9 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
   @override
   void dispose() {
     _msgSub?.cancel();
-    _wsService.dispose();
+    if (!_isExternalWs) {
+      _wsService.dispose();
+    }
     super.dispose();
   }
 
@@ -134,16 +157,15 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome, 
-                      size: 16, 
-                      color: theme.colorScheme.primary),
+                    Icon(Icons.auto_awesome,
+                        size: 16, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       'AI Explanation',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white70 : Colors.black87,
+                        color: theme.colorScheme.onSurface, // Full visibility
                       ),
                     ),
                     const Spacer(),
@@ -160,40 +182,88 @@ class _QuickExplainOverlayState extends State<QuickExplainOverlay> {
               const Divider(height: 1),
               // Content
               Expanded(
-                child: _hasError 
-                  ? Center(child: Text(_errorMsg ?? 'Error'))
-                  : _explanation.isEmpty && !_isDone
-                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                    : Markdown(
-                        data: _explanation,
-                        shrinkWrap: true,
-                        styleSheet: MarkdownStyleSheet(
-                          p: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: isDark ? Colors.white : Colors.black87,
+                child: _hasError
+                    ? Center(child: Text(_errorMsg ?? 'Error'))
+                    : _explanation.isEmpty && !_isDone
+                        ? const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : SingleChildScrollView(
+                            child: StyledGptMarkdown(
+                              _explanation,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.white
+                                    : theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+              ),
+              // Footer — Copy & Open in Chat
+              if (_isDone || _explanation.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: _explanation));
+                          HapticFeedback.mediumImpact();
+                          setState(() => _copied = true);
+                          Future.delayed(const Duration(seconds: 2), () {
+                            if (mounted) setState(() => _copied = false);
+                          });
+                        },
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            key: ValueKey(_copied),
+                            size: 16,
+                            color: _copied ? Colors.teal : null,
+                          ),
+                        ),
+                        label: Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: _copied
+                              ? Colors.teal
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          widget.onOpenInChat(_explanation);
+                        },
+                        icon: const Icon(Icons.forum_outlined, size: 14),
+                        label: Text(
+                          'Open in Chat',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          backgroundColor:
+                              theme.colorScheme.primary.withValues(alpha: 0.1),
+                          foregroundColor: theme.colorScheme.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                       ),
-              ),
-              // Footer — Copy only
-              if (_isDone || _explanation.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                  child: Center(
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: _explanation));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 1)),
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: const Text('Copy', style: TextStyle(fontSize: 12)),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: isDark ? Colors.white60 : Colors.black54,
-                      ),
-                    ),
+                    ],
                   ),
                 ),
             ],

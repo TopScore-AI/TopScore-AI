@@ -11,6 +11,7 @@ import '../../config/app_theme.dart';
 import '../../constants/colors.dart';
 import '../../widgets/resources/resource_file_card.dart';
 import '../../widgets/resources/resource_states.dart';
+import '../../widgets/app_spinner.dart';
 
 class ResourcesScreen extends StatefulWidget {
   const ResourcesScreen({super.key});
@@ -29,9 +30,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
     'CBC Files',
     'IGCSE Files',
     '844 Files',
-    'Revision Kits',
   ];
-
 
   @override
   void initState() {
@@ -57,9 +56,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
 
   void _onScroll() {
     final authProvider = context.read<AuthProvider>();
-    context
-        .read<ResourcesProvider>()
-        .fetchFiles(user: authProvider.userModel);
+    context.read<ResourcesProvider>().fetchFiles(user: authProvider.userModel);
   }
 
   /// Try to fetch files. If userModel isn't available yet (common on Android
@@ -80,6 +77,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
           _fetchInitial();
         }
       }
+
       authProvider.addListener(listener);
     }
   }
@@ -165,9 +163,12 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: isDark 
-                      ? [const Color(0xFF1A1A2E), const Color(0xFF0D0D15)]
-                      : [AppColors.primary.withValues(alpha: 0.05), Colors.white],
+                    colors: isDark
+                        ? [AppColors.backgroundDark, AppColors.surfaceDark]
+                        : [
+                            AppColors.primary.withValues(alpha: 0.05),
+                            Colors.white
+                          ],
                   ),
                 ),
               ),
@@ -191,7 +192,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Row(
+                  Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -199,8 +200,8 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                           color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.auto_stories_rounded, 
-                          color: AppColors.primary, size: 24),
+                        child: const Icon(Icons.auto_stories_rounded,
+                            color: AppColors.primary, size: 24),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -217,23 +218,29 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                   const SizedBox(height: 8),
                   if (user != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+                        border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.1)),
                         boxShadow: [
-                          if (!isDark) BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          )
+                          if (!isDark)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            )
                         ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.school_rounded, color: AppColors.primary, size: 14),
+                          const Icon(Icons.school_rounded,
+                              color: AppColors.primary, size: 14),
                           const SizedBox(width: 6),
                           Text(
                             "${user.educationLevel ?? user.curriculum} • ${user.gradeLabel}",
@@ -365,32 +372,26 @@ class _ResourcesScreenState extends State<ResourcesScreen>
               return false;
             },
             child: ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: files.length + (provider.hasMore ? 1 : 0),
-            separatorBuilder: (_, __) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              if (index == files.length) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                );
-              }
+              padding: const EdgeInsets.all(20),
+              itemCount: files.length + (provider.hasMore ? 1 : 0),
+              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                if (index == files.length) {
+                  return AppSpinner.paginate();
+                }
 
-              final file = files[index];
-              return ResourceFileCard(
-                file: file,
-                onTap: () => _openFile(file),
-              );
-            },
-          ),
+                final file = files[index];
+                return ResourceFileCard(
+                  file: file,
+                  onTap: () => _openFile(file),
+                );
+              },
+            ),
           ),
         );
       },
     );
   }
-
 
   void _openFile(FirebaseFile file) {
     if (file.downloadUrl != null) {
@@ -400,6 +401,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
       context.push('/pdf-viewer', extra: {
         'url': file.downloadUrl,
         'title': file.displayName,
+        'storagePath': file.path,
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

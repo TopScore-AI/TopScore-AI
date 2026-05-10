@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
+import '../../widgets/app_spinner.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final String? videoUrl;
@@ -62,7 +64,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
         // --- NEW: UI Customization ---
         placeholder: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+          child: AppSpinner(color: AppColors.aiAccent),
         ),
 
         // --- NEW: Custom Error UI ---
@@ -95,16 +97,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
         // Customize the UI colors
         materialProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFF6C63FF),
-          handleColor: const Color(0xFF6C63FF),
+          playedColor: AppColors.aiAccent,
+          handleColor: AppColors.aiAccent,
           backgroundColor: Colors.grey.withValues(alpha: 0.5),
           bufferedColor: Colors.white24,
         ),
 
         // Cupertino (iOS) controls customization
         cupertinoProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFF6C63FF),
-          handleColor: const Color(0xFF6C63FF),
+          playedColor: AppColors.aiAccent,
+          handleColor: AppColors.aiAccent,
           backgroundColor: Colors.grey,
           bufferedColor: Colors.white24,
         ),
@@ -204,7 +206,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       body: SafeArea(
         child: Center(
           child: _isLoading
-              ? const CircularProgressIndicator(color: Color(0xFF6C63FF))
+              ? const AppSpinner(color: AppColors.aiAccent)
               : _errorMessage != null
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,

@@ -93,7 +93,8 @@ export default function PrivacyPage() {
                 <h2>10. Contact Us</h2>
                 <p>
                     For privacy-related inquiries, please contact us at{' '}
-                    <a href="mailto:privacy@topscore-ai.com">privacy@topscore-ai.com</a>.
+                    <a href="mailto:admin@topscoreapp.ai">admin@topscoreapp.ai</a>.
+
                 </p>
                 </article>
             </div>

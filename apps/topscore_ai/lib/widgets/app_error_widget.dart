@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui';
@@ -18,187 +19,205 @@ class AppErrorWidget extends StatelessWidget {
     this.message,
   });
 
+  /// Shows the error as a centered popup dialog.
+  static Future<void> show(
+    BuildContext context, {
+    Object? details,
+    VoidCallback? onRetry,
+    String? title,
+    String? message,
+  }) {
+    return showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.8),
+      builder: (context) => AppErrorWidget(
+        details: details,
+        onRetry: onRetry,
+        title: title,
+        message: message,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isOffline = details?.toString().contains('SocketException') ?? false;
-    
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0F172A), // Slate 900
-                  Color(0xFF1E1B4B), // Indigo 950
+    final theme = Theme.of(context);
+    final bool isSocketError =
+        details?.toString().contains('SocketException') ?? false;
+    final bool isConnectionRefused =
+        details?.toString().contains('Connection refused') ?? false;
+
+    // A SocketException usually means no internet, BUT it could also be a wrong URL/Server down.
+    // We treat it as "Offline" only if it's not a "Connection refused" (which implies the server was reached but rejected).
+    final bool isOffline = isSocketError && !isConnectionRefused;
+
+    final content = Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevatedDark.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 40,
+                    offset: const Offset(0, 20),
+                  ),
                 ],
               ),
-            ),
-          ),
-          
-          // Animated decorative circles
-          Positioned(
-            top: -100,
-            right: -100,
-            child: _buildDecorativeCircle(Colors.blueAccent.withValues(alpha: 0.15), 300),
-          ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: _buildDecorativeCircle(Colors.purpleAccent.withValues(alpha: 0.1), 250),
-          ),
-
-          // Main Content
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Icon/Emoji with Glass background
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                          ),
-                          child: Text(
-                            isOffline ? '📡' : '🚀',
-                            style: const TextStyle(fontSize: 48),
-                          ),
-                        ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon Container
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: (isOffline ? Colors.amber : Colors.redAccent)
+                            .withValues(alpha: 0.2),
+                        width: 2,
                       ),
                     ),
-                    
-                    const SizedBox(height: 40),
-                    
-                    // Title
-                    Text(
-                      title ?? (isOffline ? 'Connection Lost' : 'Houston, we have a problem'),
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                    child: Center(
+                      child: Text(
+                        isOffline ? '📡' : '🚀',
+                        style: const TextStyle(fontSize: 32),
                       ),
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Message
-                    Text(
-                      message ?? (isOffline 
-                        ? 'It looks like you\'re offline. Check your connection to keep learning with TopScore AI.'
-                        : 'An unexpected hiccup occurred. Our team of space monkeys is currently investigating.'),
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16,
-                        color: Colors.white.withValues(alpha: 0.6),
-                        height: 1.6,
+                  ),
+                  const SizedBox(height: 24),
+                  // Title
+                  Text(
+                    title ??
+                        (isOffline
+                            ? 'Connection Lost'
+                            : (isSocketError
+                                ? 'Server Unreachable'
+                                : 'Houston, we have a problem')),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Message
+                  Text(
+                    message ??
+                        (isOffline
+                            ? 'It looks like you\'re offline. Check your connection to keep learning.'
+                            : (isSocketError
+                                ? 'We can\'t reach the TopScore AI servers right now. Please check your internet or try again later.'
+                                : 'An unexpected hiccup occurred. Our team is investigating.')),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      height: 1.5,
+                    ),
+                  ),
+                  if (details != null && !isOffline) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        details.toString().split('\n').first,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.firaCode(
+                          fontSize: 10,
+                          color: Colors.redAccent.withValues(alpha: 0.5),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-
-                    if (details != null && !isOffline) ...[
-                      const SizedBox(height: 32),
-                      // Technical Details (Collapsed/Small)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                        ),
-                        child: Text(
-                          details.toString().split('\n').first,
-                          style: GoogleFonts.firaCode(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.4),
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 48),
-
-                    // Action Buttons
-                    Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: onRetry ?? () {
-                            // If no custom retry, just try to pop or go home
-                            if (Navigator.canPop(context)) {
-                              Navigator.pop(context);
-                            } else {
-                              // We can't use context.go here without importing GoRouter
-                              // But this widget is often used where GoRouter is available
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 18),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 0,
-                          ),
+                  ],
+                  const SizedBox(height: 32),
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
                           child: Text(
-                            isOffline ? 'Try Reconnecting' : 'Try Again',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextButton(
-                          onPressed: () {
-                            try {
-                              // Try to use GoRouter to go home
-                              if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-                            } catch (e) {
-                              Navigator.of(context).pushReplacementNamed('/home');
-                            }
-                          },
-                          child: Text(
-                            'Back to Safety',
+                            'Dismiss',
                             style: GoogleFonts.plusJakartaSans(
                               color: Colors.white.withValues(alpha: 0.4),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: onRetry ??
+                              () {
+                                if (Navigator.canPop(context)) {
+                                  Navigator.pop(context);
+                                }
+                              },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            isOffline ? 'Retry' : 'Try Again',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
-  }
 
-  Widget _buildDecorativeCircle(Color color, double size) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
-    );
+    // If used as a standalone screen (e.g. GoRouter errorBuilder), wrap in Scaffold
+    if (ModalRoute.of(context)?.isCurrent == false ||
+        Navigator.canPop(context) == false) {
+      return Scaffold(
+        backgroundColor: Colors.black.withValues(alpha: 0.9),
+        body: content,
+      );
+    }
+
+    return content;
   }
 }
+
 

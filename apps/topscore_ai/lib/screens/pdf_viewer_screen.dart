@@ -6,6 +6,7 @@ import 'package:croppy/croppy.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../constants/colors.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,15 +23,20 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/download_provider.dart';
+import '../providers/tutor_connection_provider.dart';
+import '../services/feature_gate_service.dart';
+import '../widgets/premium_feature_dialog.dart';
 import 'package:easy_debounce/easy_debounce.dart';
 import '../services/ai_service.dart';
 import '../services/isar_service.dart';
 import '../services/tts_service.dart';
-import '../tutor_client/chat_screen.dart';
+import '../tutor_client/widgets/embedded_chat_sheet.dart';
 import '../widgets/quick_explain_overlay.dart';
+import '../tutor_client/enhanced_websocket_service.dart';
 import '../models/download_model.dart';
 import 'package:flutter/cupertino.dart';
 
+import '../widgets/app_spinner.dart';
 
 // ---------------------------------------------------------------------------
 // PdfViewerScreen — production-grade PDF reader
@@ -100,12 +106,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
 
   // Context menu overlay
   OverlayEntry? _overlayEntry;
+  OverlayEntry? _quickExplainEntry;
 
   // Caching
   Timer? _autoCacheTimer;
   bool _isAutoCaching = false;
-
-
 
   // TTS
   bool _isSpeaking = false;
@@ -115,7 +120,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   // Annotation mode
   bool _isAnnotating = false;
   PdfAnnotationMode _annotationMode = PdfAnnotationMode.none;
-  PdfInteractionMode _interactionMode = kIsWeb ? PdfInteractionMode.selection : PdfInteractionMode.pan;
+  PdfInteractionMode _interactionMode =
+      kIsWeb ? PdfInteractionMode.selection : PdfInteractionMode.pan;
 
   // Text size (zoom preset)
   static const List<double> _textSizePresets = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -124,6 +130,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   // Night mode for long reading sessions. Inverts the PDF raster colours so
   // bright white pages become soft dark — easier on the eyes.
   bool _isNightMode = false;
+
+  // Cached resolved download URL — computed once when the PDF loads so every
+  // AI action opens the sheet instantly without waiting for Firebase Storage.
+  String? _cachedPdfUrl;
+
+  // Single reading-session WebSocket service for instant explanation streaming
+  EnhancedWebSocketService? _quickExplainWsService;
 
   // (Animations removed to keep toolbar persistent)
 
@@ -136,12 +149,45 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     _startAutoCacheTimer();
     // Configure default annotation settings
     _pdfViewerController.annotationSettings = PdfAnnotationSettings();
+    _initQuickExplainWs();
+  }
+
+  void _initQuickExplainWs() {
+    try {
+      final user = context.read<AuthProvider>().userModel;
+      if (user != null) {
+        if (kDebugMode) {
+          debugPrint('[PDF_VIEWER] Pre-initializing session WebSocket for Quick Explain...');
+        }
+        _quickExplainWsService = EnhancedWebSocketService(userId: user.uid);
+        _quickExplainWsService!.setThreadId('quick_explain_${DateTime.now().millisecondsSinceEpoch}');
+        _quickExplainWsService!.initialize().then((_) {
+          if (mounted && _quickExplainWsService != null) {
+            _quickExplainWsService!.connect();
+          }
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[PDF_VIEWER] Error initializing session WebSocket: $e');
+      }
+    }
+  }
+
+  void _disposeQuickExplainWs() {
+    if (kDebugMode) {
+      debugPrint('[PDF_VIEWER] Closing and disposing session WebSocket...');
+    }
+    _quickExplainWsService?.dispose();
+    _quickExplainWsService = null;
   }
 
   @override
   void dispose() {
+    _disposeQuickExplainWs();
     _autoCacheTimer?.cancel();
     _dismissContextMenu();
+    _dismissQuickExplainOverlay();
     _searchController.dispose();
     _pageJumpController.dispose();
     _thumbnailScrollController.dispose();
@@ -538,9 +584,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
         final downloads = downloadProvider.downloads;
         final cachedTask = downloads.firstWhere(
           (t) => t.resourceId == widget.url || t.id == widget.url,
-          orElse: () => DownloadTaskModel(id: '', resourceId: '', localPath: '', downloadedAt: 0, filename: ''),
+          orElse: () => DownloadTaskModel(
+              id: '',
+              resourceId: '',
+              localPath: '',
+              downloadedAt: 0,
+              filename: ''),
         );
-        
+
         if (cachedTask.localPath.isNotEmpty) {
           final file = File(cachedTask.localPath);
           if (await file.exists()) {
@@ -559,8 +610,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       final docId =
           widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
       if (!mounted) return;
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final canAccess = await authProvider.tryAccessDocument(docId);
+
+      // Bypass access check for local files or bytes
+      bool canAccess = true;
+      if (widget.file == null && widget.bytes == null) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        canAccess = await authProvider.tryAccessDocument(docId);
+      }
 
       if (!canAccess) {
         if (mounted) {
@@ -578,7 +634,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
         loadedBytes = widget.bytes;
       } else if (widget.url != null) {
         final url = widget.url!;
-        final isWordDoc = url.toLowerCase().contains('.doc') || url.toLowerCase().contains('.docx');
+        final isWordDoc = url.toLowerCase().contains('.doc') ||
+            url.toLowerCase().contains('.docx');
 
         if (isWordDoc) {
           if (mounted) setState(() => _isLoading = true);
@@ -606,7 +663,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   .getData(30 * 1024 * 1024);
             } catch (e) {
               if (kDebugMode) {
-                debugPrint('SDK refFromURL failed, falling back to download: $e');
+                debugPrint(
+                    'SDK refFromURL failed, falling back to download: $e');
               }
               loadedBytes = await _downloadFromUrl(url);
             }
@@ -621,15 +679,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
           if (extractedPath != null) {
             try {
               if (kDebugMode) {
-              debugPrint('Extracted path from GCS URL: $extractedPath');
-            }
+                debugPrint('Extracted path from GCS URL: $extractedPath');
+              }
               loadedBytes = await FirebaseStorage.instance
                   .ref(extractedPath)
                   .getData(30 * 1024 * 1024);
             } catch (e) {
               if (kDebugMode) {
-              debugPrint('SDK fetch from extracted path failed: $e');
-            }
+                debugPrint('SDK fetch from extracted path failed: $e');
+              }
               loadedBytes = await _downloadFromUrl(path);
             }
           } else if (_isFirebaseStorageUrl(path)) {
@@ -639,8 +697,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   .getData(30 * 1024 * 1024);
             } catch (e) {
               if (kDebugMode) {
-              debugPrint('SDK refFromURL failed for storagePath, falling back to download: $e');
-            }
+                debugPrint(
+                    'SDK refFromURL failed for storagePath, falling back to download: $e');
+              }
               loadedBytes = await _downloadFromUrl(path);
             }
           } else {
@@ -669,6 +728,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
         final byteData = await rootBundle.load(widget.assetPath!);
         loadedBytes = byteData.buffer.asUint8List();
       } else if (widget.file != null) {
+        // On web, File operations are not supported
+        if (kIsWeb) {
+          throw UnsupportedError(
+              'File operations are not supported on web. Please use bytes or URL instead.');
+        }
         loadedBytes = await widget.file!.readAsBytes();
       }
 
@@ -703,7 +767,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   String? _extractPathFromFirebaseUrl(String url) {
     try {
       final decodedUrl = Uri.decodeFull(url);
-      
+
       // storage.googleapis.com format:
       // https://storage.googleapis.com/BUCKET/PATH?Expires=...
       if (decodedUrl.contains('storage.googleapis.com/')) {
@@ -713,7 +777,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
           return uri.pathSegments.sublist(1).join('/');
         }
       }
-      
+
       // firebasestorage.googleapis.com format:
       // https://firebasestorage.googleapis.com/v0/b/BUCKET/o/PATH?alt=media&token=...
       // or similar
@@ -725,7 +789,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
           return pathAndQuery.split('?').first;
         }
       }
-      
+
       if (decodedUrl.startsWith('gs://')) {
         return Uri.parse(decodedUrl).path;
       }
@@ -842,99 +906,133 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     _overlayEntry = null;
   }
 
+  void _dismissQuickExplainOverlay() {
+    _quickExplainEntry?.remove();
+    _quickExplainEntry = null;
+  }
+
   void _showQuickExplainOverlay(String text, Offset position) {
     _dismissContextMenu();
-    _overlayEntry = OverlayEntry(
-      builder: (context) => QuickExplainOverlay(
-        text: text,
-        position: position,
-        onClose: _dismissContextMenu,
-        onOpenInChat: (currentExplanation) {
-          _dismissContextMenu();
-          _openAiTutorBottomSheet(
-            initialMessage: "I was just reading this explanation:\n\n$currentExplanation\n\nCan you tell me more about '$text'?",
-          );
-        },
+    _dismissQuickExplainOverlay();
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    _quickExplainEntry = OverlayEntry(
+      builder: (context) => Directionality(
+        textDirection: textDirection,
+        child: QuickExplainOverlay(
+          text: text,
+          position: position,
+          onClose: _dismissQuickExplainOverlay,
+          externalWsService: _quickExplainWsService,
+          onOpenInChat: (currentExplanation) {
+            _dismissQuickExplainOverlay();
+            _openAiTutorBottomSheet(
+              initialMessage:
+                  "I was just reading this explanation:\n\n$currentExplanation\n\nCan you tell me more about '$text'?",
+            );
+          },
+        ),
       ),
     );
-    Overlay.of(context).insert(_overlayEntry!);
+    Overlay.of(context).insert(_quickExplainEntry!);
   }
 
-  Future<void> _openAiTutorBottomSheet({String? initialMessage, XFile? initialImage, bool startVoice = false}) async {
-    String? resolvedDownloadUrl = widget.url;
-
-    // Resolve a fresh download URL to prevent expired token issues in the AI Tutor backend
+  // ---------------------------------------------------------------------------
+  // PDF URL pre-warming — resolves once, cached for the session
+  // ---------------------------------------------------------------------------
+  Future<void> _prewarmPdfUrl() async {
+    if (_cachedPdfUrl != null) return; // already resolved
     try {
       if (widget.storagePath != null) {
-        if (widget.storagePath!.startsWith('gs://')) {
-          resolvedDownloadUrl = await FirebaseStorage.instance.refFromURL(widget.storagePath!).getDownloadURL();
-        } else {
-          resolvedDownloadUrl = await FirebaseStorage.instance.ref(widget.storagePath!).getDownloadURL();
-        }
-      } else if (widget.url != null && widget.url!.contains('firebasestorage.googleapis.com')) {
-        resolvedDownloadUrl = await FirebaseStorage.instance.refFromURL(widget.url!).getDownloadURL();
+        _cachedPdfUrl = widget.storagePath!.startsWith('gs://')
+            ? await FirebaseStorage.instance
+                .refFromURL(widget.storagePath!)
+                .getDownloadURL()
+            : await FirebaseStorage.instance
+                .ref(widget.storagePath!)
+                .getDownloadURL();
+      } else if (widget.url != null &&
+          widget.url!.contains('firebasestorage.googleapis.com')) {
+        _cachedPdfUrl = await FirebaseStorage.instance
+            .refFromURL(widget.url!)
+            .getDownloadURL();
+      } else {
+        _cachedPdfUrl = widget.url; // plain URL — use as-is
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Could not resolve fresh downloadUrl: $e');
+      if (kDebugMode) debugPrint('PDF URL pre-warm failed: $e');
+      _cachedPdfUrl = widget.url; // fall back to original
     }
-
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        final isDark = theme.brightness == Brightness.dark;
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.85,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E2C) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(24)),
-                  child: ChatScreen(
-                    initialMessage: initialMessage,
-                    initialImage: initialImage,
-                    initialFileUrl: resolvedDownloadUrl ?? widget.url,
-                    initialFileName: widget.title,
-                    initialFileType: 'application/pdf',
-                    initialFileBytes: (resolvedDownloadUrl ?? widget.url) == null ? _pdfBytes : null,
-                    isEmbedded: true,
-                    startVoice: startVoice,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
+  Future<void> _openAiTutorBottomSheet(
+      {String? initialMessage,
+      XFile? initialImage,
+      bool startVoice = false}) async {
+    if (!mounted) return;
+
+    // Check premium access for AI chat in PDF viewer
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (!FeatureGateService.canUsePdfAiChat(user)) {
+      await PremiumFeatureDialog.show(
+        context,
+        featureName: 'AI Chat in PDF Viewer',
+        icon: Icons.chat_bubble_outline,
+      );
+      return;
+    }
+
+    HapticFeedback.lightImpact();
+
+    // Ensure the global AI Tutor WebSocket is active and connected immediately
+    try {
+      final tutorConn =
+          Provider.of<TutorConnectionProvider>(context, listen: false);
+      tutorConn.resume();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+            '[PDF_VIEWER] Failed to resume global WebSocket connection: $e');
+      }
+    }
+
+    // Use the cached URL if available — no async wait needed.
+    // If not yet resolved (e.g. user tapped before document finished loading),
+    // kick off resolution now but open the sheet immediately anyway.
+    if (_cachedPdfUrl == null) {
+      _prewarmPdfUrl(); // fire-and-forget; sheet opens with null url first
+    }
+
+    // Derive a human-readable title for the sheet header
+    String sheetTitle = 'AI Tutor';
+    if (initialMessage != null) {
+      if (initialMessage.contains('summary') ||
+          initialMessage.contains('summarize')) {
+        sheetTitle = 'Document Summary';
+      } else if (initialMessage.contains('quiz')) {
+        sheetTitle = 'AI Quiz';
+      } else if (initialMessage.contains('flashcard')) {
+        sheetTitle = 'Flashcards';
+      } else if (initialMessage.contains('diagram') || initialImage != null) {
+        sheetTitle = 'Snap & Ask';
+      }
+    }
+
+    // Open immediately — no await on URL resolution
+    await EmbeddedChatSheet.show(
+      context,
+      title: sheetTitle,
+      initialMessage: initialMessage,
+      initialImage: initialImage,
+      fileUrl: initialImage == null ? (_cachedPdfUrl ?? widget.url) : null,
+      fileName: initialImage == null ? widget.title : null,
+      fileType: initialImage == null ? 'application/pdf' : null,
+      fileBytes: initialImage == null && (_cachedPdfUrl ?? widget.url) == null
+          ? _pdfBytes
+          : null,
+      startVoice: startVoice,
+      heightFactor: 0.88,
+    );
+  }
 
   void _showContextMenu(
       BuildContext context, PdfTextSelectionChangedDetails details) {
@@ -948,60 +1046,60 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     final top = (region.top - 56).clamp(8.0, double.infinity);
     final left = region.left.clamp(8.0, double.infinity);
 
+    final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
     _overlayEntry = OverlayEntry(
       builder: (_) => Positioned(
         top: top,
         left: left,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                    blurRadius: 8,
-                    color: Colors.black.withValues(alpha: 0.25),
-                    offset: const Offset(0, 2))
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _contextBtn(Icons.copy_rounded, 'Copy', fg, () {
-                  Clipboard.setData(
-                      ClipboardData(text: details.selectedText ?? ''));
-                  _dismissContextMenu();
-                  _pdfViewerController.clearSelection();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Copied'),
-                        duration: Duration(seconds: 1),
-                        behavior: SnackBarBehavior.floating),
-                  );
-                }),
-                _divider(fg),
-                _contextBtn(FontAwesomeIcons.wandMagicSparkles, 'Explain', fg,
-                    () {
-                  final text = details.selectedText;
-                  if (text != null) {
-                    final position = Offset(region.left, region.bottom + 10);
-                    _showQuickExplainOverlay(text, position);
-                  }
-                }, isFa: true),
-                _divider(fg),
-                _contextBtn(Icons.summarize_rounded, 'Summarize', fg, () {
-                  final text = details.selectedText;
-                  if (text != null) {
+        child: Directionality(
+          textDirection: textDirection,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                      blurRadius: 8,
+                      color: Colors.black.withValues(alpha: 0.25),
+                      offset: const Offset(0, 2))
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _contextBtn(Icons.copy_rounded, 'Copy', fg, () {
+                    Clipboard.setData(
+                        ClipboardData(text: details.selectedText ?? ''));
+                    HapticFeedback.lightImpact();
                     _dismissContextMenu();
                     _pdfViewerController.clearSelection();
-                    _openAiTutorBottomSheet(
-                      initialMessage: 'Please summarize this excerpt from the PDF:\n\n"$text"',
-                    );
-                  }
-                }),
-              ],
+                  }),
+                  _divider(fg),
+                  _contextBtn(FontAwesomeIcons.wandMagicSparkles, 'Explain', fg,
+                      () {
+                    final text = details.selectedText;
+                    if (text != null) {
+                      final position = Offset(region.left, region.bottom + 10);
+                      _showQuickExplainOverlay(text, position);
+                    }
+                  }, isFa: true),
+                  _divider(fg),
+                  _contextBtn(Icons.summarize_rounded, 'Summarize', fg, () {
+                    final text = details.selectedText;
+                    if (text != null) {
+                      _dismissContextMenu();
+                      _pdfViewerController.clearSelection();
+                      _openAiTutorBottomSheet(
+                        initialMessage:
+                            'Please summarize this excerpt from the PDF:\n\n"$text"',
+                      );
+                    }
+                  }),
+                ],
+              ),
             ),
           ),
         ),
@@ -1034,9 +1132,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       final boundary = _pdfRepaintKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) return null;
-      final image = await boundary.toImage(
-          pixelRatio: MediaQuery.of(context).devicePixelRatio.clamp(1.0, 2.0));
+      // Cap at 1.5x — enough for AI analysis, avoids large memory allocation
+      final ratio = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 1.5);
+      final image = await boundary.toImage(pixelRatio: ratio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose(); // free GPU memory immediately
       return byteData?.buffer.asUint8List();
     } catch (e) {
       if (kDebugMode) debugPrint('Capture failed: $e');
@@ -1057,8 +1157,38 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
 
-    final cropResult = await showCupertinoImageCropper(context,
-        imageProvider: MemoryImage(fullBytes));
+    dynamic cropResult;
+    try {
+      cropResult = await showCupertinoImageCropper(
+        context,
+        imageProvider: MemoryImage(fullBytes),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Croppy FFI library loading failed: $e');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.info_outline, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Using full screen capture (cropping unsupported on this device)',
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.white),
+              ),
+            ),
+          ]),
+          backgroundColor: Colors.orange.shade800,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+        _sendToAI(fullBytes);
+      }
+      return;
+    }
+
     if (cropResult == null || !mounted) {
       return;
     }
@@ -1110,8 +1240,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
         return;
       }
       _openAiTutorBottomSheet(
-          initialImage: xFile, 
-          initialMessage: 'Analyze and solve this specific section from the PDF.');
+          initialImage: xFile,
+          initialMessage:
+              'Analyze and solve this specific section from the PDF.');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -1122,12 +1253,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
 
   // Annotation Persistence
   Future<void> _loadAnnotations() async {
-    final docId = widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
+    final docId =
+        widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
     final json = await IsarService().getPdfAnnotations(docId);
     if (json != null && mounted) {
       try {
         // Use dynamic to safely call if available in the runtime version
-        await (_pdfViewerController as dynamic).importAnnotations(json, PdfAnnotationDataFormat.json);
+        await (_pdfViewerController as dynamic)
+            .importAnnotations(json, PdfAnnotationDataFormat.json);
       } catch (e) {
         if (kDebugMode) debugPrint('Error importing annotations: $e');
       }
@@ -1140,18 +1273,34 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       const Duration(seconds: 1),
       () async {
         if (!mounted) return;
-        final docId = widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
+        final docId = widget.storagePath ??
+            widget.url ??
+            widget.assetPath ??
+            widget.title;
         try {
-           final json = (_pdfViewerController as dynamic).exportAnnotations(PdfAnnotationDataFormat.json);
-           await IsarService().savePdfAnnotations(docId, json);
+          final json = (_pdfViewerController as dynamic)
+              .exportAnnotations(PdfAnnotationDataFormat.json);
+          await IsarService().savePdfAnnotations(docId, json);
         } catch (e) {
-           if (kDebugMode) debugPrint('Error exporting annotations: $e');
+          if (kDebugMode) debugPrint('Error exporting annotations: $e');
         }
       },
     );
   }
 
   Future<void> _downloadFile() async {
+    // Check premium access for PDF download/share
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (!FeatureGateService.canDownloadPdf(user) ||
+        !FeatureGateService.canSharePdf(user)) {
+      await PremiumFeatureDialog.show(
+        context,
+        featureName: 'PDF Download & Share',
+        icon: Icons.download,
+      );
+      return;
+    }
+
     if (_pdfBytes == null) {
       return;
     }
@@ -1182,8 +1331,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       }
     }
   }
-
-
 
   // ---------------------------------------------------------------------------
   // Build
@@ -1216,21 +1363,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
 
     return Stack(
       children: [
-          // PDF viewer
-          Positioned.fill(
-            child: RepaintBoundary(
-              key: _pdfRepaintKey,
-              child: ColorFiltered(
-                colorFilter: _isNightMode
-                    ? const ColorFilter.matrix(<double>[
-                        // Invert + slight desaturation so blacks stay comfortable
-                        -1,  0,  0, 0, 255,
-                         0, -1,  0, 0, 255,
-                         0,  0, -1, 0, 255,
-                         0,  0,  0, 1,   0,
-                      ])
-                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-                child: SfPdfViewer.memory(
+        // PDF viewer
+        Positioned.fill(
+          child: RepaintBoundary(
+            key: _pdfRepaintKey,
+            child: ColorFiltered(
+              colorFilter: _isNightMode
+                  ? const ColorFilter.matrix(<double>[
+                      // Invert + slight desaturation so blacks stay comfortable
+                      -1, 0, 0, 0, 255,
+                      0, -1, 0, 0, 255,
+                      0, 0, -1, 0, 255,
+                      0, 0, 0, 1, 0,
+                    ])
+                  : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+              child: SfPdfViewer.memory(
                 _pdfBytes!,
                 controller: _pdfViewerController,
                 canShowPaginationDialog: false,
@@ -1265,6 +1412,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                     _pdfDocument = details.document;
                   });
                   _loadAnnotations();
+                  // Pre-resolve the download URL in the background so the
+                  // first AI action opens instantly without waiting.
+                  _prewarmPdfUrl();
                 },
                 onPageChanged: (details) {
                   setState(() {
@@ -1284,134 +1434,59 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   }
                 },
               ),
-              ),
             ),
           ),
+        ),
 
-          // Reading progress bar (top)
-          if (_totalPages > 0)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: LinearProgressIndicator(
-                value: _currentPage / _totalPages,
-                minHeight: 3,
-                backgroundColor: Colors.transparent,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-              ),
-            ),
-
-          // Top app bar
+        // Reading progress bar (top)
+        if (_totalPages > 0)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: _buildTopBar(theme, isDark),
+            child: LinearProgressIndicator(
+              value: _currentPage / _totalPages,
+              minHeight: 3,
+              backgroundColor: Colors.transparent,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+            ),
           ),
 
-          // Thumbnail sidebar
-          if (_showThumbnails)
-            Positioned(
-              top: 0,
-              bottom: 0,
-              left: 0,
-              child: _buildThumbnailSidebar(theme, isDark),
-            ),
+        // Top app bar
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: _buildTopBar(theme, isDark),
+        ),
 
-          // Search bar overlay
-          if (_showSearchBar)
-            Positioned(
-              top: kToolbarHeight + MediaQuery.of(context).padding.top + 8,
-              left: 12,
-              right: 12,
-              child: _buildSearchBar(theme, isDark),
-            ),
-
-          // Bottom toolbar
+        // Thumbnail sidebar
+        if (_showThumbnails)
           Positioned(
+            top: 0,
             bottom: 0,
             left: 0,
-            right: 0,
-            child: _buildBottomBar(theme, isDark),
+            child: _buildThumbnailSidebar(theme, isDark),
           ),
 
-          // AI Action Hub (NEW Floating Horizontal Bar)
+        // Search bar overlay
+        if (_showSearchBar)
           Positioned(
-            bottom: 85, // Above bottom bar
-            left: 20,
-            right: 20,
-            child: _buildAIActionHub(theme, isDark),
+            top: kToolbarHeight + MediaQuery.of(context).padding.top + 8,
+            left: 12,
+            right: 12,
+            child: _buildSearchBar(theme, isDark),
           ),
-        ],
-    );
-  }
 
-  Widget _buildAIActionHub(ThemeData theme, bool isDark) {
-    return Container(
-      height: 60,
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-          width: 1.5,
+        // Bottom toolbar (now includes AI Hub)
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: _buildBottomBar(theme, isDark),
         ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _aiHubButton(
-                  icon: CupertinoIcons.sparkles,
-                  label: 'Ask AI',
-                  onTap: () => _openAiTutorBottomSheet(),
-                  color: theme.colorScheme.primary,
-                ),
-                _aiHubButton(
-                  icon: CupertinoIcons.waveform,
-                  label: 'Live',
-                  onTap: _openLiveVoiceWithPdf,
-                  color: Colors.redAccent,
-                ),
-                _aiHubButton(
-                  icon: CupertinoIcons.doc_text_viewfinder,
-                  label: 'Sum',
-                  onTap: _summarizePdf,
-                ),
-                _aiHubButton(
-                  icon: CupertinoIcons.square_stack_3d_up_fill,
-                  label: 'Cards',
-                  onTap: _generateFlashcards,
-                ),
-                _aiHubButton(
-                  icon: CupertinoIcons.question_circle_fill,
-                  label: 'Quiz',
-                  onTap: _generateQuiz,
-                ),
-                _aiHubButton(
-                  icon: CupertinoIcons.camera_viewfinder,
-                  label: 'Snap',
-                  onTap: () => _captureAndAction(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      ],
     );
   }
 
@@ -1436,7 +1511,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final fg = color ?? (isDark ? Colors.white : Colors.black87);
+    final fg = color ?? (isDark ? Colors.white : AppColors.text);
 
     return InkWell(
       onTap: isLoading ? null : onTap,
@@ -1450,7 +1525,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.amber),
               )
             else
               Icon(icon, color: fg, size: 20),
@@ -1460,7 +1536,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 9,
                 fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white60 : Colors.black54,
+                color: isDark ? Colors.white60 : AppColors.textSecondary,
               ),
             ),
           ],
@@ -1471,9 +1547,22 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
 
   Future<void> _summarizePdf() async {
     HapticFeedback.mediumImpact();
+
+    // Check premium access for PDF summarizer
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (!FeatureGateService.canUsePdfSummarizer(user)) {
+      await PremiumFeatureDialog.show(
+        context,
+        featureName: 'PDF Summarizer',
+        icon: Icons.summarize,
+      );
+      return;
+    }
+
     // Route summarize action through the AI Tutor overlay to avoid Vision API crashes
     await _openAiTutorBottomSheet(
-      initialMessage: 'Please provide a detailed summary of this document: "${widget.title}". Highlight the main concepts, key takeaways, and any important formulas or definitions.',
+      initialMessage:
+          'Please provide a detailed summary of this document: "${widget.title}". Highlight the main concepts, key takeaways, and any important formulas or definitions.',
     );
   }
 
@@ -1481,7 +1570,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     HapticFeedback.mediumImpact();
     // Forward directly to AI Tutor to handle generation and display in chat
     await _openAiTutorBottomSheet(
-      initialMessage: 'Please generate 5 flashcards for this document: "${widget.title}".',
+      initialMessage:
+          'Please generate 5 flashcards for this document: "${widget.title}".',
     );
   }
 
@@ -1489,7 +1579,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     HapticFeedback.mediumImpact();
     // Forward directly to AI Tutor to handle generation and display in chat
     await _openAiTutorBottomSheet(
-      initialMessage: 'Please generate a 5-question quiz based on this document: "${widget.title}".',
+      initialMessage:
+          'Please generate a 5-question quiz based on this document: "${widget.title}".',
     );
   }
 
@@ -1498,213 +1589,206 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   // ---------------------------------------------------------------------------
   Widget _buildTopBar(ThemeData theme, bool isDark) {
     final bg = isDark ? const Color(0xFF2A2A2A) : Colors.white;
-    final fg = isDark ? Colors.white : Colors.black87;
+    final fg = isDark ? Colors.white : AppColors.text;
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          color: bg.withValues(alpha: isDark ? 0.9 : 0.92),
-          child: SafeArea(
-            bottom: false,
-            child: SizedBox(
-              height: kToolbarHeight,
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: fg.withValues(alpha: 0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.arrow_back_ios_new_rounded,
-                          color: fg, size: 18),
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: 'Back',
-                    ),
+    return Container(
+      color: bg,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: kToolbarHeight,
+          child: Row(
+            children: [
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.05),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios_new_rounded,
+                      color: fg, size: 18),
+                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Back',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: fg,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // Thumbnail toggle
-                  IconButton(
-                    icon: Icon(
-                      Icons.view_sidebar_outlined,
-                      color: _showThumbnails ? theme.colorScheme.primary : fg,
-                      size: 22,
-                    ),
-                    tooltip: 'Page thumbnails',
-                    onPressed: () =>
-                        setState(() => _showThumbnails = !_showThumbnails),
-                  ),
-                  // Search
-                  IconButton(
-                    icon: Icon(
-                      Icons.search_rounded,
-                      color: _showSearchBar ? theme.colorScheme.primary : fg,
-                      size: 22,
-                    ),
-                    tooltip: 'Search',
-                    onPressed: () {
-                      setState(() => _showSearchBar = !_showSearchBar);
-                      _keepToolbarVisible();
-                    },
-                  ),
-                  // Bookmark current page
-                  IconButton(
-                    icon: Icon(
-                      _bookmarkedPages.contains(_currentPage)
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      color: _bookmarkedPages.contains(_currentPage)
-                          ? theme.colorScheme.primary
-                          : fg,
-                      size: 22,
-                    ),
-                    tooltip: 'Bookmark page',
-                    onPressed: () => _toggleBookmark(_currentPage),
-                  ),
-                  // Night mode toggle — inverts PDF colors for comfortable reading
-                  IconButton(
-                    icon: Icon(
-                      _isNightMode
-                          ? CupertinoIcons.moon_fill
-                          : CupertinoIcons.moon,
-                      color: _isNightMode ? theme.colorScheme.primary : fg,
-                      size: 20,
-                    ),
-                    tooltip: _isNightMode ? 'Disable night mode' : 'Night mode',
-                    onPressed: () =>
-                        setState(() => _isNightMode = !_isNightMode),
-                  ),
-                  // More menu
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert_rounded, color: fg, size: 22),
-                    color: bg,
-                    onSelected: (v) {
-                      switch (v) {
-                        case 'download':
-                          _downloadFile();
-                          break;
-                        case 'save':
-                          _saveToLibrary();
-                          break;
-                        case 'read_aloud':
-                          if (_isSpeaking) {
-                            _stopTts();
-                          } else if (_lastSelectedText != null &&
-                              _lastSelectedText!.isNotEmpty) {
-                            _speakText(_lastSelectedText!);
-                          } else {
-                            _readCurrentPage();
-                          }
-                          break;
-                        case 'annotate':
-                          _showAnnotationToolbar();
-                          break;
-                        case 'bookmark':
-                          _toggleBookmark(_currentPage);
-                          break;
-                        case 'interaction_mode':
-                          setState(() {
-                            _interactionMode = _interactionMode == PdfInteractionMode.pan 
-                                ? PdfInteractionMode.selection 
-                                : PdfInteractionMode.pan;
-                          });
-                          break;
-                        case 'text_size':
-                          _showTextSizeDialog();
-                          break;
-                        case 'fit_width':
-                          _pdfViewerController.zoomLevel = 1.0;
-                          setState(() => _zoomLevel = 1.0);
-                          break;
-                        case 'scroll_mode':
-                          setState(() =>
-                              _isContinuousScroll = !_isContinuousScroll);
-                          break;
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Thumbnail toggle
+              IconButton(
+                icon: Icon(
+                  Icons.view_sidebar_outlined,
+                  color: _showThumbnails ? theme.colorScheme.primary : fg,
+                  size: 22,
+                ),
+                tooltip: 'Page thumbnails',
+                onPressed: () =>
+                    setState(() => _showThumbnails = !_showThumbnails),
+              ),
+              // Search
+              IconButton(
+                icon: Icon(
+                  Icons.search_rounded,
+                  color: _showSearchBar ? theme.colorScheme.primary : fg,
+                  size: 22,
+                ),
+                tooltip: 'Search',
+                onPressed: () {
+                  setState(() => _showSearchBar = !_showSearchBar);
+                  _keepToolbarVisible();
+                },
+              ),
+              // Bookmark current page
+              IconButton(
+                icon: Icon(
+                  _bookmarkedPages.contains(_currentPage)
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  color: _bookmarkedPages.contains(_currentPage)
+                      ? theme.colorScheme.primary
+                      : fg,
+                  size: 22,
+                ),
+                tooltip: 'Bookmark page',
+                onPressed: () => _toggleBookmark(_currentPage),
+              ),
+              // Night mode toggle — inverts PDF colors for comfortable reading
+              IconButton(
+                icon: Icon(
+                  _isNightMode ? CupertinoIcons.moon_fill : CupertinoIcons.moon,
+                  color: _isNightMode ? theme.colorScheme.primary : fg,
+                  size: 20,
+                ),
+                tooltip: _isNightMode ? 'Disable night mode' : 'Night mode',
+                onPressed: () => setState(() => _isNightMode = !_isNightMode),
+              ),
+              // More menu
+              PopupMenuButton<String>(
+                icon: Icon(Icons.more_vert_rounded, color: fg, size: 22),
+                color: bg,
+                onSelected: (v) {
+                  switch (v) {
+                    case 'download':
+                      _downloadFile();
+                      break;
+                    case 'save':
+                      _saveToLibrary();
+                      break;
+                    case 'read_aloud':
+                      if (_isSpeaking) {
+                        _stopTts();
+                      } else if (_lastSelectedText != null &&
+                          _lastSelectedText!.isNotEmpty) {
+                        _speakText(_lastSelectedText!);
+                      } else {
+                        _readCurrentPage();
                       }
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                          value: 'read_aloud',
-                          child: _menuItem(
-                              _isSpeaking
-                                  ? Icons.stop_circle_rounded
-                                  : Icons.volume_up_rounded,
-                              _isSpeaking ? 'Stop Reading' : 'Read Aloud',
-                              theme)),
-                      PopupMenuItem(
-                          value: 'annotate',
-                          child: _menuItem(
-                              Icons.edit_rounded,
-                              _isAnnotating ? 'Annotations (on)' : 'Annotate',
-                              theme)),
-                      PopupMenuItem(
-                          value: 'bookmark',
-                          child: _menuItem(
-                              _bookmarkedPages.contains(_currentPage)
-                                  ? Icons.bookmark_rounded
-                                  : Icons.bookmark_border_rounded,
-                              'Bookmark Page',
-                              theme)),
-                       PopupMenuItem(
-                          value: 'interaction_mode',
-                          child: _menuItem(
-                            _interactionMode == PdfInteractionMode.pan 
-                                ? Icons.text_fields_rounded 
-                                : Icons.pan_tool_rounded,
-                            _interactionMode == PdfInteractionMode.pan 
-                                ? 'Switch to Selection Mode' 
-                                : 'Switch to Pan mode',
-                            theme,
-                          )),
-                      PopupMenuItem(
-                          value: 'text_size',
-                          child: _menuItem(
-                              Icons.text_fields_rounded, 'Text Size', theme)),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                          value: 'scroll_mode',
-                          child: _menuItem(
-                            _isContinuousScroll
-                                ? Icons.view_day_outlined
-                                : Icons.view_carousel_outlined,
-                            _isContinuousScroll
-                                ? 'Switch to Page mode'
-                                : 'Switch to Scroll mode',
-                            theme,
-                          )),
-                      PopupMenuItem(
-                          value: 'fit_width',
-                          child: _menuItem(
-                              Icons.fit_screen_rounded, 'Reset zoom', theme)),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                          value: 'save',
-                          child: _menuItem(
-                              Icons.cloud_download_rounded, 'Save for Offline', theme)),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                          value: 'download',
-                          child: _menuItem(
-                              Icons.share_rounded, 'Share Document', theme)),
-                    ],
-                  ),
+                      break;
+                    case 'annotate':
+                      _showAnnotationToolbar();
+                      break;
+                    case 'bookmark':
+                      _toggleBookmark(_currentPage);
+                      break;
+                    case 'interaction_mode':
+                      setState(() {
+                        _interactionMode =
+                            _interactionMode == PdfInteractionMode.pan
+                                ? PdfInteractionMode.selection
+                                : PdfInteractionMode.pan;
+                      });
+                      break;
+                    case 'text_size':
+                      _showTextSizeDialog();
+                      break;
+                    case 'fit_width':
+                      _pdfViewerController.zoomLevel = 1.0;
+                      setState(() => _zoomLevel = 1.0);
+                      break;
+                    case 'scroll_mode':
+                      setState(
+                          () => _isContinuousScroll = !_isContinuousScroll);
+                      break;
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                      value: 'read_aloud',
+                      child: _menuItem(
+                          _isSpeaking
+                              ? Icons.stop_circle_rounded
+                              : Icons.volume_up_rounded,
+                          _isSpeaking ? 'Stop Reading' : 'Read Aloud',
+                          theme)),
+                  PopupMenuItem(
+                      value: 'annotate',
+                      child: _menuItem(
+                          Icons.edit_rounded,
+                          _isAnnotating ? 'Annotations (on)' : 'Annotate',
+                          theme)),
+                  PopupMenuItem(
+                      value: 'bookmark',
+                      child: _menuItem(
+                          _bookmarkedPages.contains(_currentPage)
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          'Bookmark Page',
+                          theme)),
+                  PopupMenuItem(
+                      value: 'interaction_mode',
+                      child: _menuItem(
+                        _interactionMode == PdfInteractionMode.pan
+                            ? Icons.text_fields_rounded
+                            : Icons.pan_tool_rounded,
+                        _interactionMode == PdfInteractionMode.pan
+                            ? 'Switch to Selection Mode'
+                            : 'Switch to Pan mode',
+                        theme,
+                      )),
+                  PopupMenuItem(
+                      value: 'text_size',
+                      child: _menuItem(
+                          Icons.text_fields_rounded, 'Text Size', theme)),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                      value: 'scroll_mode',
+                      child: _menuItem(
+                        _isContinuousScroll
+                            ? Icons.view_day_outlined
+                            : Icons.view_carousel_outlined,
+                        _isContinuousScroll
+                            ? 'Switch to Page mode'
+                            : 'Switch to Scroll mode',
+                        theme,
+                      )),
+                  PopupMenuItem(
+                      value: 'fit_width',
+                      child: _menuItem(
+                          Icons.fit_screen_rounded, 'Reset zoom', theme)),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                      value: 'save',
+                      child: _menuItem(Icons.cloud_download_rounded,
+                          'Save for Offline', theme)),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                      value: 'download',
+                      child: _menuItem(
+                          Icons.share_rounded, 'Share Document', theme)),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -1721,21 +1805,72 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // Bottom bar
-  // ---------------------------------------------------------------------------
   Widget _buildBottomBar(ThemeData theme, bool isDark) {
-    final bg = isDark ? const Color(0xFF2A2A2A) : Colors.white;
-    final fg = isDark ? Colors.white : Colors.black87;
+    final bg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final fg = isDark ? Colors.white : AppColors.text;
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          color: bg.withValues(alpha: isDark ? 0.9 : 0.92),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Row 1: AI Actions
+            Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _aiHubButton(
+                    icon: CupertinoIcons.sparkles,
+                    label: 'Ask AI',
+                    onTap: () => _openAiTutorBottomSheet(),
+                    color: theme.colorScheme.primary,
+                  ),
+                  _aiHubButton(
+                    icon: CupertinoIcons.waveform,
+                    label: 'Live',
+                    onTap: _openLiveVoiceWithPdf,
+                    color: Colors.redAccent,
+                  ),
+                  _aiHubButton(
+                    icon: CupertinoIcons.doc_text_viewfinder,
+                    label: 'Sum',
+                    onTap: _summarizePdf,
+                  ),
+                  _aiHubButton(
+                    icon: CupertinoIcons.square_stack_3d_up_fill,
+                    label: 'Cards',
+                    onTap: _generateFlashcards,
+                  ),
+                  _aiHubButton(
+                    icon: CupertinoIcons.question_circle_fill,
+                    label: 'Quiz',
+                    onTap: _generateQuiz,
+                  ),
+                  _aiHubButton(
+                    icon: CupertinoIcons.camera_viewfinder,
+                    label: 'Snap',
+                    onTap: () => _captureAndAction(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, thickness: 0.5),
+            // Row 2: Zoom and Page Nav
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(
                 children: [
                   // Zoom out
@@ -1759,7 +1894,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                        color:
+                            theme.colorScheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -1783,9 +1919,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                       setState(() => _zoomLevel = z);
                     },
                   ),
-
                   const Spacer(),
-
                   // Prev page
                   Container(
                     decoration: BoxDecoration(
@@ -1863,14 +1997,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                       color: Colors.orange,
                       tooltip: 'Stop annotating',
                       onPressed: () => setState(() {
-                            _annotationMode = PdfAnnotationMode.none;
-                            _isAnnotating = false;
-                          }),
+                        _annotationMode = PdfAnnotationMode.none;
+                        _isAnnotating = false;
+                      }),
                     ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -2064,7 +2198,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: theme.colorScheme.primary),
+            AppSpinner(),
             const SizedBox(height: 16),
             Text('Loading document...',
                 style: GoogleFonts.inter(

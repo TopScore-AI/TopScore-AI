@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../models/firebase_file.dart';
 import '../../constants/colors.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import 'package:provider/provider.dart';
 import '../../providers/download_provider.dart';
 
@@ -21,8 +20,8 @@ class ResourceFileCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final sizeStr = file.size != null
-        ? '${(file.size! / (1024 * 1024)).toStringAsFixed(2)} MB'
-        : 'Unknown size';
+        ? '${(file.size! / (1024 * 1024)).toStringAsFixed(1)} MB'
+        : '';
 
     return Consumer<DownloadProvider>(
       builder: (context, downloadProvider, child) {
@@ -32,15 +31,22 @@ class ResourceFileCard extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: theme.cardColor,
+            color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            boxShadow: isDark
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
           ),
           child: Material(
             color: Colors.transparent,
@@ -48,11 +54,11 @@ class ResourceFileCard extends StatelessWidget {
               onTap: onTap,
               borderRadius: BorderRadius.circular(16),
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 child: Row(
                   children: [
-                    _buildIcon(isDark),
-                    const SizedBox(width: 16),
+                    _buildIcon(),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,71 +67,71 @@ class ResourceFileCard extends StatelessWidget {
                             file.displayName,
                             style: GoogleFonts.plusJakartaSans(
                               fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                              fontSize: 14,
                               color: theme.colorScheme.onSurface,
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 5),
                           Row(
                             children: [
-                              Text(
-                                '${file.subject ?? 'General'} • ${file.gradeLabel}',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 12,
-                                  color: theme.hintColor,
+                              if (file.subject != null) ...[
+                                _Tag(
+                                  label: file.subject!,
+                                  color: theme.colorScheme.primary,
                                 ),
+                                const SizedBox(width: 6),
+                              ],
+                              _Tag(
+                                label: file.gradeLabel,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.4),
                               ),
                               const Spacer(),
-                              Text(
-                                sizeStr,
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.primaryColor,
+                              if (sizeStr.isNotEmpty)
+                                Text(
+                                  sizeStr,
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.35),
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    // --- DOWNLOAD / SAVED ICON ---
+                    const SizedBox(width: 10),
+                    // Download / saved indicator
                     if (isDownloading)
                       SizedBox(
-                        width: 24,
-                        height: 24,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(
                           value: progress > 0 ? progress : null,
                           strokeWidth: 2.5,
-                          color: theme.primaryColor,
+                          color: theme.colorScheme.primary,
                         ),
                       )
                     else if (isDownloaded)
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.1),
+                          color: AppColors.success.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 16,
+                        child: Icon(
+                          Icons.check_rounded,
+                          color: AppColors.success,
+                          size: 14,
                         ),
                       )
                     else
-                      IconButton(
-                        icon: Icon(
-                          Icons.file_download_outlined,
-                          color: theme.hintColor.withValues(alpha: 0.5),
-                          size: 20,
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () {
+                      GestureDetector(
+                        onTap: () {
                           if (file.downloadUrl != null) {
                             downloadProvider.downloadGenericFile(
                               id: file.path,
@@ -134,12 +140,26 @@ class ResourceFileCard extends StatelessWidget {
                             );
                           }
                         },
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.download_rounded,
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.7),
+                            size: 16,
+                          ),
+                        ),
                       ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: theme.hintColor.withValues(alpha: 0.3),
-                      size: 20,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                      size: 18,
                     ),
                   ],
                 ),
@@ -151,37 +171,52 @@ class ResourceFileCard extends StatelessWidget {
     );
   }
 
-  Widget _buildIcon(bool isDark) {
+  Widget _buildIcon() {
     if (file.thumbnailUrl != null) {
-      return Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          image: DecorationImage(
-            image: NetworkImage(file.thumbnailUrl!),
-            fit: BoxFit.cover,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          file.thumbnailUrl!,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fileTypeIcon(),
         ),
       );
     }
+    return _fileTypeIcon();
+  }
 
-    IconData iconData = Icons.insert_drive_file_rounded;
-    Color iconColor = AppColors.primaryPurple;
+  Widget _fileTypeIcon() {
+    IconData iconData;
+    Color iconColor;
 
-    if (file.type == 'pdf') {
-      iconData = Icons.picture_as_pdf_rounded;
-      iconColor = const Color(0xFFEF4444); // Red-500
-    } else if (file.type == 'jpg' || file.type == 'png' || file.type == 'jpeg') {
-      iconData = Icons.image_rounded;
-      iconColor = const Color(0xFFF59E0B); // Amber-500
+    switch (file.type.toLowerCase()) {
+      case 'pdf':
+        iconData = Icons.picture_as_pdf_rounded;
+        iconColor = AppColors.error;
+        break;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'webp':
+        iconData = Icons.image_rounded;
+        iconColor = AppColors.warning;
+        break;
+      case 'doc':
+      case 'docx':
+        iconData = Icons.description_rounded;
+        iconColor = AppColors.info;
+        break;
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+        iconData = Icons.play_circle_rounded;
+        iconColor = AppColors.aiAccent;
+        break;
+      default:
+        iconData = Icons.insert_drive_file_rounded;
+        iconColor = AppColors.primary;
     }
 
     return Container(
@@ -191,8 +226,35 @@ class ResourceFileCard extends StatelessWidget {
         color: iconColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Center(
-        child: Icon(iconData, color: iconColor, size: 24),
+      child: Icon(iconData, color: iconColor, size: 24),
+    );
+  }
+}
+
+// ── Small tag chip ────────────────────────────────────────────────────────────
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Tag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

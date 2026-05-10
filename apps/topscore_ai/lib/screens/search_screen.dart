@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/app_spinner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -100,7 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
           decoration: InputDecoration(
             hintText: 'Search resources, topics...',
             border: InputBorder.none,
-            hintStyle: GoogleFonts.nunito(color: Colors.grey),
+            hintStyle: GoogleFonts.nunito(color: theme.hintColor),
           ),
           style: GoogleFonts.nunito(fontSize: 16),
         ),
@@ -124,7 +125,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildBody() {
     final theme = Theme.of(context);
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return AppSpinner.center();
 
     if (_query.isEmpty) {
       final searchProvider = Provider.of<SearchProvider>(context);
@@ -178,17 +179,18 @@ class _SearchScreenState extends State<SearchScreen> {
               runSpacing: 8,
               children: history
                   .map((s) => ActionChip(
-                        label: Text(s),
+                        label: Text(s, style: GoogleFonts.nunito(fontSize: 12)),
                         onPressed: () {
                           HapticsService.instance.lightImpact();
                           _controller.text = s;
                           _search(s);
                         },
                         backgroundColor:
-                            theme.primaryColor.withValues(alpha: 0.05),
+                            theme.colorScheme.surfaceContainerHighest,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
+                        side: BorderSide.none,
                       ))
                   .toList(),
             ),
@@ -221,7 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const Text('🔍', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 16),
             Text('No results for "$_query"',
-                style: GoogleFonts.nunito(fontSize: 15, color: Colors.grey)),
+                style: GoogleFonts.nunito(fontSize: 15, color: theme.hintColor)),
           ],
         ),
       );
@@ -243,7 +245,7 @@ class _SearchScreenState extends State<SearchScreen> {
           title: Text(r.title,
               style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
           subtitle: Text('${r.subject} · Grade ${r.grade}',
-              style: GoogleFonts.nunito(fontSize: 12, color: Colors.grey)),
+              style: GoogleFonts.nunito(fontSize: 12, color: theme.hintColor)),
           onTap: () => _onResultTap(r),
         );
       },
@@ -251,22 +253,23 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildPopularTopic(String title, String subtitle, IconData icon) {
+    final theme = Theme.of(context);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+          color: theme.primaryColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, color: Theme.of(context).primaryColor),
+        child: Icon(icon, color: theme.primaryColor),
       ),
       title:
           Text(title, style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle,
-          style: GoogleFonts.nunito(fontSize: 12, color: Colors.grey)),
+          style: GoogleFonts.nunito(fontSize: 12, color: theme.hintColor)),
       trailing:
-          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+          Icon(Icons.arrow_forward_ios, size: 14, color: theme.hintColor),
       onTap: () {
         _controller.text = title;
         _search(title);

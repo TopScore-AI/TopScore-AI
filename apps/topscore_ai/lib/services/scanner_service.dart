@@ -1,32 +1,59 @@
-﻿import 'package:universal_io/io.dart';
-// import 'package:cunning_document_scanner/cunning_document_scanner.dart'; // Mobile Only (See Conditional Import below)
-// Since we can't do conditional imports easily without separate files,
-// we will just wrap the usage and suppress checks or use `invokeMethod` if possible,
-// OR simpler: Use conditional compilation if possible.
-// Actually, CunningDocumentScanner plugin usually compiles on web but throws at runtime?
-// The user request says "It will crash on Web. You must hide it..."
-// To strictly avoid compile errors if the package doesn't support web at all, we might need conditional imports.
-// But for now, let's try wrapping with kIsWeb.
-import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'package:universal_io/io.dart';
+// Note: Document Scanner requires Google Play Services on Android.
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+/// Thrown when the doc scanner can't run. Callers should show this message.
+class ScannerUnavailableException implements Exception {
+  final String message;
+  ScannerUnavailableException(this.message);
+  @override
+  String toString() => message;
+}
 
 class ScannerService {
-  /// Opens the native Camera UI with Edge Detection
+  /// Opens the Google ML Kit Document Scanner UI on Android.
+  ///
+  /// Returns the list of image paths on success, or `null` if the user
+  /// cancelled. Throws [ScannerUnavailableException] when the scanner
+  /// can't run (e.g. missing Play Services, web platform) so the caller
+  /// can show a message instead of silently doing nothing.
   Future<List<String>?> scanDocument() async {
+    if (kIsWeb) {
+      throw ScannerUnavailableException(
+        'Document scanner is not available on web.',
+      );
+    }
+
+    final scannerOptions = DocumentScannerOptions(
+      documentFormat: DocumentFormat.jpeg,
+      mode: ScannerMode.full,
+      isGalleryImport: true,
+      pageLimit: 20,
+    );
+
+    final documentScanner = DocumentScanner(options: scannerOptions);
+
     try {
-      if (kIsWeb) {
-        if (kDebugMode) debugPrint("Scanner not supported on Web");
-        return null;
-      }
-      List<String>? images = await CunningDocumentScanner.getPictures();
-      return images;
+      final result = await documentScanner.scanDocument();
+      return result.images;
+    } on PlatformException catch (e) {
+      if (kDebugMode) debugPrint('Scanner PlatformException: ${e.code} ${e.message}');
+      // ML Kit's document scanner module is downloaded on demand via Play
+      // Services. If it's missing/outdated the plugin throws here.
+      throw ScannerUnavailableException(
+        'Document scanner unavailable. Please update Google Play Services and try again.',
+      );
     } catch (e) {
-      if (kDebugMode) debugPrint("Scanner Error: $e");
-      return null;
+      if (kDebugMode) debugPrint('Scanner Error: $e');
+      rethrow;
+    } finally {
+      documentScanner.close();
     }
   }
 

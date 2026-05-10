@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'dart:developer' as developer;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../tutor_client/connection_manager.dart';
+
 enum GeminiLiveEventType {
   user,
   gemini,
@@ -17,7 +19,10 @@ enum GeminiLiveEventType {
   flashcards,
   interactiveGraph,
   mnemonic,
-  punnettSquare
+  punnettSquare,
+  sessionEnd,
+  ping,
+  suggestions,
 }
 
 class GeminiLiveEvent {
@@ -60,6 +65,10 @@ class GeminiLiveEvent {
           toolArgs: json['args'],
           toolResult: json['result'],
         );
+      case 'session_end':
+        return GeminiLiveEvent(type: GeminiLiveEventType.sessionEnd, raw: json);
+      case 'ping':
+        return GeminiLiveEvent(type: GeminiLiveEventType.ping);
       case 'error':
         return GeminiLiveEvent(
             type: GeminiLiveEventType.error, error: json['error']);
@@ -83,6 +92,9 @@ class GeminiLiveEvent {
       case 'punnett_square':
         return GeminiLiveEvent(
             type: GeminiLiveEventType.punnettSquare, raw: json);
+      case 'suggestions':
+        return GeminiLiveEvent(
+            type: GeminiLiveEventType.suggestions, raw: json);
       default:
         return GeminiLiveEvent(
             type: GeminiLiveEventType.error,
@@ -102,9 +114,21 @@ class GeminiLiveService {
   Stream<GeminiLiveEvent> get events => _eventController.stream;
   Stream<Uint8List> get audioStream => _audioController.stream;
 
+  final ConnectionStateManager _connectionManager = ConnectionStateManager();
+
+  // _sessionActive: true between startLiveVoice and explicit stop — used to
+  // decide whether a socket drop is a transient hiccup (reconnecting) or a
+  // clean teardown.
+  bool _sessionActive = false;
+
+  /// Called by the controller when the user explicitly ends voice mode.
+  void markStopped() {
+    _sessionActive = false;
+  }
+
   // _isConnected: handshake complete AND sink not yet closed
   bool _isConnected = false;
-  // _isClosed: set the moment we know the channel is closing/closed —
+  // _isClosed: set the moment we know the channel is closing/closed Ã¢â‚¬â€
   // checked before every sink.add() to prevent the BrowserWebSocket error.
   bool _isClosed = true;
 
@@ -114,6 +138,7 @@ class GeminiLiveService {
     if (_isConnected) return;
 
     _isClosed = false;
+    _sessionActive = true;
 
     try {
       _channel = WebSocketChannel.connect(Uri.parse(url));
@@ -124,21 +149,26 @@ class GeminiLiveService {
       await _channel!.ready;
 
       _isConnected = true;
+      _connectionManager.setVoiceConnected(true);
       developer.log('Gemini Live: Connected to $url',
           name: 'GeminiLiveService');
 
       _channel!.stream.listen(
         (message) {
           if (message is List<int>) {
-            _audioController.add(Uint8List.fromList(message));
+            if (!_audioController.isClosed) {
+              _audioController.add(Uint8List.fromList(message));
+            }
           } else if (message is String) {
             try {
               final json = jsonDecode(message);
-              _eventController.add(GeminiLiveEvent.fromJson(json));
+              if (!_eventController.isClosed) {
+                _eventController.add(GeminiLiveEvent.fromJson(json));
+              }
             } catch (e) {
               developer.log('Gemini Live: Error decoding JSON: $e',
                   name: 'GeminiLiveService');
-              _eventController.add(GeminiLiveEvent(
+              _safeAddEvent(GeminiLiveEvent(
                   type: GeminiLiveEventType.error,
                   error: 'JSON parse error: $e'));
             }
@@ -147,10 +177,11 @@ class GeminiLiveService {
         onDone: () {
           final code = _channel?.closeCode;
           final reason = _channel?.closeReason;
+          final wasActive = _sessionActive;
           _markClosed();
 
           // Only emit an error event if this wasn't a clean intentional stop
-          if (code != 1000) {
+          if (wasActive && code != 1000) {
             final errorMsg = _mapCloseCodeToMessage(code, reason);
             _safeAddEvent(GeminiLiveEvent(
                 type: GeminiLiveEventType.error, error: errorMsg));
@@ -160,10 +191,13 @@ class GeminiLiveService {
               name: 'GeminiLiveService');
         },
         onError: (error) {
+          final wasActive = _sessionActive;
           _markClosed();
-          _safeAddEvent(GeminiLiveEvent(
-              type: GeminiLiveEventType.error,
-              error: 'WebSocket error: $error'));
+          if (wasActive) {
+            _safeAddEvent(GeminiLiveEvent(
+                type: GeminiLiveEventType.error,
+                error: 'WebSocket error: $error'));
+          }
           developer.log('Gemini Live: WebSocket error: $error',
               name: 'GeminiLiveService');
         },
@@ -183,9 +217,10 @@ class GeminiLiveService {
   void _markClosed() {
     _isConnected = false;
     _isClosed = true;
+    _connectionManager.setVoiceConnected(false);
   }
 
-  /// Safely add to event stream — guards against adding to a closed controller.
+  /// Safely add to event stream Ã¢â‚¬â€ guards against adding to a closed controller.
   void _safeAddEvent(GeminiLiveEvent event) {
     if (!_eventController.isClosed) {
       _eventController.add(event);
@@ -266,6 +301,7 @@ class GeminiLiveService {
   }
 
   void stop() {
+    _sessionActive = false;
     _markClosed();
     try {
       _channel?.sink.close();
@@ -277,7 +313,11 @@ class GeminiLiveService {
 
   void dispose() {
     stop();
-    if (!_eventController.isClosed) _eventController.close();
-    if (!_audioController.isClosed) _audioController.close();
+    // Use Future.microtask to avoid closing controllers synchronously
+    // which can cause "Bad state: Cannot add new events after calling close" errors
+    Future.microtask(() {
+      if (!_eventController.isClosed) _eventController.close();
+      if (!_audioController.isClosed) _audioController.close();
+    });
   }
 }

@@ -26,8 +26,8 @@ class UserModel {
   final Map<String, double>? competencyScores; // CBC seven core competencies
 
   // Freemium tracking limits
-  final int dailyMessageCount;
-  final DateTime? lastMessageDate;
+  final int freeMessageCount;
+  final DateTime? freeMessagesLastAt;
   final List<String> accessedDocuments;
   final DateTime? lastDocumentAccessDate;
 
@@ -55,8 +55,8 @@ class UserModel {
     this.parentalConsentGiven = false,
     this.dateOfBirth,
     this.competencyScores,
-    this.dailyMessageCount = 0,
-    this.lastMessageDate,
+    this.freeMessageCount = 0,
+    this.freeMessagesLastAt,
     this.accessedDocuments = const [],
     this.lastDocumentAccessDate,
   });
@@ -85,8 +85,14 @@ class UserModel {
       'role': role,
       'grade': grade,
       'schoolName': schoolName,
+      'xp': 0,
+      'level': 1,
       if (preferredName != null) 'preferred_name': preferredName,
       'created_at': FieldValue.serverTimestamp(),
+      // Initialize free user limits for new accounts
+      'free_message_count': freeMessageCount,
+      'free_messages_last_at': freeMessagesLastAt,
+      'tier': 'Free', // Default tier for new users
     };
   }
 
@@ -115,8 +121,8 @@ class UserModel {
       'parental_consent_given': parentalConsentGiven,
       'date_of_birth': dateOfBirth?.millisecondsSinceEpoch,
       'competency_scores': competencyScores,
-      'dailyMessageCount': dailyMessageCount,
-      'lastMessageDate': lastMessageDate?.millisecondsSinceEpoch,
+      'free_message_count': freeMessageCount,
+      'free_messages_last_at': freeMessagesLastAt?.millisecondsSinceEpoch,
       'accessedDocuments': accessedDocuments,
       'lastDocumentAccessDate': lastDocumentAccessDate?.millisecondsSinceEpoch,
     };
@@ -172,8 +178,10 @@ class UserModel {
               ),
             )
           : null,
-      dailyMessageCount: map['dailyMessageCount'] ?? 0,
-      lastMessageDate: getDateTime(map['lastMessageDate']),
+      freeMessageCount:
+          map['free_message_count'] ?? map['dailyMessageCount'] ?? 0,
+      freeMessagesLastAt:
+          getDateTime(map['free_messages_last_at'] ?? map['lastMessageDate']),
       accessedDocuments: map['accessedDocuments'] != null
           ? List<String>.from(map['accessedDocuments'])
           : [],
@@ -205,8 +213,8 @@ class UserModel {
     bool? parentalConsentGiven,
     DateTime? dateOfBirth,
     Map<String, double>? competencyScores,
-    int? dailyMessageCount,
-    DateTime? lastMessageDate,
+    int? freeMessageCount,
+    DateTime? freeMessagesLastAt,
     List<String>? accessedDocuments,
     DateTime? lastDocumentAccessDate,
   }) {
@@ -234,8 +242,8 @@ class UserModel {
       parentalConsentGiven: parentalConsentGiven ?? this.parentalConsentGiven,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       competencyScores: competencyScores ?? this.competencyScores,
-      dailyMessageCount: dailyMessageCount ?? this.dailyMessageCount,
-      lastMessageDate: lastMessageDate ?? this.lastMessageDate,
+      freeMessageCount: freeMessageCount ?? this.freeMessageCount,
+      freeMessagesLastAt: freeMessagesLastAt ?? this.freeMessagesLastAt,
       accessedDocuments: accessedDocuments ?? this.accessedDocuments,
       lastDocumentAccessDate:
           lastDocumentAccessDate ?? this.lastDocumentAccessDate,

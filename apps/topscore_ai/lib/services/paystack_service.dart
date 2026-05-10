@@ -84,7 +84,7 @@ class PaystackService {
       }
 
       final headers =
-          await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+          await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
       final response = await http.post(
         url,
         headers: headers,
@@ -108,7 +108,7 @@ class PaystackService {
     final url = Uri.parse('${AppConfig.paystackVerify}/$reference');
 
     try {
-      final headers = await AuthHeaders.getHeaders();
+      final headers = await AuthHeaders.getHeaders(existingHeaders: {});
       final response = await http.get(url, headers: headers);
 
       if (response.statusCode == 200) {

@@ -11,8 +11,13 @@ class TutorConnectionProvider with ChangeNotifier {
   bool get isInitialized => _isInitialized;
 
   /// Initialize or update the connection for a specific user
-  void updateUserId(String? userId) {
-    if (userId == _currentUserId) return;
+  Future<void> updateUserId(String? userId) async {
+    if (userId == _currentUserId && _wsService != null) {
+      // If the user hasn't changed, ensure the existing connection is resumed
+      // (Handles background -> foreground transitions)
+      _wsService?.resume();
+      return;
+    }
 
     _currentUserId = userId;
 
@@ -32,8 +37,9 @@ class TutorConnectionProvider with ChangeNotifier {
         notifyListeners();
       });
 
-      // Connect immediately
-      _wsService!.connect();
+      // Initialize storage/listeners, then connect.
+      await _wsService!.initialize();
+      await _wsService!.connect();
       _isInitialized = true;
     } else {
       _isInitialized = false;
@@ -42,8 +48,36 @@ class TutorConnectionProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pre-connect using the device ID before the user signs in.
+  /// This ensures the WebSocket is ready as soon as the app launches.
+  Future<void> preconnect(String deviceId) async {
+    if (_wsService != null && _currentUserId == deviceId) return;
+    
+    if (kDebugMode) {
+      debugPrint('[TutorConnection] Pre-connecting with Device ID: $deviceId');
+    }
+    
+    // Use deviceId as the initial identity
+    _currentUserId = deviceId;
+    _wsService?.dispose();
+    _wsService = EnhancedWebSocketService(userId: deviceId);
+    
+    _wsService!.isConnectedStream.listen((connected) {
+      notifyListeners();
+    });
+    
+    await _wsService!.initialize();
+    await _wsService!.connect();
+    _isInitialized = true;
+    notifyListeners();
+  }
+
   void reconnect() {
     _wsService?.resetConnection();
+  }
+
+  void resume() {
+    _wsService?.resume();
   }
 
   void pause() {

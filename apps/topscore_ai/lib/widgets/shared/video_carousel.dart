@@ -23,7 +23,7 @@ class VideoCarousel extends StatelessWidget {
             style: GoogleFonts.nunito(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -48,7 +48,7 @@ class VideoCarousel extends StatelessWidget {
       width: 200,
       margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -144,7 +144,7 @@ class VideoCarousel extends StatelessWidget {
                       style: GoogleFonts.nunito(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
-                        color: Colors.black87,
+                        color: Theme.of(context).colorScheme.onSurface,
                         height: 1.2,
                       ),
                     ),
@@ -153,7 +153,10 @@ class VideoCarousel extends StatelessWidget {
                       video.source,
                       style: GoogleFonts.nunito(
                         fontSize: 12,
-                        color: Colors.grey[600],
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
                       ),
                     ),
                   ],

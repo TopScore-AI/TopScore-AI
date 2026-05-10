@@ -1,7 +1,12 @@
 /// Strips common markdown formatting from a string, returning plain text.
 /// Used for displaying AI-generated titles and chat content in plain UI contexts.
 String stripMarkdown(String text) {
-  return text
+  if (text.isEmpty) return text;
+  
+  // First, remove technical metadata tags completely
+  String cleaned = _removeTechnicalMetadata(text);
+  
+  return cleaned
       .replaceAll(RegExp(r'\*\*\*([^*]+)\*\*\*'), r'$1') // ***bold italic***
       .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1')     // **bold**
       .replaceAll(RegExp(r'\*([^*]+)\*'), r'$1')          // *italic*
@@ -26,21 +31,7 @@ String postFormatAIResponse(String text) {
   String formatted = text;
 
   // 1. Hide Technical Metadata Tags (Internal artifact triggers)
-  final List<String> metadataPatterns = [
-    r'\[INTERACTIVE_GRAPH_CONFIG\]\([^)]*\)',
-    r'\[QUIZ_DATA\]\([^)]*\)',
-    r'\[FLASHCARDS_DATA\]\([^)]*\)',
-    r'\[MNEMONIC_DATA\]\([^)]*\)',
-    r'\[GRAPH_DATA\]\([^)]*\)',
-    r'\[PLOT_DATA\]\([^)]*\)',
-    r'\[TABLE_DATA\]\([^)]*\)',
-    r'\[SEARCH_QUERY\]\([^)]*\)',
-    r'\[PUNNETT_SQUARE\]\([^)]*\)',
-  ];
-
-  for (final pattern in metadataPatterns) {
-    formatted = formatted.replaceAll(RegExp(pattern), '');
-  }
+  formatted = _removeTechnicalMetadata(formatted);
 
   // 2. Hide Thinking/Reasoning tags (if they are in the main text stream)
   formatted = formatted.replaceAll(RegExp(r'<thought>[\s\S]*?<\/thought>'), '');
@@ -68,4 +59,53 @@ String postFormatAIResponse(String text) {
   formatted = formatted.replaceAll(RegExp(r'\n{3,}'), '\n\n');
   
   return formatted.trim();
+}
+
+/// Robustly removes internal technical tags and their data payloads.
+/// Handles partial tags during streaming and ensures they are completely hidden.
+String _removeTechnicalMetadata(String text) {
+  const tags = [
+    'QUIZ_DATA',
+    'FLASHCARDS_DATA',
+    'MNEMONIC_DATA',
+    'INTERACTIVE_GRAPH_CONFIG',
+    'GRAPH_DATA',
+    'PLOT_DATA',
+    'TABLE_DATA',
+    'SEARCH_QUERY',
+    'PUNNETT_SQUARE',
+    'GRAPH_GENERATED',
+  ];
+
+  String result = text;
+  for (final tag in tags) {
+    // Matches the tag and an optional parenthesized block that might be incomplete or multi-line.
+    // Breakdown:
+    // 1.  \[TAG\]              - matches literal tag like [QUIZ_DATA]
+    // 2.  (?:\(.*?\))?         - optionally matches a non-greedy parenthesized block (data payload)
+    // 3.  (?:\([^)]*$)?        - OR matches an unclosed parenthetical block (for streaming UI)
+    final pattern = RegExp(
+      '\\[$tag\\](?:\\([^)]*\\)?)?',
+      multiLine: true,
+      dotAll: true,
+    );
+    result = result.replaceAll(pattern, '');
+  }
+
+  // Image tools (wikimedia_tool, image_search_tool, serpapi_image_search_tool)
+  // return confirmation strings like `[IMAGE_FOUND] ![alt](url)\n[Source: s](url)`
+  // (legacy) or `[IMAGE_DELIVERED] Found image: '...'. The image has been sent...`
+  // (current). If the agent echoes these into its prose, gpt_markdown can
+  // mis-parse the blob as an image URL and issue a doomed request against
+  // backendBaseUrl. Drop the whole line, not just the tag.
+  result = result.replaceAll(
+    RegExp(r'\[IMAGE_DELIVERED\][^\n]*', multiLine: true),
+    '',
+  );
+  result = result.replaceAll(
+    RegExp(r'\[IMAGE_FOUND\][^\n]*', multiLine: true),
+    '',
+  );
+
+  return result;
 }

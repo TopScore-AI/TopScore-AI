@@ -88,10 +88,8 @@ extension ChatControllerTTS on ChatController {
     _isTtsPaused = false;
     notify();
     
-    // Sanitize text for speech:
-    // 1. Remove technical metadata tags
+    // 1. Sanitize text for speech:
     final cleaned = postFormatAIResponse(text);
-    // 2. Strip formatting, newlines, images
     final plainText = stripMarkdown(cleaned);
     
     if (plainText.isEmpty) {
@@ -101,7 +99,14 @@ extension ChatControllerTTS on ChatController {
       return;
     }
 
+    // 2. Synchronize Language Accent
+    final authProvider = Provider.of<AuthProvider>(scaffoldKey.currentContext!, listen: false);
+    final lang = authProvider.userModel?.preferredLanguage == 'sw' ? 'sw-KE' : 'en-US';
+    await _ttsService.setLanguage(lang);
+
     await _ttsService.speak(plainText);
+
+
   }
 
   Future<void> stopTts() async {

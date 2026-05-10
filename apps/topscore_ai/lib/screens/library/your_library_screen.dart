@@ -1,24 +1,23 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../../widgets/app_spinner.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
-import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/resources_provider.dart';
+import '../../repositories/synced_study_repository.dart';
 import '../../widgets/resources/resource_file_card.dart';
-import '../../main.dart'; // For studyDb
-import '../../utils/cors_proxy_helper.dart';
+import '../../main.dart'; // studyDb
 import '../tools/flashcard_study_screen.dart';
 import '../tools/quiz_study_screen.dart';
 import '../../models/flashcard_model.dart';
 import '../../models/quiz_model.dart';
+import '../../services/download_service.dart';
+import '../../models/firebase_file.dart';
 
 class YourLibraryScreen extends StatefulWidget {
   const YourLibraryScreen({super.key});
@@ -27,22 +26,54 @@ class YourLibraryScreen extends StatefulWidget {
   State<YourLibraryScreen> createState() => _YourLibraryScreenState();
 }
 
-class _YourLibraryScreenState extends State<YourLibraryScreen> {
+class _YourLibraryScreenState extends State<YourLibraryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final DownloadService _downloadService = DownloadService();
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = context.read<AuthProvider>();
       if (auth.userModel != null) {
-        context.read<ResourcesProvider>().loadRecentlyOpened();
-        context.read<ResourcesProvider>().loadCloudHistory(auth.userModel!.uid);
+        final res = context.read<ResourcesProvider>();
+        await res.loadRecentlyOpened();
+        await res.loadCloudHistory(auth.userModel!.uid);
+        _triggerAutoDownloads(res.recentlyOpened);
       }
     });
   }
 
   @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _triggerAutoDownloads(List<FirebaseFile> files) async {
+    if (kIsWeb) return;
+    for (final file in files) {
+      if (file.downloadUrl == null || file.downloadUrl!.isEmpty) continue;
+      final isDownloaded = await _downloadService.isDownloaded(file.path);
+      if (!isDownloaded) {
+        _downloadService
+            .downloadFile(
+              id: file.path,
+              title: file.name,
+              downloadUrl: file.downloadUrl!,
+              onProgress: (_) {},
+            )
+            .catchError((_) => 'error');
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final auth = context.watch<AuthProvider>();
     final uid = auth.userModel?.uid ?? 'anon';
 
@@ -50,377 +81,310 @@ class _YourLibraryScreenState extends State<YourLibraryScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
-          "Your Library",
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+          'Your Library',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
         ),
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          labelStyle:
+              GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+          unselectedLabelStyle:
+              GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+          labelColor: theme.colorScheme.primary,
+          unselectedLabelColor:
+              theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          indicatorColor: theme.colorScheme.primary,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: Colors.transparent,
+          tabs: const [
+            Tab(text: 'Files'),
+            Tab(text: 'Flashcards'),
+            Tab(text: 'Quizzes'),
+          ],
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
           final res = context.read<ResourcesProvider>();
           await res.loadRecentlyOpened();
           await res.loadCloudHistory(uid);
+          setState(() {}); // refresh FutureBuilders
         },
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // --- SECTION 1: RECENTLY SAVED / OPENED ---
-            _buildSectionHeader("Recently Saved"),
-            _buildRecentSliver(),
-
-            // --- SECTION 2: AI ARTIFACTS (Images & Graphs) ---
-            _buildSectionHeader("My AI Creations"),
-            _buildArtifactsSliver(uid),
-
-            // --- SECTION 3: STUDY MATERIALS (Flashcards & Quizzes) ---
-            _buildSectionHeader("Flashcards & Quizzes"),
-            _buildOfflineSliver(),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 120)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(20, 32, 20, 16),
-      sliver: SliverToBoxAdapter(
-        child: Row(
+        child: TabBarView(
+          controller: _tabController,
           children: [
-            Container(
-              width: 4,
-              height: 18,
-              decoration: BoxDecoration(
-                color: AppColors.primaryPurple,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              title,
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                letterSpacing: -0.5,
-              ),
-            ),
+            _FilesTab(isDark: isDark),
+            _MaterialsTab(type: 'flashcard', isDark: isDark),
+            _MaterialsTab(type: 'quiz', isDark: isDark),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildRecentSliver() {
+// ─── Files tab ────────────────────────────────────────────────────────────────
+
+class _FilesTab extends StatelessWidget {
+  final bool isDark;
+  const _FilesTab({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
     return Consumer<ResourcesProvider>(
-      builder: (context, provider, child) {
+      builder: (context, provider, _) {
         final recent = provider.recentlyOpened;
         if (recent.isEmpty) {
-          return const SliverToBoxAdapter(
-            child: _EmptyPlaceholder(message: "No recently saved files."),
+          return const _EmptyState(
+            icon: CupertinoIcons.doc_text,
+            message:
+                'No saved files yet.\nOpen a PDF from the Library to save it here.',
           );
         }
-
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final file = recent[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ResourceFileCard(
-                    file: file,
-                    onTap: () => context.push('/pdf-viewer', extra: {
-                      'url': file.downloadUrl,
-                      'title': file.displayName,
-                    }),
-                  ),
-                );
-              },
-              childCount: recent.length > 5 ? 5 : recent.length,
-            ),
-          ),
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+          itemCount: recent.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, i) {
+            final file = recent[i];
+            return ResourceFileCard(
+              file: file,
+              onTap: () => context.push('/pdf-viewer', extra: {
+                'url': file.downloadUrl,
+                'title': file.displayName,
+                'storagePath': file.path,
+              }),
+            );
+          },
         );
       },
     );
   }
+}
 
-  Widget _buildArtifactsSliver(String uid) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('library')
-          .orderBy('createdAt', descending: true)
-          .limit(8)
-          .snapshots(),
+// ─── Flashcards / Quizzes tab ─────────────────────────────────────────────────
+
+class _MaterialsTab extends StatefulWidget {
+  final String type;
+  final bool isDark;
+  const _MaterialsTab({required this.type, required this.isDark});
+
+  @override
+  State<_MaterialsTab> createState() => _MaterialsTabState();
+}
+
+class _MaterialsTabState extends State<_MaterialsTab> {
+  late Stream<List<Map<String, dynamic>>> _stream;
+  late Future<List<Map<String, dynamic>>> _fallbackFuture;
+
+  void _bind() {
+    final repo = studyDb;
+    if (repo is SyncedStudyRepository) {
+      _stream = repo.watchMaterialsByType(widget.type);
+    } else {
+      _stream = const Stream.empty();
+    }
+    _fallbackFuture = studyDb.getMaterialsByType(widget.type);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _bind();
+  }
+
+  void _refresh() => setState(_bind);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _stream,
+      initialData: null,
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SliverToBoxAdapter(
-            child: _EmptyPlaceholder(message: "Generated images/graphs will appear here."),
-          );
-        }
-
-        final cloudDocs = snapshot.data!.docs;
-        
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverMasonryGrid.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            itemBuilder: (context, index) {
-              final data = cloudDocs[index].data() as Map<String, dynamic>;
-              return _ArtifactCard(data: data);
+        if (!snapshot.hasData) {
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: _fallbackFuture,
+            builder: (context, futureSnap) {
+              if (futureSnap.connectionState == ConnectionState.waiting) {
+                return AppSpinner.center();
+              }
+              return _buildList(futureSnap.data ?? []);
             },
-            childCount: cloudDocs.length,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildOfflineSliver() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: Future.wait([
-        studyDb.getMaterialsByType('flashcards'),
-        studyDb.getMaterialsByType('quiz'),
-        studyDb.getMaterialsByType('pdf_summary'),
-      ]).then((lists) => lists.expand((x) => x).toList()
-        ..sort((a, b) => b['createdAt'].toString().compareTo(a['createdAt'].toString()))),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SliverToBoxAdapter(
-            child: _EmptyPlaceholder(message: "No generated study sets yet."),
           );
         }
-
-        final items = snapshot.data!;
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _OfflineMaterialCard(item: items[index]),
-                );
-              },
-              childCount: items.length > 15 ? 15 : items.length,
-            ),
-          ),
-        );
+        return _buildList(snapshot.data ?? []);
       },
     );
   }
-}
 
-class _EmptyPlaceholder extends StatelessWidget {
-  final String message;
-  const _EmptyPlaceholder({required this.message});
+  Widget _buildList(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      return _EmptyState(
+        icon: widget.type == 'flashcard'
+            ? CupertinoIcons.rectangle_on_rectangle_angled
+            : CupertinoIcons.checkmark_seal,
+        message: widget.type == 'flashcard'
+            ? 'No flashcard sets saved yet.\nGenerate some from the AI Tutor!'
+            : 'No quizzes saved yet.\nGenerate some from the AI Tutor!',
+      );
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 32,
-            color: theme.hintColor.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white38 : Colors.black38,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, i) => _StudyMaterialCard(
+        item: items[i],
+        onDeleted: _refresh,
       ),
     );
   }
 }
 
-class _ArtifactCard extends StatelessWidget {
-  final Map<String, dynamic> data;
-  const _ArtifactCard({required this.data});
+// ─── Study material card ──────────────────────────────────────────────────────
+
+class _StudyMaterialCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final VoidCallback onDeleted;
+
+  const _StudyMaterialCard({required this.item, required this.onDeleted});
 
   @override
   Widget build(BuildContext context) {
-    final type = data['type'] ?? 'text';
-    final content = data['content'] ?? '';
-    final title = data['title'] ?? 'Untitled';
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final type = item['type'] as String? ?? '';
+    final topic = item['topic'] as String? ?? 'Untitled';
+    final curriculum = item['curriculum'] as String? ?? '';
+    final grade = item['grade']?.toString() ?? '';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.02)),
+    final isFlashcard = type == 'flashcard';
+    final color = isFlashcard ? Colors.orange : Colors.green;
+    final icon = isFlashcard
+        ? CupertinoIcons.rectangle_on_rectangle_angled
+        : CupertinoIcons.checkmark_seal_fill;
+
+    // Count items for the subtitle
+    final count = _countItems(item);
+    final countLabel = isFlashcard
+        ? '$count card${count == 1 ? '' : 's'}'
+        : '$count question${count == 1 ? '' : 's'}';
+
+    return Dismissible(
+      key: Key('${item['id']}_$topic'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(CupertinoIcons.delete, color: Colors.red),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (type == 'image' || type == 'graph')
-            AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: CachedNetworkImage(
-                  imageUrl: CorsProxyHelper.getCorsProxyUrl(content),
-                  placeholder: (c, u) => Container(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
-                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
-                  errorWidget: (c, u, e) => const Icon(Icons.broken_image_outlined),
-                  fit: BoxFit.cover,
-                ),
+      confirmDismiss: (_) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete?'),
+            content: Text('Remove "$topic" from your library?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (_) async {
+        final id = item['id'];
+        if (id != null) {
+          await studyDb.deleteMaterial(id as int);
+          onDeleted();
+        }
+      },
+      child: Material(
+        color: isDark ? const Color(0xFF1E1E1E) : theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () => _openStudyScreen(context),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.black.withValues(alpha: 0.04),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: (type == 'graph' ? Colors.blue : Colors.purple).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    type.toString().toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: (type == 'graph' ? Colors.blue : Colors.purple),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title, 
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w700, 
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OfflineMaterialCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  const _OfflineMaterialCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final type = item['type'];
-    final topic = item['topic'] ?? 'Untitled';
-    
-    IconData icon = Icons.description_rounded;
-    Color color = Colors.blue;
-    if (type == 'flashcards') { icon = Icons.style_rounded; color = Colors.orange; }
-    else if (type == 'quiz') { icon = Icons.quiz_rounded; color = Colors.green; }
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _handleStudy(context),
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
+                // Icon badge
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: color, size: 24),
+                  child: Icon(icon, color: color, size: 26),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
+
+                // Text
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        topic, 
+                        topic,
                         style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700, 
+                          fontWeight: FontWeight.w700,
                           fontSize: 15,
                           color: theme.colorScheme.onSurface,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '${type.toString().toUpperCase()} • ${item['curriculum'] ?? 'General'}',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: theme.hintColor,
-                        ),
+                      Row(
+                        children: [
+                          _Chip(label: countLabel, color: color),
+                          if (curriculum.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            _Chip(
+                                label: curriculum,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.4)),
+                          ],
+                          if (grade.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            _Chip(
+                                label: grade,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.4)),
+                          ],
+                        ],
                       ),
                     ],
                   ),
                 ),
+
+                // Arrow
                 Icon(
-                  Icons.arrow_forward_ios_rounded, 
-                  size: 16, 
-                  color: theme.hintColor.withValues(alpha: 0.3),
+                  CupertinoIcons.chevron_right,
+                  size: 16,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
                 ),
               ],
             ),
@@ -430,93 +394,176 @@ class _OfflineMaterialCard extends StatelessWidget {
     );
   }
 
-  void _handleStudy(BuildContext context) {
-    final jsonData = jsonDecode(item['jsonData']);
-    final type = item['type'];
+  int _countItems(Map<String, dynamic> item) {
+    try {
+      final raw = jsonDecode(item['jsonData'] as String);
+      if (raw is Map) {
+        final list = raw['cards'] ?? raw['questions'];
+        if (list is List) return list.length;
+      } else if (raw is List) {
+        return raw.length;
+      }
+    } catch (_) {}
+    return 0;
+  }
 
-    if (type == 'flashcards') {
-      final List<dynamic> cardsJson = jsonData;
-      final flashcardSet = FlashcardSet(
-        title: item['topic'] ?? 'Untitled Flashcards',
-        topic: item['topic'] ?? 'Untitled Flashcards',
-        curriculum: item['curriculum'] ?? 'Unknown',
-        grade: int.tryParse(item['grade']?.toString().split(' ').last ?? ''),
-        cards: cardsJson.map((c) => Flashcard.fromJson(c)).toList(),
-      );
-      context.push('/ai-tutor', extra: flashcardSet.cards); // FlashcardStudyScreen should be a GoRoute or handled via AI Tutor
-      // Actually, looking at the models, I should verify if FlashcardStudyScreen and QuizStudyScreen are GoRoutes.
-      // If not, I should keep Navigator.push or register them as GoRoutes.
-      // In router.dart, I don't see them.
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => FlashcardStudyScreen(flashcardSet: flashcardSet),
-        ),
-      );
-    } else if (type == 'quiz') {
-      final List<dynamic> questionsJson = jsonData;
-      final questions = questionsJson.map((q) => QuizQuestion.fromJson(q)).toList();
-      final quiz = Quiz(
-        title: item['topic'] ?? 'Untitled Quiz',
-        topic: item['topic'] ?? 'General',
-        difficulty: 'Saved',
-        questions: questions,
-        curriculum: item['curriculum'],
-        grade: int.tryParse(item['grade']?.toString().split(' ').last ?? ''),
-      );
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => QuizStudyScreen(
-            offlineQuiz: quiz,
+  void _openStudyScreen(BuildContext context) {
+    final type = item['type'] as String? ?? '';
+    try {
+      final raw = jsonDecode(item['jsonData'] as String);
+
+      if (type == 'flashcard') {
+        final FlashcardSet set;
+        if (raw is Map<String, dynamic> && raw.containsKey('cards')) {
+          // Full FlashcardSet JSON
+          set = FlashcardSet.fromJson(raw);
+        } else if (raw is List) {
+          // Legacy: bare list of cards
+          set = FlashcardSet(
+            title: item['topic'] ?? 'Flashcards',
+            topic: item['topic'] ?? 'Flashcards',
+            curriculum: item['curriculum'],
+            grade: int.tryParse(
+                item['grade']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ??
+                    ''),
+            cards: raw
+                .map((c) => Flashcard.fromJson(c as Map<String, dynamic>))
+                .toList(),
+          );
+        } else {
+          _showError(context, 'Could not read flashcard data.');
+          return;
+        }
+
+        if (set.cards.isEmpty) {
+          _showError(context, 'This flashcard set has no cards.');
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => FlashcardStudyScreen(flashcardSet: set),
+          ),
+        );
+      } else if (type == 'quiz') {
+        final Quiz quiz;
+        if (raw is Map<String, dynamic> && raw.containsKey('questions')) {
+          // Full Quiz JSON
+          quiz = Quiz.fromJson(raw);
+        } else if (raw is List) {
+          // Legacy: bare list of questions
+          quiz = Quiz(
+            title: item['topic'] ?? 'Quiz',
             topic: item['topic'] ?? 'General',
-            curriculum: item['curriculum'] ?? 'Unknown',
-            grade: item['grade']?.toString() ?? 'Unknown',
+            difficulty: 'Saved',
+            curriculum: item['curriculum'],
+            grade: int.tryParse(
+                item['grade']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ??
+                    ''),
+            questions: raw
+                .map((q) => QuizQuestion.fromJson(q as Map<String, dynamic>))
+                .toList(),
+          );
+        } else {
+          _showError(context, 'Could not read quiz data.');
+          return;
+        }
+
+        if (quiz.questions.isEmpty) {
+          _showError(context, 'This quiz has no questions.');
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => QuizStudyScreen(
+              offlineQuiz: quiz,
+              topic: item['topic'] ?? 'General',
+              curriculum: item['curriculum'] ?? 'General',
+              grade: item['grade']?.toString() ?? '',
+            ),
           ),
-        ),
-      );
-    } else if (type == 'pdf') {
-       final localPath = jsonData['localPath'];
-       if (localPath != null) {
-         context.push('/pdf-viewer', extra: {
-           'file': File(localPath),
-           'title': item['topic'] ?? 'Offline Document',
-         });
-       }
-     } else {
-       // PDF Summary
-       final summary = jsonData['summary'] ?? '';
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Summary: ${item['topic']}",
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Markdown(
-                  data: summary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      _showError(context, 'Failed to open: $e');
     }
+  }
+
+  void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+// ─── Chip label ───────────────────────────────────────────────────────────────
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Chip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  const _EmptyState({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 56,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              message,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

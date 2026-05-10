@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+﻿// Copyright 2025 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 import 'dart:developer';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_soloud/flutter_soloud.dart';
 
 class AudioOutput {
@@ -29,65 +30,120 @@ class AudioOutput {
       return;
     }
 
-    /// Initialize the player (singleton).
-    await SoLoud.instance.init(sampleRate: sampleRate, channels: channels);
-    initialized = true;
+    try {
+      /// Initialize the player (singleton).
+      await SoLoud.instance.init(sampleRate: sampleRate, channels: channels);
+      initialized = true;
+      log('AudioOutput initialized successfully');
+    } catch (e) {
+      log('Failed to initialize AudioOutput: $e');
+      // On web, flutter_soloud may fail to initialize
+      // We'll handle this gracefully by not setting initialized to true
+      if (kIsWeb) {
+        log('AudioOutput initialization failed on web - this is expected if audio permissions are not granted');
+      }
+      rethrow;
+    }
   }
 
   Future<void> dispose() async {
     if (initialized) {
-      await SoLoud.instance.disposeAllSources();
-      SoLoud.instance.deinit();
-      initialized = false;
+      try {
+        await SoLoud.instance.disposeAllSources();
+        SoLoud.instance.deinit();
+        initialized = false;
+        log('AudioOutput disposed successfully');
+      } catch (e) {
+        log('Error disposing AudioOutput: $e');
+        initialized = false;
+      }
     }
   }
 
   SoLoud get instance => SoLoud.instance;
 
   AudioSource? setupNewStream() {
-    if (!SoLoud.instance.isInitialized) {
+    if (!initialized || !SoLoud.instance.isInitialized) {
+      log('Cannot setup stream - AudioOutput not initialized');
       return null;
     }
 
-    stream = SoLoud.instance.setBufferStream(
-      bufferingType: BufferingType.released,
-      bufferingTimeNeeds: 0.10,
-      sampleRate: sampleRate,
-      channels: channels,
-      format: format,
-      onBuffering: (isBuffering, handle, time) {
-        log('Buffering: $isBuffering, Time: $time');
-      },
-    );
-    log('New audio output stream buffer created.');
-    return stream;
+    try {
+      stream = SoLoud.instance.setBufferStream(
+        bufferingType: BufferingType.released,
+        bufferingTimeNeeds:
+            0.04, // 40ms — low enough for real-time, high enough to avoid underruns
+        sampleRate: sampleRate,
+        channels: channels,
+        format: format,
+        onBuffering: (isBuffering, handle, time) {
+          log('Buffering: $isBuffering, Time: $time');
+        },
+      );
+      log('New audio output stream buffer created.');
+      return stream;
+    } catch (e) {
+      log('Error setting up audio stream: $e');
+      return null;
+    }
   }
 
   Future<AudioSource?> playStream() async {
-    var myStream = setupNewStream();
-    if (!SoLoud.instance.isInitialized || myStream == null) {
+    if (!initialized) {
+      log('Cannot play stream - AudioOutput not initialized');
       return null;
     }
-    // Play audio stream
-    handle = await SoLoud.instance.play(myStream);
-    return stream = myStream;
+
+    try {
+      var myStream = setupNewStream();
+      if (!SoLoud.instance.isInitialized || myStream == null) {
+        return null;
+      }
+      // Play audio stream
+      handle = await SoLoud.instance.play(myStream);
+      return stream = myStream;
+    } catch (e) {
+      log('Error playing audio stream: $e');
+      return null;
+    }
   }
 
   void addDataToAudioStream(Uint8List audioChunk) {
+    if (!initialized) {
+      return;
+    }
+
     var currentStream = stream;
     if (currentStream != null) {
-      SoLoud.instance.addAudioDataStream(currentStream, audioChunk);
+      try {
+        SoLoud.instance.addAudioDataStream(currentStream, audioChunk);
+      } catch (e) {
+        log('Error adding data to audio stream: $e');
+      }
     }
   }
 
   /// Returns true if the audio output stream is actively playing.
-  bool get isPlaying => handle != null && stream != null && 
-      SoLoud.instance.getIsValidVoiceHandle(handle!);
+  bool get isPlaying {
+    if (!initialized || handle == null || stream == null) {
+      return false;
+    }
+    try {
+      return SoLoud.instance.getIsValidVoiceHandle(handle!);
+    } catch (e) {
+      log('Error checking if playing: $e');
+      return false;
+    }
+  }
 
   /// Instantly flushes the current audio buffer (barge-in).
   /// Stops the current stream and creates a fresh one so new AI audio
   /// can start immediately without audible artifacts.
   Future<void> flushBuffer() async {
+    if (!initialized) {
+      return;
+    }
+
     var currentStream = stream;
     var currentHandle = handle;
 
@@ -109,21 +165,28 @@ class AudioOutput {
   }
 
   Future<void> stopStream() async {
-    var currentStream = stream;
-    var currentHandle = handle;
-
-    // Stream doesn't exist or handle is not valid - so nothing to stop.
-    if (currentStream == null ||
-        currentHandle == null ||
-        !SoLoud.instance.getIsValidVoiceHandle(currentHandle)) {
+    if (!initialized) {
       stream = null;
       handle = null;
       return;
     }
+
+    var currentStream = stream;
+    var currentHandle = handle;
+
+    // Stream doesn't exist or handle is not valid - so nothing to stop.
+    if (currentStream == null || currentHandle == null) {
+      stream = null;
+      handle = null;
+      return;
+    }
+
     try {
-      // End data to stream & stop currently playing sound from handle
-      SoLoud.instance.setDataIsEnded(currentStream);
-      await SoLoud.instance.stop(currentHandle);
+      if (SoLoud.instance.getIsValidVoiceHandle(currentHandle)) {
+        // End data to stream & stop currently playing sound from handle
+        SoLoud.instance.setDataIsEnded(currentStream);
+        await SoLoud.instance.stop(currentHandle);
+      }
     } catch (e) {
       log('Error stopping audio stream: $e');
     } finally {

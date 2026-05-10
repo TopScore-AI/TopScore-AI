@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,7 +25,7 @@ String _relativeTime(DateTime time) {
 // Deterministic color palette from title
 Color _colorFromTitle(String title) {
   const palette = [
-    Color(0xFF2563EB), // Blue
+    AppColors.primary, // Blue
     Color(0xFF10B981), // Emerald
     Color(0xFFF59E0B), // Amber
     Color(0xFFEF4444), // Red
@@ -117,7 +118,7 @@ class SessionHistoryCarousel extends StatelessWidget {
       BuildContext context, Map<String, dynamic> chat, {bool isNewest = false}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
+    final textColor = isDark ? const Color(0xFFF8FAFC) : AppColors.surfaceElevatedDark;
     final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     final title = chat['title'] ?? 'AI Tutor Chat';
@@ -198,7 +199,7 @@ class SessionHistoryCarousel extends StatelessWidget {
   Widget _buildRealSessionCard(BuildContext context, dynamic file, {bool isNewest = false}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
+    final textColor = isDark ? const Color(0xFFF8FAFC) : AppColors.surfaceElevatedDark;
     final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     // Determine icon based on type
@@ -292,7 +293,7 @@ class SessionHistoryCarousel extends StatelessWidget {
   Widget _buildQuickStartCard(BuildContext context, int index) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
+    final textColor = isDark ? const Color(0xFFF8FAFC) : AppColors.surfaceElevatedDark;
     final subtextColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF64748B);
 
     final colors = [

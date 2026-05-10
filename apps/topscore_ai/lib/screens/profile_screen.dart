@@ -7,17 +7,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import 'dart:async';
 import 'dart:io';
 import '../constants/colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/image_cache_manager.dart';
-import 'subscription/subscription_screen.dart';
-import 'legal/privacy_policy_screen.dart';
-import 'legal/terms_of_use_screen.dart';
-import 'auth/auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -118,12 +114,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         preferredName: _preferredNameCtrl.text.trim().isNotEmpty
             ? _preferredNameCtrl.text.trim()
             : null,
-        curriculum: auth.userModel?.curriculum,
-        educationLevel: auth.userModel?.educationLevel,
-        interests: auth.userModel?.interests,
-        subjects: auth.userModel?.subjects,
+        dateOfBirth: auth.userModel?.dateOfBirth,
+        parentalConsentGiven: auth.userModel?.parentalConsentGiven,
       );
-      if (mounted) setState(() => _isEditing = false);
+      if (mounted) {
+        setState(() => _isEditing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Profile updated successfully!'),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -200,6 +202,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             _buildAvatar(user, theme, isDark),
             const SizedBox(height: 20),
+            if (user != null) ...[
+              _buildXpCard(user, theme, isDark),
+              const SizedBox(height: 20),
+            ],
             if (_isEditing)
               _buildEditForm(theme, isDark)
             else
@@ -246,11 +252,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shape: BoxShape.circle,
               color: theme.cardColor,
               border: Border.all(
-                  color: AppColors.primaryPurple.withValues(alpha: 0.3),
-                  width: 2),
+                  color: AppColors.primary.withValues(alpha: 0.3), width: 2),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: theme.shadowColor.withValues(alpha: 0.08),
                     blurRadius: 16,
                     offset: const Offset(0, 4))
               ],
@@ -261,7 +266,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : hasPhoto
                       ? CachedNetworkImage(
-                          imageUrl: CorsProxyHelper.getCorsProxyUrl(user!.photoURL as String),
+                          imageUrl: CorsProxyHelper.getCorsProxyUrl(
+                              user!.photoURL as String),
                           cacheManager: ProfileImageCacheManager(),
                           httpHeaders: CorsProxyHelper.standardHeaders,
                           fit: BoxFit.cover,
@@ -291,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryPurple,
+                    color: AppColors.primary,
                     shape: BoxShape.circle,
                     border: Border.all(
                         color: theme.scaffoldBackgroundColor, width: 2),
@@ -301,6 +307,123 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildXpCard(dynamic user, ThemeData theme, bool isDark) {
+    if (user == null) return const SizedBox.shrink();
+
+    final xp = user.xp as int? ?? 0;
+    final level = user.level as int? ?? 1;
+
+    // Level progress: xp % 1000
+    final xpInCurrentLevel = xp % 1000;
+    final progress = xpInCurrentLevel / 1000.0;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.surfaceElevatedDark, AppColors.backgroundDark]
+              : [Colors.white, AppColors.background],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.primaryColor.withValues(alpha: 0.1),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Level $level',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                  Text(
+                    'TopScore Scholar',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.workspace_premium_rounded,
+                    color: Colors.amber, size: 28),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$xpInCurrentLevel / 1000 XP',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: theme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              backgroundColor: theme.primaryColor.withValues(alpha: 0.05),
+              valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Earn more XP by completing AI and Multiplayer Quizzes!',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -332,11 +455,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: theme.shadowColor.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 3))
         ],
@@ -354,10 +477,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withValues(alpha: 0.1),
+                      color: theme.primaryColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, size: 16, color: AppColors.primaryPurple),
+                    child: Icon(icon, size: 16, color: theme.primaryColor),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -394,11 +517,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: theme.shadowColor.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 3))
         ],
@@ -406,7 +529,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(children: [
         _editField('Display Name', _nameCtrl, Icons.person_rounded),
         const SizedBox(height: 12),
-        _editField('AI Tutor calls me...', _preferredNameCtrl, Icons.record_voice_over_rounded),
+        _editField('AI Tutor calls me...', _preferredNameCtrl,
+            Icons.record_voice_over_rounded),
         const SizedBox(height: 12),
         _editField('School', _schoolCtrl, Icons.school_rounded),
         const SizedBox(height: 12),
@@ -432,7 +556,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         labelStyle: GoogleFonts.inter(
             fontSize: 13,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-        prefixIcon: Icon(icon, size: 18, color: AppColors.primaryPurple),
+        prefixIcon: Icon(icon, size: 18, color: theme.primaryColor),
         filled: true,
         fillColor:
             isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[50],
@@ -441,7 +565,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.primaryPurple, width: 1.5),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.5),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -456,14 +580,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isSubscribed = user?.isSubscribed as bool? ?? false;
     if (isSubscribed) return const SizedBox.shrink();
 
-    final count = user?.dailyMessageCount as int? ?? 0;
-    final lastDate = user?.lastMessageDate as DateTime?;
-    final limit = 5;
+    final count = user?.freeMessageCount as int? ?? 0;
+    final lastDate = user?.freeMessagesLastAt as DateTime?;
+    final limit = 6; // Free tier limit is 6 messages
 
-    // Calculate reset time
-    String resetLabel = 'Resets in 6 hours';
+    // Calculate reset time (12-hour window)
+    String resetLabel = 'Resets in 12 hours';
     if (lastDate != null) {
-      final resetAt = lastDate.add(const Duration(hours: 6));
+      final resetAt = lastDate.add(const Duration(hours: 12));
       final now = DateTime.now();
       if (resetAt.isAfter(now)) {
         final diff = resetAt.difference(now);
@@ -486,11 +610,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: theme.shadowColor.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 3))
         ],
@@ -538,19 +662,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final expiry = user?.subscriptionExpiry as DateTime?;
 
     return GestureDetector(
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const SubscriptionScreen())),
+      onTap: () => context.push('/subscription'),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: isSubscribed
               ? const LinearGradient(
-                  colors: [Color(0xFF6C63FF), Color(0xFF9C8FFF)],
+                  colors: [AppColors.aiAccent, Color(0xFF9C8FFF)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight)
               : LinearGradient(colors: [
-                  isDark ? const Color(0xFF1E293B) : Colors.white,
-                  isDark ? const Color(0xFF1E293B) : Colors.white
+                  isDark ? AppColors.surfaceElevatedDark : Colors.white,
+                  isDark ? AppColors.surfaceElevatedDark : Colors.white
                 ]),
           borderRadius: BorderRadius.circular(20),
           border: isSubscribed
@@ -559,8 +682,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           boxShadow: [
             BoxShadow(
                 color: isSubscribed
-                    ? const Color(0xFF6C63FF).withValues(alpha: 0.25)
-                    : Colors.black.withValues(alpha: 0.04),
+                    ? AppColors.aiAccent.withValues(alpha: 0.25)
+                    : theme.shadowColor.withValues(alpha: 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 3))
           ],
@@ -571,12 +694,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             decoration: BoxDecoration(
               color: isSubscribed
                   ? Colors.white.withValues(alpha: 0.2)
-                  : AppColors.googleYellow.withValues(alpha: 0.12),
+                  : Colors.amber.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: FaIcon(FontAwesomeIcons.crown,
-                size: 18,
-                color: isSubscribed ? Colors.white : AppColors.googleYellow),
+                size: 18, color: isSubscribed ? Colors.white : Colors.amber),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -621,7 +743,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildPreferencesSection(ThemeData theme, bool isDark) {
     final settings = Provider.of<SettingsProvider>(context);
-    
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionLabel('Preferences'),
       _tile(
@@ -644,12 +766,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         icon: Icons.bolt_rounded,
         iconColor: Colors.orange,
         title: 'Lite Mode (Saves Data)',
+        subtitle: 'Always enabled to save your internet',
         trailing: Switch(
-          value: settings.isLiteMode,
-          onChanged: (v) => settings.toggleLiteMode(v),
+          value: true,
+          onChanged: null, // Disabled
           activeThumbColor: theme.colorScheme.primary,
         ),
         onTap: () {},
+        theme: theme,
+        isDark: isDark,
+      ),
+      const SizedBox(height: 10),
+      _tile(
+        icon: Icons.notifications_rounded,
+        iconColor: AppColors.primary,
+        title: 'Notifications & Reminders',
+        subtitle: 'Study reminders, quiet hours',
+        onTap: () => context.push('/notification-preferences'),
         theme: theme,
         isDark: isDark,
       ),
@@ -667,8 +800,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           icon: FontAwesomeIcons.shieldHalved,
           iconColor: Colors.teal,
           title: 'Privacy Policy',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+          onTap: () => context.push('/privacy-policy'),
           theme: theme,
           isDark: isDark),
       const SizedBox(height: 10),
@@ -676,184 +808,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           icon: FontAwesomeIcons.fileContract,
           iconColor: Colors.teal,
           title: 'Terms of Use',
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const TermsOfUseScreen())),
+          onTap: () => context.push('/terms-of-use'),
           theme: theme,
           isDark: isDark),
       const SizedBox(height: 10),
       _tile(
           icon: FontAwesomeIcons.headset,
-          iconColor: const Color(0xFF6C63FF),
+          iconColor: AppColors.aiAccent,
           title: 'Contact Support',
-          subtitle: 'support@topscoreapp.ai',
-          onTap: () => _showContactSupport(context),
+          subtitle: 'Get help or report an issue',
+          onTap: () => context.push('/support'),
           theme: theme,
           isDark: isDark),
+      if (!kIsWeb) ...[],
     ]);
-  }
-
-  void _showContactSupport(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final subjectCtrl = TextEditingController();
-    final messageCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    bool sending = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
-          padding:
-              EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.dividerColor,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Contact Support',
-                      style: GoogleFonts.nunito(
-                          fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('We\'ll respond within 24 hours',
-                      style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5))),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: subjectCtrl,
-                    style: GoogleFonts.inter(fontSize: 14),
-                    decoration: _inputDec(
-                        isDark, theme, 'Subject', Icons.subject_rounded),
-                    validator: (v) =>
-                        (v?.trim().isEmpty ?? true) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: messageCtrl,
-                    maxLines: 4,
-                    style: GoogleFonts.inter(fontSize: 14),
-                    decoration: _inputDec(isDark, theme,
-                        'Describe your issue...', Icons.message_rounded),
-                    validator: (v) =>
-                        (v?.trim().isEmpty ?? true) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text('Cancel',
-                            style:
-                                GoogleFonts.inter(fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: sending
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                setModalState(() => sending = true);
-                                final user =
-                                    context.read<AuthProvider>().userModel;
-                                final email = user?.email ?? '';
-                                final uri = Uri(
-                                  scheme: 'mailto',
-                                  path: 'support@topscoreapp.ai',
-                                  query:
-                                      'subject=${Uri.encodeComponent(subjectCtrl.text.trim())}'
-                                      '&body=${Uri.encodeComponent('From: $email\n\n${messageCtrl.text.trim()}')}',
-                                );
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri);
-                                  if (ctx.mounted) Navigator.pop(ctx);
-                                } else {
-                                  setModalState(() => sending = false);
-                                  if (ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx)
-                                        .showSnackBar(const SnackBar(
-                                      content: Text(
-                                          'Could not open mail app. Email us at support@topscoreapp.ai'),
-                                    ));
-                                  }
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6C63FF),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : Text('Send',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ]),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDec(
-      bool isDark, ThemeData theme, String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: GoogleFonts.inter(
-          fontSize: 13,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.4)),
-      prefixIcon: Icon(icon, size: 18, color: const Color(0xFF6C63FF)),
-      filled: true,
-      fillColor:
-          isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[50],
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -865,11 +833,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user == null) {
       return _tile(
         icon: FontAwesomeIcons.rightToBracket,
-        iconColor: AppColors.primaryPurple,
+        iconColor: AppColors.primary,
         title: 'Sign In / Register',
-        textColor: AppColors.primaryPurple,
-        onTap: () => Navigator.push(
-            context, MaterialPageRoute(builder: (_) => const AuthScreen())),
+        textColor: AppColors.primary,
+        onTap: () => context.push('/login'),
         theme: theme,
         isDark: isDark,
         hasShadow: false,
@@ -898,7 +865,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       const SizedBox(height: 16),
       GestureDetector(
-        onTap: () => _showDeleteConfirmation(context, authProvider),
+        onTap: () => context.push('/delete-account'),
         child: Text('Delete Account',
             style: GoogleFonts.nunito(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
@@ -924,8 +891,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     bool hasShadow = true,
     Color? backgroundColor,
   }) {
-    final bg =
-        backgroundColor ?? (isDark ? const Color(0xFF1E293B) : Colors.white);
+    final bg = backgroundColor ??
+        (isDark ? AppColors.surfaceElevatedDark : Colors.white);
     return Container(
       decoration: BoxDecoration(
         color: bg,
@@ -933,7 +900,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         boxShadow: hasShadow
             ? [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
+                    color: theme.shadowColor.withValues(alpha: 0.03),
                     blurRadius: 8,
                     offset: const Offset(0, 2))
               ]
@@ -988,38 +955,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   String _formatDate(DateTime dt) => '${dt.day}/${dt.month}/${dt.year}';
-
-  void _showDeleteConfirmation(BuildContext context, AuthProvider auth) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Account & Data?'),
-        content: const Text(
-          'Under the Kenya Data Protection Act 2019, you have the right to erasure of your data.\n\n'
-          'This will permanently delete:\n'
-          '• Your profile and account\n'
-          '• Learning progress and assessment records\n'
-          '• Support tickets and activity history\n'
-          '• Subscription details\n\n'
-          'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await auth.deleteAccount();
-              if (context.mounted) {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete All Data',
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
 }

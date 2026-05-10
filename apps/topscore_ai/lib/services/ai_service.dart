@@ -64,7 +64,7 @@ class AIService {
       String path, Map<String, dynamic> body) async {
     final url = Uri.parse('${AppConfig.backendBaseUrl}$path');
     final headers =
-        await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+        await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
     final response =
         await http.post(url, headers: headers, body: jsonEncode(body));
     if (response.statusCode == 200) {
@@ -98,6 +98,34 @@ class AIService {
     return FlashcardSet.fromJson(data);
   }
 
+  /// POST /api/study/flashcards-from-file (multipart)
+  Future<FlashcardSet> generateFlashcardsFromFile({
+    required Uint8List pdfBytes,
+    required String filename,
+    String curriculum = 'General',
+    String grade = 'General',
+    int amount = 5,
+  }) async {
+    final url =
+        Uri.parse('${AppConfig.backendBaseUrl}/api/study/flashcards-from-file');
+    final headers = await AuthHeaders.getHeaders(existingHeaders: {});
+    final request = http.MultipartRequest('POST', url)
+      ..headers.addAll(headers)
+      ..files.add(
+          http.MultipartFile.fromBytes('file', pdfBytes, filename: filename))
+      ..fields['curriculum'] = curriculum
+      ..fields['grade'] = grade
+      ..fields['item_count'] = amount.toString();
+
+    final response = await http.Response.fromStream(await request.send());
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      return FlashcardSet.fromJson(decoded);
+    }
+    throw Exception(
+        'Flashcard generation from file failed (${response.statusCode}): ${response.body}');
+  }
+
   /// POST /api/study/quiz
   Future<Quiz> generateQuiz({
     required String userId,
@@ -129,7 +157,7 @@ class AIService {
   }) async {
     final url =
         Uri.parse('${AppConfig.backendBaseUrl}/api/study/summarize-pdf-vision');
-    final headers = await AuthHeaders.getHeaders({});
+    final headers = await AuthHeaders.getHeaders(existingHeaders: {});
     final request = http.MultipartRequest('POST', url)
       ..headers.addAll(headers)
       ..files.add(
@@ -151,7 +179,7 @@ class AIService {
   Future<String> analyzeHomework(Uint8List imageBytes) async {
     final url =
         Uri.parse('${AppConfig.backendBaseUrl}/api/study/analyze-homework');
-    final headers = await AuthHeaders.getHeaders({});
+    final headers = await AuthHeaders.getHeaders(existingHeaders: {});
     final request = http.MultipartRequest('POST', url)
       ..headers.addAll(headers)
       ..files.add(http.MultipartFile.fromBytes(
@@ -173,7 +201,7 @@ class AIService {
     final url =
         Uri.parse('${AppConfig.backendBaseUrl}/documents/convert-from-url');
     final headers =
-        await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+        await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
     final response = await http.post(url,
         headers: headers, body: jsonEncode({'url': fileUrl}));
     if (response.statusCode == 200) return response.bodyBytes;
@@ -203,7 +231,7 @@ class AIService {
   /// POST /pdf-chat/start-session (multipart)
   Future<String> startPdfSession(Uint8List pdfBytes, String filename) async {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/pdf-chat/start-session');
-    final headers = await AuthHeaders.getHeaders({});
+    final headers = await AuthHeaders.getHeaders(existingHeaders: {});
     final request = http.MultipartRequest('POST', url)
       ..headers.addAll(headers)
       ..files.add(

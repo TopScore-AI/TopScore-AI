@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="font-size: 20px; color: #0f172a; margin-top: 0;">Your TopScore Pro Subscription Has Expired</h2>
+
+<p>Hello {{ user_name }},</p>
+<p>Your TopScore Premium subscription expired on <strong>{{ expiry_date }}</strong>. We hope you enjoyed the full benefits of Premium access!</p>
+
+<div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 24px 0;">
+    <p style="margin: 0; color: #991b1b; font-weight: 600;">Premium Access Ended</p>
+    <p style="margin: 8px 0 0 0; color: #991b1b; font-size: 14px;">Your account has been switched to the free tier with limited features.</p>
+</div>
+
+<p><strong>What you're missing:</strong></p>
+<ul style="padding-left: 20px; margin-bottom: 24px;">
+    <li>Unlimited AI Tutor sessions & document chat</li>
+    <li>Pro Composition Grading with detailed feedback</li>
+    <li>Full Resource Library access (CBC, KCSE, IGCSE)</li>
+    <li>Offline learning & offline document viewing</li>
+</ul>
+
+<p>Ready to continue your learning journey? Renew your subscription today and get back to unlimited learning!</p>
+
+<div style="text-align: center; margin: 32px 0;">
+    <a href="https://topscoreapp.ai/pricing" class="button">Renew Subscription</a>
+</div>
+
+<p style="font-size: 14px; color: #64748b;">You can still use TopScore AI with our free tier, which includes limited AI Tutor sessions and basic features.</p>
+
+<p>Best regards,<br><strong>TopScore AI Team</strong></p>
+{% endblock %}

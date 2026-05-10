@@ -1,14 +1,20 @@
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import Nav from '@/components/Nav';
 import Hero from '@/components/Hero';
-import TrustedBy from '@/components/TrustedBy';
-import ActiveVoiceShowcase from '@/components/ActiveVoiceShowcase';
+import Curriculum from '../components/Curriculum';
+import Features from '@/components/Features';
+import Interactive from '../components/Interactive';
+import Testimonials from '@/components/Testimonials';
+import Pricing from '@/components/Pricing';
+import FAQ from '@/components/FAQ';
+import TechStack from '../components/TechStack';
+import TrustedBy from '../components/TrustedBy';
+import Screenshots from '../components/Screenshots';
+import Mission from '@/components/Mission';
+import MobileStickyCTA from '@/components/MobileStickyCTA';
+
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
-import Safety from '@/components/Safety';
-import BentoFeatures from '@/components/BentoFeatures';
 
 export const metadata: Metadata = {
   alternates: { canonical: 'https://topscoreapp.ai' },
@@ -44,18 +50,26 @@ const softwareSchema = {
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col" suppressHydrationWarning>
+    <main className="min-h-screen bg-white" suppressHydrationWarning>
       <JsonLd data={organizationSchema} />
       <JsonLd data={softwareSchema} />
       <Nav />
-      <div className="flex-grow flex flex-col">
-        <Hero />
-        <TrustedBy />
-        <BentoFeatures />
-        <ActiveVoiceShowcase />
-        <Safety />
-      </div>
+      <Hero />
+      <TrustedBy />
+      <Curriculum />
+      <Features />
+      <Screenshots />
+      <Mission />
+      
+      {/* Multimodal Showcase Section is handled within the new UI components or inline if needed */}
+      <Interactive />
+      <Testimonials />
+      <Pricing />
+      <FAQ />
+      <TechStack />
       <Footer />
+      <MobileStickyCTA />
     </main>
   );
 }
+

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
+import '../../widgets/app_spinner.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -44,7 +45,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: AppColors.text,
           image: DecorationImage(
             image: const AssetImage('assets/images/auth_background.png'),
             fit: BoxFit.cover,
@@ -117,18 +118,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 labelText: 'Email Address',
-                                labelStyle: const TextStyle(color: Colors.white70),
-                                prefixIcon: const Icon(Icons.email_outlined, color: Colors.white70),
+                                labelStyle:
+                                    const TextStyle(color: Colors.white70),
+                                prefixIcon: const Icon(Icons.email_outlined,
+                                    color: Colors.white70),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Colors.white24),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white24),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Colors.white70),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white70),
                                 ),
                               ),
                               validator: (value) {
@@ -153,7 +158,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                     : () async {
                                         if (_formKey.currentState!.validate()) {
                                           try {
-                                            await authProvider.sendPasswordReset(
+                                            await authProvider
+                                                .sendPasswordReset(
                                               _emailController.text.trim(),
                                             );
                                             if (context.mounted) {
@@ -164,8 +170,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                               ScaffoldMessenger.of(context)
                                                   .showSnackBar(
                                                 SnackBar(
-                                                  content:
-                                                      Text(_friendlyAuthError(e)),
+                                                  content: Text(
+                                                      _friendlyAuthError(e)),
                                                   backgroundColor:
                                                       AppColors.error,
                                                 ),
@@ -185,7 +191,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                     ? const SizedBox(
                                         height: 24,
                                         width: 24,
-                                        child: CircularProgressIndicator(
+                                        child: AppSpinner(
                                           color: Colors.white,
                                           strokeWidth: 2,
                                         ),

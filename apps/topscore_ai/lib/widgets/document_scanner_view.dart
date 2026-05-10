@@ -2,7 +2,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_io/io.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, debugPrint;
+import 'package:permission_handler/permission_handler.dart';
+import 'app_spinner.dart';
 
 class DocumentScannerView extends StatefulWidget {
   const DocumentScannerView({super.key});
@@ -11,9 +13,11 @@ class DocumentScannerView extends StatefulWidget {
   State<DocumentScannerView> createState() => _DocumentScannerViewState();
 }
 
-class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsBindingObserver {
+class _DocumentScannerViewState extends State<DocumentScannerView>
+    with WidgetsBindingObserver {
   CameraController? _controller;
   bool _isCameraInitialized = false;
+  PermissionStatus _permissionStatus = PermissionStatus.provisional;
   List<CameraDescription> _cameras = [];
   XFile? _capturedFile;
   FlashMode _flashMode = FlashMode.auto;
@@ -22,7 +26,23 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+    _checkPermissionAndInit();
+  }
+
+  Future<void> _checkPermissionAndInit() async {
+    if (kIsWeb) {
+      _initializeCamera();
+      return;
+    }
+
+    final status = await Permission.camera.request();
+    if (mounted) {
+      setState(() => _permissionStatus = status);
+    }
+
+    if (status.isGranted) {
+      _initializeCamera();
+    }
   }
 
   void _initializeCamera() async {
@@ -37,24 +57,22 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
 
       _controller = CameraController(
         backCamera,
-        // THE FIX FOR 1GB PHONES: Do not use ResolutionPreset.max. 
-        // 'high' is ~720p/1080p, perfect for OCR and memory-safe.
-        ResolutionPreset.high, 
-        enableAudio: false, 
+        ResolutionPreset.high,
+        enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
 
       await _controller!.initialize();
       await _controller!.lockCaptureOrientation(DeviceOrientation.portraitUp);
       await _controller!.setFlashMode(_flashMode);
-      
+
       if (mounted) {
         setState(() {
           _isCameraInitialized = true;
         });
       }
     } catch (e) {
-      debugPrint("Camera initialization error: $e");
+      if (kDebugMode) debugPrint("Camera initialization error: $e");
     }
   }
 
@@ -66,7 +84,8 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
       return;
     }
 
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
       cameraController.dispose();
       _isCameraInitialized = false;
     } else if (state == AppLifecycleState.resumed) {
@@ -93,13 +112,13 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
         });
       }
     } catch (e) {
-      debugPrint("Error taking picture: $e");
+      if (kDebugMode) debugPrint("Error taking picture: $e");
     }
   }
 
   Future<void> _toggleFlash() async {
     if (_controller == null) return;
-    
+
     FlashMode nextMode;
     switch (_flashMode) {
       case FlashMode.off:
@@ -120,16 +139,92 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
         _flashMode = nextMode;
       });
     } catch (e) {
-      debugPrint("Error setting flash mode: $e");
+      if (kDebugMode) debugPrint("Error setting flash mode: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_permissionStatus.isDenied || _permissionStatus.isPermanentlyDenied) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.no_photography_outlined,
+                    color: Colors.white70, // Visible on black background
+                    size: 64),
+                const SizedBox(height: 24),
+                const Text(
+                  "Camera Access Required",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "We need camera access to help you scan and solve your homework questions.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16), // Visible on black background
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: _checkPermissionAndInit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 32, vertical: 12),
+                  ),
+                  child: const Text("Allow Camera"),
+                ),
+                if (_permissionStatus.isPermanentlyDenied) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: openAppSettings,
+                    child: const Text("Open Phone Settings",
+                        style: TextStyle(
+                            color:
+                                Colors.white60)), // Visible on black background
+                  ),
+                ],
+                const SizedBox(height: 40),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Go Back",
+                      style: TextStyle(color: Colors.white38)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (!_isCameraInitialized || _controller == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.greenAccent)),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.camera_alt_outlined, color: Colors.white24, size: 48),
+              SizedBox(height: 16),
+              AppSpinner(color: Colors.white24),
+              SizedBox(height: 24),
+              Text(
+                "Initializing Camera...",
+                style: TextStyle(color: Colors.white24, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -153,7 +248,6 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                 child: _buildCapturedPreview(),
               ),
             ),
-
           if (_capturedFile == null)
             Positioned(
               bottom: 40,
@@ -164,7 +258,7 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                   const Text(
                     "Align your homework in the frame",
                     style: TextStyle(
-                      color: Colors.white, 
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       shadows: [Shadow(color: Colors.black, blurRadius: 4)],
                     ),
@@ -173,7 +267,8 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(width: 60), // Spacer to balance flash button
+                      const SizedBox(
+                          width: 60), // Spacer to balance flash button
                       GestureDetector(
                         onTap: _takePicture,
                         child: Container(
@@ -189,7 +284,8 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                               shape: BoxShape.circle,
                               color: Colors.white.withValues(alpha: 0.3),
                             ),
-                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 32),
+                            child: const Icon(Icons.camera_alt,
+                                color: Colors.white, size: 32),
                           ),
                         ),
                       ),
@@ -197,9 +293,11 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                       IconButton(
                         onPressed: _toggleFlash,
                         icon: Icon(
-                          _flashMode == FlashMode.always 
-                              ? Icons.flash_on 
-                              : (_flashMode == FlashMode.auto ? Icons.flash_auto : Icons.flash_off),
+                          _flashMode == FlashMode.always
+                              ? Icons.flash_on
+                              : (_flashMode == FlashMode.auto
+                                  ? Icons.flash_auto
+                                  : Icons.flash_off),
                           color: Colors.white,
                           size: 30,
                         ),
@@ -217,7 +315,7 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                   _buildReviewButton(
+                  _buildReviewButton(
                     onTap: () => setState(() => _capturedFile = null),
                     label: "RETAKE",
                     icon: Icons.refresh,
@@ -233,7 +331,6 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
                 ],
               ),
             ),
-          
           Positioned(
             top: 50,
             left: 20,
@@ -255,9 +352,9 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
   }
 
   Widget _buildReviewButton({
-    required VoidCallback onTap, 
-    required String label, 
-    required IconData icon, 
+    required VoidCallback onTap,
+    required String label,
+    required IconData icon,
     required Color color,
     Color textColor = Colors.white,
   }) {
@@ -269,7 +366,8 @@ class _DocumentScannerViewState extends State<DocumentScannerView> with WidgetsB
           color: color,
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10)
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3), blurRadius: 10)
           ],
         ),
         child: Row(
@@ -313,7 +411,7 @@ class ScannerOverlayPainter extends CustomPainter {
 
     paint.blendMode = BlendMode.clear;
     canvas.drawRRect(cutoutRect, paint);
-    
+
     paint.blendMode = BlendMode.srcOver;
     paint.color = Colors.greenAccent;
     paint.style = PaintingStyle.stroke;

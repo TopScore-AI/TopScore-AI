@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,7 +21,7 @@ class ActivityHistoryScreen extends StatelessWidget {
         appBar: AppBar(
           title: Text(
             'Activity History',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
           ),
           bottom: TabBar(
             labelStyle: GoogleFonts.inter(
@@ -70,7 +71,7 @@ class _ActivityList extends StatelessWidget {
           title: chat['title'] as String? ?? 'AI Tutor Chat',
           subtitle: 'AI Tutor Session',
           icon: Icons.chat_bubble_outline,
-          color: const Color(0xFF2563EB),
+          color: AppColors.primary,
           time: _parseTime(chat['updated_at']),
           data: chat,
         ));
@@ -113,10 +114,13 @@ class _ActivityList extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 'No activity yet',
-                style: GoogleFonts.plusJakartaSans(
+                style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Colors.grey[600],
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 8),
@@ -129,7 +133,10 @@ class _ActivityList extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,
-                  color: Colors.grey[500],
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
                   height: 1.5,
                 ),
               ),

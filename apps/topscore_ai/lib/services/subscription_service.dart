@@ -19,7 +19,8 @@ class SubscriptionService {
     try {
       // 2. Fallback to JWT Claims (Security Token)
       // This catches cases where the user just joined on a new device but claims are synced
-      IdTokenResult tokenResult = await user.getIdTokenResult(false); // Don't force refresh every time
+      IdTokenResult tokenResult =
+          await user.getIdTokenResult(false); // Don't force refresh every time
       Map<String, dynamic>? claims = tokenResult.claims;
 
       if (claims?['plan'] == 'premium') {
@@ -46,16 +47,17 @@ class SubscriptionService {
   /// and updates the JWT claims in the background.
   Future<void> refreshSubscriptionStatus() async {
     final auth = app_auth.AuthProvider.instance;
-    
+
     // 1. Pull the absolute latest state from Firestore
     // This bypasses the old JWT claim-based gate which caused the 'Trial' fallback
     await auth.refreshUser();
 
     // 2. Check if the database now shows a Pro status
     if (auth.hasActiveSubscription) {
-      if (kDebugMode) debugPrint('Subscription confirmed in Firestore. Ensuring local 30-day sync.');
-      // Local sync ensuring all UI components (badges, limits) reflect the full 30 days
-      await auth.updateSubscription(30);
+      if (kDebugMode) debugPrint('Subscription confirmed in Firestore.');
+      // Do NOT call updateSubscription here — the duration was already set
+      // correctly by the payment flow. Calling it again with a hardcoded 30
+      // would overwrite a weekly (7-day) purchase with a monthly one.
     }
 
     // 3. Background: Refresh JWT token claims (clean-up for future API sessions)

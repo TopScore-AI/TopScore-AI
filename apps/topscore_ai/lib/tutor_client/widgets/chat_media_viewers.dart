@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
+import '../../widgets/app_spinner.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../utils/sharing_utils.dart';
 import '../../utils/web_download_helper.dart';
@@ -17,7 +18,7 @@ class FullScreenImageViewer extends StatefulWidget {
   final String? heroTag;
 
   const FullScreenImageViewer({
-    super.key, 
+    super.key,
     required this.imageUrl,
     this.heroTag,
   });
@@ -37,7 +38,8 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
       final response = await http.get(Uri.parse(widget.imageUrl));
       if (response.statusCode == 200) {
         final bytes = response.bodyBytes;
-        final filename = 'topscore_${DateTime.now().millisecondsSinceEpoch}.png';
+        final filename =
+            'topscore_${DateTime.now().millisecondsSinceEpoch}.png';
 
         if (kIsWeb) {
           WebDownloadHelper.downloadBytes(bytes, filename);
@@ -45,7 +47,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
           final tempDir = await getTemporaryDirectory();
           final file = File('${tempDir.path}/$filename');
           await file.writeAsBytes(bytes);
-          
+
           await SharePlus.instance.share(ShareParams(
             files: [XFile(file.path)],
             text: 'Shared from TopScore AI',
@@ -82,7 +84,8 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
             child: CircleAvatar(
               backgroundColor: Colors.black.withValues(alpha: 0.5),
               child: IconButton(
-                icon: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 20),
+                icon: const Icon(CupertinoIcons.xmark,
+                    color: Colors.white, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
@@ -94,9 +97,14 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               child: CircleAvatar(
                 backgroundColor: Colors.black.withValues(alpha: 0.5),
                 child: IconButton(
-                  icon: _isDownloading 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(CupertinoIcons.cloud_download, color: Colors.white, size: 20),
+                  icon: _isDownloading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child:
+                              AppSpinner(strokeWidth: 2, color: Colors.white))
+                      : const Icon(CupertinoIcons.cloud_download,
+                          color: Colors.white, size: 20),
                   onPressed: _handleDownload,
                 ),
               ),
@@ -107,9 +115,11 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               child: CircleAvatar(
                 backgroundColor: Colors.black.withValues(alpha: 0.5),
                 child: IconButton(
-                  icon: const Icon(CupertinoIcons.share, color: Colors.white, size: 20),
+                  icon: const Icon(CupertinoIcons.share,
+                      color: Colors.white, size: 20),
                   onPressed: () {
-                    final cleanLink = SharingUtils.generateShareLink(widget.imageUrl);
+                    final cleanLink =
+                        SharingUtils.generateShareLink(widget.imageUrl);
                     SharePlus.instance.share(ShareParams(
                       text: 'Check this out on TopScore AI:\n$cleanLink',
                     ));
@@ -122,15 +132,15 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
         body: PhotoView(
           imageProvider: CachedNetworkImageProvider(widget.imageUrl),
           loadingBuilder: (context, event) => const Center(
-            child: CupertinoActivityIndicator(color: Colors.white),
+            child: AppSpinner(color: Colors.white),
           ),
           errorBuilder: (context, error, stackTrace) => const Center(
             child: Icon(Icons.broken_image, color: Colors.white38, size: 40),
           ),
           minScale: PhotoViewComputedScale.contained,
           maxScale: PhotoViewComputedScale.covered * 4.1,
-          heroAttributes: widget.heroTag != null 
-              ? PhotoViewHeroAttributes(tag: widget.heroTag!) 
+          heroAttributes: widget.heroTag != null
+              ? PhotoViewHeroAttributes(tag: widget.heroTag!)
               : null,
           backgroundDecoration: const BoxDecoration(color: Colors.black),
         ),
@@ -153,9 +163,9 @@ class PdfViewerScreen extends StatelessWidget {
           title,
           style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         leading: IconButton(
           icon: const Icon(CupertinoIcons.back),
           onPressed: () => Navigator.pop(context),
@@ -165,7 +175,8 @@ class PdfViewerScreen extends StatelessWidget {
         url,
         onDocumentLoadFailed: (details) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to load PDF: ${details.description}')),
+            SnackBar(
+                content: Text('Failed to load PDF: ${details.description}')),
           );
         },
       ),

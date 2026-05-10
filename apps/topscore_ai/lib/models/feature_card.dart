@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -43,7 +44,7 @@ final List<FeatureCardData> homeFeatures = [
   FeatureCardData(
     title: "Progress",
     icon: Icons.bar_chart_rounded,
-    color: const Color(0xFF6C63FF),
+    color: AppColors.aiAccent,
     endColor: const Color(0xFF8B80FF),
     routeIndex: -2, // Special case: Push CareerCompassScreen
   ),

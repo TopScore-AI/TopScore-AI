@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -45,11 +46,22 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  late final VoidCallback _connectivityListener;
+
+  @override
+  void dispose() {
+    // Remove the listener to prevent memory leaks and BuildContext issues
+    Provider.of<ConnectivityProvider>(context, listen: false)
+        .removeListener(_connectivityListener);
+    super.dispose();
+  }
+
   void _setupConnectivityListener() {
     final connectivity =
         Provider.of<ConnectivityProvider>(context, listen: false);
     bool? wasOnline;
-    connectivity.addListener(() {
+    
+    _connectivityListener = () {
       if (!mounted) return;
       final isOnline = connectivity.isOnline;
       if (wasOnline != null && wasOnline != isOnline) {
@@ -74,7 +86,9 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       wasOnline = isOnline;
-    });
+    };
+
+    connectivity.addListener(_connectivityListener);
   }
 
   void _checkMissingInterests() {
@@ -87,6 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
         isDismissible: false,
         enableDrag: false,
         isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         builder: (context) => InterestUpdateSheet(userId: user.uid),
       );
     }
@@ -110,102 +126,114 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context).userModel;
-    final firstName = user?.displayName.split(' ')[0] ?? 'Student';
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtextColor =
+        isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // ── Header with Progress Ring ────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Mini progress ring
-                    _DailyProgressRing(
-                      progress: 0.6,
-                      size: 48,
-                      child: (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                          ? CircleAvatar(
-                              radius: 20,
-                              backgroundImage: CachedNetworkImageProvider(
-                                user.photoURL!,
-                                cacheManager: ProfileImageCacheManager(),
-                              ),
-                            )
-                          : Text(
-                              firstName.isNotEmpty ? firstName[0].toUpperCase() : 'S',
-                              style: GoogleFonts.poppins(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_getGreeting()}, $firstName 👋',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 20,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            user?.gradeLabel ?? 'Form 3',
-                            style: GoogleFonts.nunito(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: subtextColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => context.push('/profile'),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor:
-                            theme.colorScheme.primary.withValues(alpha: 0.1),
-                        backgroundImage:
-                            user?.photoURL != null && user!.photoURL!.isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                    user.photoURL!,
+    return Selector<AuthProvider,
+        ({String? name, String? photo, String? grade})>(
+      selector: (_, auth) => (
+        name: auth.userModel?.displayName,
+        photo: auth.userModel?.photoURL,
+        grade: auth.userModel?.gradeLabel,
+      ),
+      builder: (context, data, _) {
+        final firstName = data.name?.split(' ')[0] ?? 'Student';
+
+        return Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          body: SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // ── Header with Progress Ring ────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Mini progress ring
+                        _DailyProgressRing(
+                          progress: 0.6,
+                          size: 48,
+                          child: (data.photo != null && data.photo!.isNotEmpty)
+                              ? CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage: CachedNetworkImageProvider(
+                                    data.photo!,
                                     cacheManager: ProfileImageCacheManager(),
+                                  ),
+                                )
+                              : Text(
+                                  firstName.isNotEmpty
+                                      ? firstName[0].toUpperCase()
+                                      : 'S',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${_getGreeting()}, $firstName 👋',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 20,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                data.grade ?? 'Form 3',
+                                style: GoogleFonts.nunito(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: subtextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        BounceWrapper(
+                          onTap: () => context.push('/profile'),
+                          child: CircleAvatar(
+                            radius: 20,
+                            backgroundColor:
+                                theme.colorScheme.primary.withValues(alpha: 0.1),
+                            backgroundImage:
+                                data.photo != null && data.photo!.isNotEmpty
+                                    ? CachedNetworkImageProvider(
+                                        data.photo!,
+                                        cacheManager:
+                                            ProfileImageCacheManager(),
+                                      )
+                                    : null,
+                            child: data.photo == null || data.photo!.isEmpty
+                                ? Text(
+                                    firstName.isNotEmpty
+                                        ? firstName[0].toUpperCase()
+                                        : 'S',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: theme.colorScheme.primary,
+                                    ),
                                   )
                                 : null,
-                        child: user?.photoURL == null || user!.photoURL!.isEmpty
-                            ? Text(
-                                firstName.isNotEmpty
-                                    ? firstName[0].toUpperCase()
-                                    : 'S',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              )
-                            : null,
-                      ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
 
 
             // ── Ask AI ──────────────────────────────────────────────────
@@ -294,7 +322,7 @@ class HomeTab extends StatelessWidget {
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
-                          _SubjectChip(label: 'Mathematics', emoji: '📐', color: const Color(0xFF2563EB)),
+                          _SubjectChip(label: 'Mathematics', emoji: '📐', color: AppColors.primary),
                           _SubjectChip(label: 'Science', emoji: '🔬', color: const Color(0xFF10B981)),
                           _SubjectChip(label: 'English', emoji: '📖', color: const Color(0xFFF59E0B)),
                           _SubjectChip(label: 'Kiswahili', emoji: '🇰🇪', color: const Color(0xFFEF4444)),
@@ -351,6 +379,8 @@ class HomeTab extends StatelessWidget {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -381,8 +411,8 @@ class _DailyProgressRing extends StatelessWidget {
           progress: progress.clamp(0.0, 1.0),
           trackColor: isDark
               ? Colors.white.withValues(alpha: 0.06)
-              : const Color(0xFF2563EB).withValues(alpha: 0.1),
-          progressColor: const Color(0xFF2563EB),
+              : AppColors.primary.withValues(alpha: 0.1),
+          progressColor: AppColors.primary,
           strokeWidth: 3.5,
         ),
         child: Center(child: child),

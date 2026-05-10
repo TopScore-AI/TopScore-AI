@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../constants/colors.dart';
 
 class PunnettSquareWidget extends StatelessWidget {
   final String dataJson;
@@ -20,16 +21,20 @@ class PunnettSquareWidget extends StatelessWidget {
       final String? description = data['description'];
       final Map<String, dynamic>? legend = data['legend'];
 
+      final theme = Theme.of(context);
+      final isDark = theme.brightness == Brightness.dark;
+
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: isDark ? AppColors.surfaceElevatedDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          border:
+              Border.all(color: Colors.white.withAlpha(25), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.white.withValues(alpha: 0.02),
+              color: Colors.white.withAlpha(5),
               blurRadius: 20,
               spreadRadius: 1,
             ),
@@ -41,8 +46,8 @@ class PunnettSquareWidget extends StatelessWidget {
             if (title != null) ...[
               Text(
                 title.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppColors.text,
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.2,
@@ -52,11 +57,12 @@ class PunnettSquareWidget extends StatelessWidget {
             ],
             LayoutBuilder(
               builder: (context, constraints) {
-                final double cellSize = (constraints.maxWidth - 40) / (topAlleles.length + 1);
+                final double cellSize =
+                    (constraints.maxWidth - 40) / (topAlleles.length + 1);
                 return Table(
                   defaultColumnWidth: FixedColumnWidth(cellSize),
                   border: TableBorder.all(
-                    color: Colors.white.withValues(alpha: 0.1),
+                    color: Colors.white.withAlpha(25),
                     width: 0.5,
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -65,19 +71,23 @@ class PunnettSquareWidget extends StatelessWidget {
                     TableRow(
                       children: [
                         const SizedBox.shrink(), // Empty top-left cell
-                        ...topAlleles.map((allele) => _buildHeaderCell(allele.toString(), isVertical: false)),
+                        ...topAlleles.map((allele) => _buildHeaderCell(
+                            allele.toString(),
+                            isVertical: false)),
                       ],
                     ),
                     // Grid Rows
                     for (int i = 0; i < leftAlleles.length; i++)
                       TableRow(
                         children: [
-                          _buildHeaderCell(leftAlleles[i].toString(), isVertical: true),
+                          _buildHeaderCell(leftAlleles[i].toString(),
+                              isVertical: true),
                           ...List.generate(topAlleles.length, (j) {
-                            final cellValue = (grid.length > i && (grid[i] as List).length > j)
+                            final cellValue = (grid.length > i &&
+                                    (grid[i] as List).length > j)
                                 ? grid[i][j].toString()
                                 : '';
-                            return _buildGridCell(cellValue);
+                            return _buildGridCell(context, cellValue);
                           }),
                         ],
                       ),
@@ -100,7 +110,9 @@ class PunnettSquareWidget extends StatelessWidget {
               Wrap(
                 spacing: 12,
                 runSpacing: 8,
-                children: legend.entries.map((e) => _buildLegendItem(e.key, e.value.toString())).toList(),
+                children: legend.entries
+                    .map((e) => _buildLegendItem(e.key, e.value.toString()))
+                    .toList(),
               ),
             ],
             if (description != null) ...[
@@ -108,7 +120,7 @@ class PunnettSquareWidget extends StatelessWidget {
               Text(
                 description,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: Colors.white.withAlpha(180),
                   fontSize: 13,
                   fontStyle: FontStyle.italic,
                 ),
@@ -121,10 +133,11 @@ class PunnettSquareWidget extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.1),
+          color: Colors.red.withAlpha(25),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text('Error rendering Punnett Square: $e', style: const TextStyle(color: Colors.redAccent)),
+        child: Text('Error rendering Punnett Square: $e',
+            style: const TextStyle(color: Colors.redAccent)),
       );
     }
   }
@@ -134,12 +147,12 @@ class PunnettSquareWidget extends StatelessWidget {
       height: 50,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withAlpha(13),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.cyanAccent,
+        style: TextStyle(
+          color: AppColors.topscoreBlue,
           fontSize: 18,
           fontWeight: FontWeight.bold,
           fontFamily: 'monospace',
@@ -148,14 +161,16 @@ class PunnettSquareWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildGridCell(String text) {
+  Widget _buildGridCell(BuildContext context, String text) {
     return Container(
       height: 50,
       alignment: Alignment.center,
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white
+              : AppColors.text,
           fontSize: 16,
           fontWeight: FontWeight.w500,
           fontFamily: 'monospace',
@@ -168,9 +183,9 @@ class PunnettSquareWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withAlpha(13)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -178,7 +193,7 @@ class PunnettSquareWidget extends StatelessWidget {
           Text(
             key,
             style: const TextStyle(
-              color: Colors.cyanAccent,
+              color: AppColors.topscoreBlue,
               fontWeight: FontWeight.bold,
               fontSize: 12,
             ),

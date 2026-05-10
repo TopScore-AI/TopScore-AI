@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // EduPoa brand colors
-  static const Color edupoaBlue = Color(0xFF2B4E9A); // Primary Blue
-  static const Color edupoaTeal = Color(0xFF2D9A7C); // Secondary/Accent Teal
-  static const Color edupoaDark = Color(0xFF1F2633); // Footer/Dark
+  // TopScore brand colors
+  static const Color topscoreBlue = Color(0xFF2B4E9A); // Primary Blue
+  static const Color topscoreTeal = Color(0xFF2D9A7C); // Secondary/Accent Teal
+  static const Color topscoreDark = Color(0xFF1F2633); // Footer/Dark
 
-  // Primary Colors (Mapped to EduPoa)
-  static const Color primaryBlue = edupoaBlue;
+  // AI Tutor accent — used for quiz/flashcard highlights and AI-generated content
+  static const Color aiAccent = Color(0xFF6C63FF); // Purple accent
+
+  // Paystack checkout bar colour
+  static const Color paystackBlue = Color(0xFF09A5DB);
+
+  // Primary Colors (Mapped to TopScore)
+  static const Color primaryBlue = topscoreBlue;
   // keeping primaryPurple for backward compatibility strictly as an alias for migration
-  static const Color primaryPurple = edupoaBlue;
-  static const Color primaryDark = edupoaDark;
+  static const Color primaryPurple = topscoreBlue;
+  static const Color primaryDark = topscoreDark;
 
   // Accent Colors
-  static const Color accentTeal = edupoaTeal;
-  static const Color accentGreen = Color(0xFF2D9A7C); // Match EduPoa Teal/Green
+  static const Color accentTeal = topscoreTeal;
+  static const Color accentGreen =
+      Color(0xFF2D9A7C); // Match TopScore Teal/Green
   static const Color accentEmerald = Color(0xFF10b981);
 
   // Secondary Colors
@@ -26,10 +33,12 @@ class AppColors {
   static const Color black = Color(0xFF0f0f23);
   static const Color white = Color(0xFFFFFFFF);
 
-  // App Theme Aliases - This is what main.dart uses
-  static const Color primary = Color(0xFF2563EB); // Premium Blue
-  static const Color secondary = edupoaTeal;
-  static const Color accent = edupoaTeal;
+  // App Theme Aliases - This is what main.dart uses (matching Home Screen)
+  static const Color primary =
+      Color(0xFF2563EB); // Premium Blue (Home Screen primary)
+  static const Color secondary =
+      topscoreTeal; // Teal accent (Home Screen secondary)
+  static const Color accent = topscoreTeal; // Teal accent
 
   // Enhanced UI Colors
   static const Color overlay = Color(0x80000000);
@@ -39,18 +48,20 @@ class AppColors {
   static const Color shimmerBaseDark = Color(0xFF252525);
   static const Color shimmerHighlightDark = Color(0xFF2C2C2C);
 
-  // Light Mode Backgrounds - Crisp and modern
-  static const Color background = Color(0xFFF8FAFC); // Slate 50
-  static const Color surface = white;
-  static const Color surfaceVariant = Color(0xFFF1F5F9); // Slate 100
-  static const Color surfaceElevated = white;
+  // Light Mode Backgrounds - Crisp and modern (Home Screen style)
+  static const Color background =
+      Color(0xFFF8FAFC); // Slate 50 - matches Home Screen
+  static const Color surface = white; // Pure white cards
+  static const Color surfaceVariant =
+      Color(0xFFF1F5F9); // Slate 100 - subtle backgrounds
+  static const Color surfaceElevated = white; // Elevated cards
 
-  // Dark Mode Colors - Rich Midnight Charcoal, not pure black
-  static const Color backgroundDark = Color(0xFF0F172A); // Slate 900
-  static const Color surfaceDark = Color(0xFF12121A); // Layered surface
-  static const Color surfaceVariantDark = Color(0xFF1A1A28); // Elevated variant
-  static const Color surfaceElevatedDark = Color(0xFF161622); // Cards & modals
-  static const Color textDark = Color(0xFFF8FAFC); // Soft white (less harsh)
+  // Dark Mode Colors - Deep Navy EdTech palette (not pure black)
+  static const Color backgroundDark = Color(0xFF0D1B2A); // Deep Navy
+  static const Color surfaceDark = Color(0xFF112240); // Navy surface
+  static const Color surfaceVariantDark = Color(0xFF1A2F4A); // Elevated variant
+  static const Color surfaceElevatedDark = Color(0xFF162035); // Cards & modals
+  static const Color textDark = Color(0xFFF0F4FF); // Soft blue-white
   static const Color textSecondaryDark = Color(0xFF94A3B8);
 
   // Glow Colors (for dark mode luminous borders & shadows)
@@ -59,10 +70,11 @@ class AppColors {
   static const Color warningGlow = Color(0xFFFBBF24);
   static const Color accentGlow = Color(0xFF8B5CF6);
 
-  // Text colors (Light mode) - Pure black for icons/text
-  static const Color text = Color(0xFF000000); // Pure Black
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color textLight = Color(0xFF9CA3AF);
+  // Text colors (Light mode) - Premium Slate (Home Screen hierarchy)
+  static const Color text = Color(0xFF0F172A); // Slate 900 - primary text
+  static const Color textSecondary =
+      Color(0xFF64748B); // Slate 500 - secondary text (Home Screen)
+  static const Color textLight = Color(0xFF94A3B8); // Slate 400 - muted text
   static const Color textInverse = white;
 
   // Border colors - Softer, more subtle
@@ -76,8 +88,8 @@ class AppColors {
   static const Color info = Color(0xFF3b82f6);
 
   // Feature Card Colors - Updated to respect the new palette where appropriate
-  static const Color cardBlue = edupoaBlue;
-  static const Color cardGreen = edupoaTeal;
+  static const Color cardBlue = topscoreBlue;
+  static const Color cardGreen = topscoreTeal;
   static const Color cardPurple = Color(0xFF8b5cf6);
   static const Color cardPink = Color(0xFFec4899);
   static const Color cardOrange = Color(0xFFf97316);
@@ -93,26 +105,26 @@ class AppColors {
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [edupoaBlue, Color(0xFF3B5EAA)], // Blue gradient
+    colors: [topscoreBlue, Color(0xFF3B5EAA)], // Blue gradient
   );
 
   static const LinearGradient heroGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [edupoaBlue, Color(0xFF203A75), edupoaTeal],
+    colors: [topscoreBlue, Color(0xFF203A75), topscoreTeal],
     stops: [0.0, 0.6, 1.0],
   );
 
   static const LinearGradient accentGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [edupoaTeal, Color(0xFF3DBFA0)],
+    colors: [topscoreTeal, Color(0xFF3DBFA0)],
   );
 
   static const LinearGradient darkGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF000000), Color(0xFF121212)],
+    colors: [Color(0xFF0D1B2A), Color(0xFF112240)],
   );
 
   static const LinearGradient glassGradient = LinearGradient(
@@ -120,8 +132,6 @@ class AppColors {
     end: Alignment.bottomRight,
     colors: [Color(0x30FFFFFF), Color(0x10FFFFFF)],
   );
-
-
 
   // Backward compatibility aliases
   static const LinearGradient secondaryGradient = accentGradient;

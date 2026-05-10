@@ -8,7 +8,7 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.backgroundDark,
       body: Stack(
         children: [
           // Premium Background with Dark Overlay
@@ -26,15 +26,15 @@ class SplashScreen extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withValues(alpha: 0.3),
-                      Colors.black.withValues(alpha: 0.7),
+                      AppColors.backgroundDark.withValues(alpha: 0.3),
+                      AppColors.backgroundDark.withValues(alpha: 0.7),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-          
+
           // Branding Center
           Center(
             child: Column(
@@ -44,13 +44,9 @@ class SplashScreen extends StatelessWidget {
                   'assets/images/logo.png',
                   width: 160,
                   height: 160,
-                )
-                .animate()
-                .fadeIn(duration: 800.ms)
-                .scale(delay: 200.ms, duration: 600.ms, curve: Curves.easeOutBack),
-                
+                ).animate().fadeIn(duration: 800.ms).scale(
+                    delay: 200.ms, duration: 600.ms, curve: Curves.easeOutBack),
                 const SizedBox(height: 48),
-                
                 CircularProgressIndicator(
                   color: AppColors.primary,
                   strokeWidth: 3,

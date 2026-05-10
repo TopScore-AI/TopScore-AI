@@ -1,7 +1,9 @@
+import '../../constants/colors.dart';
 import 'dart:ui_web' as ui_web;
 import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
+import '../../widgets/app_spinner.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/paystack_service.dart';
 
@@ -79,13 +81,20 @@ class _PaystackWebCheckoutState extends State<PaystackWebCheckout> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF09A5DB),
+        backgroundColor: AppColors.paystackBlue,
         foregroundColor: Colors.white,
         title: Text('Complete Payment',
             style: GoogleFonts.nunito(fontWeight: FontWeight.bold)),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
+        leadingWidth: 80,
+        leading: TextButton(
           onPressed: _isVerifying ? null : () => Navigator.pop(context, null),
+          child: Text(
+            'Cancel',
+            style: GoogleFonts.nunito(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
         actions: [
           if (_isVerifying)
@@ -95,8 +104,7 @@ class _PaystackWebCheckoutState extends State<PaystackWebCheckout> {
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                  child: AppSpinner(strokeWidth: 2, color: Colors.white),
                 ),
               ),
             )
@@ -123,7 +131,7 @@ class _PaystackWebCheckoutState extends State<PaystackWebCheckout> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(),
+                        AppSpinner(),
                         SizedBox(height: 16),
                         Text('Verifying payment…'),
                       ],

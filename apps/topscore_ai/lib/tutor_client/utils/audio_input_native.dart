@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:waveform_flutter/waveform_flutter.dart' as wf;
@@ -26,7 +26,7 @@ class AudioInput extends ChangeNotifier {
     }
   }
 
-  /// No-op on native — permission is handled by the OS dialog via hasPermission().
+  /// No-op on native â€” permission is handled by the OS dialog via hasPermission().
   Future<void> requestPermission() async {
     await init();
   }
@@ -61,7 +61,7 @@ class AudioInput extends ChangeNotifier {
       throw Exception('Microphone permission denied');
     }
 
-    // Device selection — mobile often returns []
+    // Device selection â€” mobile often returns []
     final devices = await _recorder.listInputDevices();
     InputDevice? selectedDevice;
     if (devices.isNotEmpty) {
@@ -99,8 +99,8 @@ class AudioInput extends ChangeNotifier {
 
     final rawStream = await _recorder.startStream(config);
 
-    // 16kHz, 16-bit, mono = 32000 bytes/sec → 100ms = 3200 bytes
-    const chunkSize = 3200;
+    // 16kHz, 16-bit, mono = 32000 bytes/sec -> 20ms = 640 bytes
+    const chunkSize = 640; // 20ms at 16kHz 16-bit mono
     final List<int> buffer = [];
     _recorderStreamSub = rawStream.listen(
       (data) {

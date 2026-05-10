@@ -67,8 +67,9 @@ class TopScoreLoader extends StatelessWidget {
                   ],
                 ),
                 child: Image.asset(
-                  'assets/images/topscore_logo_transparent.png',
+                  'assets/images/logo.png',
                   fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(),
                 ),
               ).animate(onPlay: (c) => c.repeat(reverse: true))
                .scale(begin: const Offset(0.95, 0.95), end: const Offset(1.05, 1.05), duration: 1.seconds),

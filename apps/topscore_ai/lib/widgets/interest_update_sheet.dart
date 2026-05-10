@@ -1,8 +1,11 @@
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'app_spinner.dart';
 
 class InterestUpdateSheet extends StatefulWidget {
   final String userId;
@@ -47,7 +50,8 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
     if (widget.userId.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please sign in to save your interests.')),
+          const SnackBar(
+              content: Text('Please sign in to save your interests.')),
         );
       }
       return;
@@ -56,14 +60,14 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
     setState(() => _isSaving = true);
 
     try {
-      // Update Firestore directly
+      // Update Firestore with merge:true to handle cases where doc might not exist yet
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.userId)
-          .update({
-            'interests': _selectedInterests,
-            'careerMode': 'interest_based', // Flag to switch UI mode
-          });
+          .set({
+        'interests': _selectedInterests,
+        'careerMode': 'interest_based', // Flag to switch UI mode
+      }, SetOptions(merge: true));
 
       // Refresh local user model in provider
       if (mounted) {
@@ -85,13 +89,28 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark 
+                ? Colors.black.withValues(alpha: 0.7) 
+                : Colors.white.withValues(alpha: 0.75),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              width: 1,
+            ),
+          ),
+          child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -105,7 +124,13 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
           const SizedBox(height: 8),
           Text(
             "We've updated Career Compass! Select your interests to get personalized career guidance.",
-            style: GoogleFonts.nunito(fontSize: 16, color: Colors.grey[600]),
+            style: GoogleFonts.nunito(
+              fontSize: 16,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -123,15 +148,17 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
                     selectedColor: const Color(
                       0xFF6C63FF,
                     ).withValues(alpha: 0.2),
-                    checkmarkColor: const Color(0xFF6C63FF),
-                    backgroundColor: Colors.grey[100],
+                    checkmarkColor: AppColors.aiAccent,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.08),
                     labelStyle: GoogleFonts.nunito(
                       color: isSelected
-                          ? const Color(0xFF6C63FF)
-                          : Colors.black87,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                          ? AppColors.aiAccent
+                          : Theme.of(context).colorScheme.onSurface,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                     onSelected: (bool selected) {
                       setState(() {
@@ -158,13 +185,13 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
                   ? null
                   : _saveInterests,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
+                backgroundColor: AppColors.aiAccent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: _isSaving
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const AppSpinner(color: Colors.white)
                   : Text(
                       "Save & Continue",
                       style: GoogleFonts.nunito(
@@ -176,6 +203,8 @@ class _InterestUpdateSheetState extends State<InterestUpdateSheet> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }

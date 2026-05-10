@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
@@ -18,11 +19,20 @@ class EnhancedWebSocketService {
       StreamController.broadcast();
 
   bool _isConnected = false;
+  bool _isConnecting = false;
+  bool _isPaused = false;
+  bool _isInitialized = false;
+  bool _isDisposed = false;
+  bool _lastHasInternet = true;
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 10;
+  bool _isHandshakeSent = false;
   Timer? _reconnectTimer;
   Timer? _keepAliveTimer;
-  StreamSubscription<User?>? _authSubscription; // NEW: Track auth stream
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<ConnectionState>? _connectionStateSub;
+  final Random _random = Random();
+  Completer<void>? _authenticatedCompleter;
 
   // Connection manager for state tracking and retry logic
   final ConnectionStateManager _connectionManager = ConnectionStateManager();
@@ -41,44 +51,64 @@ class EnhancedWebSocketService {
   bool get hasInternet => _connectionManager.hasInternet;
 
   final String userId;
+  String? userName;
   String sessionId = const Uuid().v4();
   String threadId = const Uuid().v4();
 
-  EnhancedWebSocketService({required this.userId}) {
-    _initialize();
-  }
+  EnhancedWebSocketService({required this.userId});
 
-  Future<void> _initialize() async {
+  /// Initialize storage, connectivity listeners, and auth stream. Must be
+  /// awaited before [connect] or [sendMessage] are used.
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    _isInitialized = true;
+
     _connectionManager.initialize();
     await _offlineStorage.initialize();
     await _syncManager.initialize();
 
-    // Listen for connectivity changes
-    _connectionManager.stateStream.listen((state) {
-      if (state == ConnectionState.reconnecting && hasInternet) {
-        // Try to reconnect and sync pending messages
+    _lastHasInternet = _connectionManager.hasInternet;
+
+    // React to connectivity transitions: when internet returns, resume.
+    _connectionStateSub = _connectionManager.stateStream.listen((state) {
+      if (_isDisposed || _isPaused) return;
+      final hasNet = _connectionManager.hasInternet;
+      final regained = !_lastHasInternet && hasNet;
+      _lastHasInternet = hasNet;
+
+      if (regained && !_isConnected && !_isConnecting) {
+        _reconnectAttempts = 0;
+        connect();
+        return;
+      }
+      if (state == ConnectionState.reconnecting &&
+          hasNet &&
+          !_isConnected &&
+          !_isConnecting) {
         connect();
       }
     });
 
-    // NEW: Listen for Firebase token rotation to keep session alive
     _authSubscription =
         FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
-      if (user != null && _channel != null && _isConnected) {
+      if (user != null && _channel != null) {
         try {
           final newToken = await user.getIdToken();
           if (newToken != null) {
-            final payload = {"type": "token_refresh", "auth_token": newToken};
-            _channel?.sink.add(jsonEncode(payload));
+            if (_isConnected) {
+              // Already authenticated, just refreshing
+              final payload = {"type": "token_refresh", "auth_token": newToken};
+              _channel?.sink.add(jsonEncode(payload));
+            } else if (!_isHandshakeSent) {
+              // Channel is open but we haven't sent the initial handshake yet
+              _sendHandshake(newToken);
+            }
           }
         } catch (e) {
           if (kDebugMode) debugPrint('WebSocket token refresh error: $e');
         }
       }
     });
-
-    // Start connection immediately
-    connect();
   }
 
   String get _wsUrl {
@@ -101,9 +131,19 @@ class EnhancedWebSocketService {
   void setThreadId(String newThreadId) => threadId = newThreadId;
   void setSessionId(String newSessionId) => sessionId = newSessionId;
 
-  /// Connect with automatic retry and offline fallback
+  /// Connect with automatic retry and offline fallback. Safe to call
+  /// repeatedly — concurrent calls coalesce.
   Future<void> connect() async {
+    if (_isDisposed || _isPaused) return;
+    if (!_isInitialized) {
+      if (kDebugMode) {
+        debugPrint(
+            'WebSocket: connect() called before initialize() — ignoring');
+      }
+      return;
+    }
     if (_isConnected && _channel != null) return;
+    if (_isConnecting) return;
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       _connectionManager.setDisconnected();
@@ -115,33 +155,64 @@ class EnhancedWebSocketService {
       return;
     }
 
+    _isConnecting = true;
     _connectionManager.setConnecting();
+    _authenticatedCompleter = Completer<void>();
+    _isHandshakeSent = false;
+
+    // Close any orphaned channel from a previous attempt before opening a new one.
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+
     String? idToken;
     final user = FirebaseAuth.instance.currentUser;
 
     if (user != null) {
       try {
+        if (kDebugMode) {
+          debugPrint('WebSocket: Fetching fresh Firebase ID Token...');
+        }
         idToken = await user.getIdToken(false);
+        if (kDebugMode) {
+          debugPrint('WebSocket: Token fetched (length: ${idToken?.length})');
+        }
       } catch (e) {
-        if (kDebugMode) debugPrint('WebSocket: Failed to get auth token: $e');
-        // Continue anyway, backend may allow limited access or fallback to guest
+        if (kDebugMode) {
+          debugPrint('WebSocket: Failed to get auth token: $e');
+        }
       }
     }
 
     try {
       final uri = Uri.parse(_wsUrl);
-      _channel = WebSocketChannel.connect(uri);
+      final channel = WebSocketChannel.connect(uri);
+      _channel = channel;
+
+      // Handle async connection errors from the ready future to prevent top-level crashes
+      channel.ready.catchError((error) {
+        if (kDebugMode) {
+          debugPrint('WebSocket: connection ready error: $error');
+        }
+        if (identical(_channel, channel)) {
+          _handleDisconnection();
+        }
+      });
 
       if (idToken != null) {
-        final handshakePayload = {
-          "type": "init",
-          "auth_token": idToken,
-          "thread_id": threadId,
-        };
-        _channel!.sink.add(jsonEncode(handshakePayload));
+        if (kDebugMode) {
+          debugPrint('WebSocket: connect() found token, sending handshake...');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint(
+              'WebSocket: connect() - no token, sending handshake with identity: $userId');
+        }
       }
+      _sendHandshake(idToken);
 
-      _channel!.stream.listen(
+      channel.stream.listen(
         (message) {
           try {
             final data = jsonDecode(message) as Map<String, dynamic>;
@@ -152,10 +223,14 @@ class EnhancedWebSocketService {
         },
         onError: (error) {
           if (kDebugMode) debugPrint('WebSocket: Connection error: $error');
-          _handleDisconnection();
+          if (identical(_channel, channel)) {
+            _handleDisconnection();
+          }
         },
         onDone: () {
-          _handleDisconnection();
+          if (identical(_channel, channel)) {
+            _handleDisconnection();
+          }
         },
       );
     } catch (e) {
@@ -164,26 +239,154 @@ class EnhancedWebSocketService {
       _isConnectedController.add(false);
       _connectionManager.setDisconnected();
       _scheduleReconnect();
+    } finally {
+      _isConnecting = false;
     }
   }
 
+  void _sendHandshake(String? token) {
+    if (_channel == null) {
+      if (kDebugMode) {
+        debugPrint('WebSocket: Cannot send handshake, channel is null');
+      }
+      return;
+    }
+    if (_isHandshakeSent) {
+      if (kDebugMode) {
+        debugPrint('WebSocket: Handshake already sent, skipping duplicate');
+      }
+      return;
+    }
+
+    try {
+      if (kDebugMode) {
+        debugPrint('WebSocket: Preparing init handshake for user $userId...');
+      }
+      final handshakePayload = {
+        "type": "init",
+        "user_id": userId,
+        "thread_id": threadId,
+        if (token != null) "auth_token": token,
+      };
+      final encoded = jsonEncode(handshakePayload);
+      if (kDebugMode) {
+        debugPrint('WebSocket: Sending init payload to sink...');
+      }
+      _channel!.sink.add(encoded);
+      _isHandshakeSent = true;
+      if (kDebugMode) {
+        debugPrint('WebSocket: Init handshake sent successfully');
+      }
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('WebSocket: Error sending handshake: $e\n$stack');
+      }
+    }
+  }
+
+  void _markConnected() {
+    if (_isConnected) return;
+    _isConnected = true;
+    _reconnectAttempts = 0;
+    if (!_isDisposed && !_isConnectedController.isClosed) {
+      _isConnectedController.add(true);
+    }
+    _connectionManager.setConnected();
+    _startKeepAliveTimer();
+    _syncPendingMessages();
+  }
+
   void _handleIncomingMessage(Map<String, dynamic> data) {
+    if (_isDisposed || _messageController.isClosed) return;
     final type = data['type'];
 
     switch (type) {
       case 'connected':
-        _isConnected = true;
-        _reconnectAttempts = 0;
-        _isConnectedController.add(true);
-        _connectionManager.setConnected();
-        _startKeepAliveTimer();
-        _syncPendingMessages();
+        // Transport established, but wait for 'authenticated' before marking ready
+        if (kDebugMode) {
+          debugPrint(
+              'WebSocket: Transport connected (session: ${data['session_id']}), waiting for auth...');
+        }
+        break;
+
+      case 'system':
+        if (data['status'] == 'authenticated') {
+          if (kDebugMode) {
+            debugPrint('WebSocket: Session authenticated successfully.');
+          }
+          _markConnected();
+          if (_authenticatedCompleter != null &&
+              !_authenticatedCompleter!.isCompleted) {
+            _authenticatedCompleter!.complete();
+          }
+        } else {
+          _messageController.add(data);
+        }
         break;
 
       case 'ping':
         _sendPong();
         break;
 
+      // ─── STREAMING AI RESPONSE HANDLING ───────────────────────────────────
+      case 'response_start':
+        // Marks the beginning of a streaming response
+        if (kDebugMode) {
+          debugPrint(
+              'WebSocket: Streaming response started (id: ${data['id']})');
+        }
+        _messageController.add(data);
+        break;
+
+      case 'chunk':
+        // Incremental text content from AI
+        _messageController.add(data);
+        break;
+
+      case 'table':
+        // Table content (formatted separately)
+        _messageController.add(data);
+        break;
+
+      case 'tool_call':
+        // AI is using a tool (e.g., search, in-app browser)
+        if (kDebugMode) {
+          debugPrint('WebSocket: Tool call - ${data['tool']}');
+        }
+        _messageController.add(data);
+        break;
+
+      case 'status':
+        // Status updates (e.g., "Thinking...", "Analyzing...")
+        _messageController.add(data);
+        break;
+
+      case 'done':
+        // End of streaming response
+        if (kDebugMode) {
+          debugPrint('WebSocket: Streaming response completed');
+        }
+        // Cache the complete message if available
+        if (data.containsKey('full_response')) {
+          _cacheMessage(data);
+        }
+        _messageController.add(data);
+        break;
+
+      case 'error':
+        // Error during streaming
+        if (kDebugMode) {
+          debugPrint('WebSocket: Streaming error - ${data['content']}');
+        }
+        _messageController.add(data);
+        break;
+
+      case 'is_kicd_certified':
+        // KICD certification flag for curriculum-verified content
+        _messageController.add(data);
+        break;
+
+      // ─── LEGACY RESPONSE HANDLING ─────────────────────────────────────────
       case 'response':
         _cacheMessage(data);
         _messageController.add(data);
@@ -206,6 +409,7 @@ class EnhancedWebSocketService {
     bool dataSaver = false,
     String? replyToId,
     String? replyToText,
+    String? userName,
     Map<String, dynamic>? extraData,
   }) async {
     final messageId = const Uuid().v4();
@@ -220,6 +424,7 @@ class EnhancedWebSocketService {
       "model_preference": modelPreference ?? "smart",
       "data_saver": dataSaver,
       "timestamp": DateTime.now().millisecondsSinceEpoch,
+      if (userName != null) "user_name": userName,
       if (fileUrls != null && fileUrls.isNotEmpty) 'file_urls': fileUrls,
       if (fileUrls != null && fileUrls.isNotEmpty) 'file_url': fileUrls.first,
       if (fileType != null) 'file_type': fileType,
@@ -241,16 +446,19 @@ class EnhancedWebSocketService {
         ),
       );
       // Still emit it locally for UI
-      _messageController.add({
-        'type': 'queued',
-        'message_id': messageId,
-        'message': message,
-        'pending': true,
-      });
+      if (!_isDisposed && !_messageController.isClosed) {
+        _messageController.add({
+          'type': 'queued',
+          'message_id': messageId,
+          'message': message,
+          'pending': true,
+        });
+      }
       return;
     }
 
     try {
+      if (_isDisposed) return;
       _channel!.sink.add(jsonEncode(data));
     } catch (e) {
       if (kDebugMode) debugPrint('Error sending message: $e');
@@ -286,9 +494,16 @@ class EnhancedWebSocketService {
     }
   }
 
-  /// Send a raw JSON payload — used for control messages like stop
+  /// Send a raw JSON payload — used for control messages like stop. Dropped
+  /// silently when offline (the server-side generation isn't running anyway).
   void sendRaw(Map<String, dynamic> payload) {
-    if (!_isConnected || _channel == null) return;
+    if (!_isConnected || _channel == null) {
+      if (kDebugMode) {
+        debugPrint(
+            'WebSocket: sendRaw dropped (disconnected): ${payload['type']}');
+      }
+      return;
+    }
     try {
       _channel!.sink.add(jsonEncode(payload));
     } catch (e) {
@@ -381,20 +596,20 @@ class EnhancedWebSocketService {
   }
 
   void _scheduleReconnect() {
+    if (_isDisposed || _isPaused) return;
     _reconnectAttempts++;
     if (_reconnectAttempts < _maxReconnectAttempts) {
-      // Exponential backoff with jitter: min(60s, 2^attempt * 1s) + random(0–1s)
+      // Exponential backoff: min(60s, 2^attempt * 1s) + up-to-20% random jitter.
       final baseSeconds = (1 << _reconnectAttempts).clamp(1, 60);
-      final jitterMs = (baseSeconds *
-              1000 *
-              0.2 *
-              (DateTime.now().millisecondsSinceEpoch % 100) /
-              100)
-          .round();
+      final maxJitterMs = (baseSeconds * 1000 * 0.2).toInt();
+      final jitterMs = maxJitterMs > 0 ? _random.nextInt(maxJitterMs + 1) : 0;
       final delayMs = baseSeconds * 1000 + jitterMs;
       _connectionManager.setReconnecting();
       _reconnectTimer?.cancel();
-      _reconnectTimer = Timer(Duration(milliseconds: delayMs), connect);
+      _reconnectTimer = Timer(Duration(milliseconds: delayMs), () {
+        if (_isDisposed || _isPaused) return;
+        connect();
+      });
       if (kDebugMode) {
         debugPrint(
             'WebSocket: reconnect attempt $_reconnectAttempts in ${delayMs}ms');
@@ -406,12 +621,25 @@ class EnhancedWebSocketService {
 
   void _handleDisconnection() {
     _isConnected = false;
-    _isConnectedController.add(false);
+    if (!_isConnectedController.isClosed) {
+      _isConnectedController.add(false);
+    }
     _connectionManager.setDisconnected();
+    if (_isDisposed || _isPaused) return;
     _scheduleReconnect();
   }
 
+  /// Resume after [pause] and force a fresh connect.
+  void resume() {
+    if (_isDisposed) return;
+    _isPaused = false;
+    _reconnectAttempts = 0;
+    connect();
+  }
+
   void resetConnection() {
+    if (_isDisposed) return;
+    _isPaused = false;
     _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
     _keepAliveTimer?.cancel();
@@ -419,23 +647,38 @@ class EnhancedWebSocketService {
   }
 
   /// Pause timers and close the channel without destroying the service.
-  /// Called when the app goes to background. Call [connect] to resume.
+  /// Reconnects scheduled by onDone/onError are suppressed until [resume]
+  /// (or [connect]/[resetConnection]) is called.
   void pause() {
+    _isPaused = true;
     _keepAliveTimer?.cancel();
     _reconnectTimer?.cancel();
-    _channel?.sink.close();
+    final channel = _channel;
     _channel = null;
+    try {
+      channel?.sink.close();
+    } catch (_) {}
     _isConnected = false;
-    _isConnectedController.add(false);
+    if (!_isConnectedController.isClosed) {
+      _isConnectedController.add(false);
+    }
   }
 
   Future<void> dispose() async {
+    _isDisposed = true;
+    _isPaused = true;
     _reconnectTimer?.cancel();
     _keepAliveTimer?.cancel();
-    _authSubscription?.cancel();
-    _channel?.sink.close();
-    _messageController.close();
-    _isConnectedController.close();
-    _connectionManager.dispose();
+    await _authSubscription?.cancel();
+    await _connectionStateSub?.cancel();
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    if (!_messageController.isClosed) await _messageController.close();
+    if (!_isConnectedController.isClosed) await _isConnectedController.close();
+    // Note: _connectionManager is a process-wide singleton — do not dispose it
+    // here, otherwise its broadcast stream becomes unusable for the rest of
+    // the app session.
   }
 }

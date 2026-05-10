@@ -14,7 +14,7 @@ class StudyPlanService {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/api/study-plan/generate');
     
     try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+      final headers = await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
       final response = await http.post(
         url,
         headers: headers,
@@ -62,7 +62,7 @@ class StudyPlanService {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/api/study-plan/check-in');
     
     try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+      final headers = await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
       await http.post(
         url,
         headers: headers,

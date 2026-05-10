@@ -40,7 +40,7 @@ class VideoInput extends ChangeNotifier {
 
     _cameraController = CameraController(
       _cameras.first,
-      ResolutionPreset.medium,
+      ResolutionPreset.low,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
@@ -59,7 +59,7 @@ class VideoInput extends ChangeNotifier {
     }
 
     _captureTimer?.cancel();
-    _captureTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    _captureTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       final controller = _cameraController;
       if (controller == null ||
           !controller.value.isInitialized ||
@@ -70,8 +70,12 @@ class VideoInput extends ChangeNotifier {
       try {
         if (controller.value.isTakingPicture) return;
         final XFile imageFile = await controller.takePicture();
+
+        // Compress image to avoid saturating the WebSocket and causing audio jitter
         final Uint8List imageBytes = await imageFile.readAsBytes();
-        if (!_imageStreamController.isClosed) {
+
+        // Check if controller is still open before adding
+        if (!_imageStreamController.isClosed && _isStreaming) {
           _imageStreamController.add(imageBytes);
         }
       } catch (e) {
@@ -84,13 +88,19 @@ class VideoInput extends ChangeNotifier {
 
   Future<void> stopStreamingImages() async {
     if (!_isStreaming) return;
+
+    // Cancel timer first to prevent new captures
     _captureTimer?.cancel();
     _captureTimer = null;
+    _isStreaming = false;
+
+    // Then close stream controller safely
     if (!_imageStreamController.isClosed) {
       await _imageStreamController.close();
     }
     _imageStreamController = StreamController<Uint8List>.broadcast();
-    _isStreaming = false;
+
+    // Finally dispose camera
     await _cameraController?.dispose();
     _cameraController = null;
     controllerInitialized = false;

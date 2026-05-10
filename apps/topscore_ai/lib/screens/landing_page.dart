@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 
 import '../constants/colors.dart';
 import '../config/app_theme.dart';
 import '../widgets/bounce_wrapper.dart';
-import 'auth/auth_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -42,7 +42,7 @@ class _LandingPageState extends State<LandingPage>
       subtitle:
           "Get personalized explanations and step-by-step guidance. The new app layout gives your tutor plenty of space.",
       imagePath: "assets/images/onboarding_ai_tutor.png",
-      color: const Color(0xFF6C63FF),
+      color: AppColors.aiAccent,
     ),
     OnboardingContent(
       title: "Expansive Library",
@@ -54,7 +54,7 @@ class _LandingPageState extends State<LandingPage>
     OnboardingContent(
       title: "Smart Tools",
       subtitle:
-          "From scientific calculators to study schedulers, we have what you need, organized perfectly.",
+          "From AI study schedulers to personalized learning paths, we have what you need, organized perfectly.",
       imagePath: "assets/images/onboarding_smart_tools.png",
       color: const Color(0xFF4ECDC4),
     ),
@@ -123,10 +123,7 @@ class _LandingPageState extends State<LandingPage>
 
   void _goToAuth() {
     HapticFeedback.selectionClick();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AuthScreen()),
-    );
+    context.push('/login');
   }
 
   @override
@@ -399,13 +396,13 @@ class _MorphingNavButton extends StatelessWidget {
                           style: GoogleFonts.nunito(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: Colors.black,
+                            color: AppColors.text,
                           ),
                         ),
                         const SizedBox(width: AppTheme.spacingSm),
                         const Icon(
                           Icons.arrow_forward_rounded,
-                          color: Colors.black,
+                          color: AppColors.text,
                           size: 24,
                         ),
                       ],
@@ -413,7 +410,7 @@ class _MorphingNavButton extends StatelessWidget {
                   : const Icon(
                       Icons.arrow_forward_rounded,
                       key: ValueKey('icon'),
-                      color: Colors.black,
+                      color: AppColors.text,
                       size: 32,
                     ),
             ),

@@ -47,7 +47,7 @@
     padding: 10px 22px;
     border: none;
     border-radius: 50px;
-    background: var(--gradient-brand);
+    background: #4f46e5; /* Using defined brand-primary */
     color: #fff;
     font-size: 13px;
     font-weight: 700;

@@ -3,7 +3,8 @@ part of '../chat_controller.dart';
 extension ChatControllerLiveVoice on ChatController {
   // --- Constants ---
   static const Duration _silenceTimeout = Duration(seconds: 12);
-  static const Duration _inactivityTimeout = Duration(minutes: 2);
+  static const Duration _inactivityTimeout = Duration(minutes: 10);
+  static const Duration _finalInactivityTimeout = Duration(minutes: 5);
 
   /// Robust permission check before starting the voice session.
   /// Handles "Denied" and "Permanently Denied" (Blocked) states with clean UX.
@@ -32,21 +33,25 @@ extension ChatControllerLiveVoice on ChatController {
   }
 
   void _showMicrophoneSettingsDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
         title: Row(
           children: [
-            const Icon(CupertinoIcons.mic_slash, color: Colors.redAccent, size: 28),
+            const Icon(CupertinoIcons.mic_slash,
+                color: Colors.redAccent, size: 28),
             const SizedBox(width: 12),
             Text(
               "Microphone Blocked",
               style: GoogleFonts.plusJakartaSans(
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ],
@@ -57,18 +62,22 @@ extension ChatControllerLiveVoice on ChatController {
           children: [
             Text(
               "To use Voice Mode, we need access to your microphone. It looks like it's currently blocked.",
-              style: GoogleFonts.plusJakartaSans(color: Colors.black54, fontSize: 14),
+              style: GoogleFonts.plusJakartaSans(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  fontSize: 14),
             ),
             const SizedBox(height: 20),
-            _buildStep(1, "Click the 'Lock' 🔒 icon in the address bar."),
-            _buildStep(2, "Toggle Microphone to 'Allow'."),
-            _buildStep(3, "Click the 'Retry' button below."),
+            _buildStep(
+                context, 1, "Click the 'Lock' 🔒 icon in the address bar."),
+            _buildStep(context, 2, "Toggle Microphone to 'Allow'."),
+            _buildStep(context, 3, "Click the 'Retry' button below."),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Cancel", style: GoogleFonts.plusJakartaSans(color: Colors.black45)),
+            child: Text("Cancel",
+                style: GoogleFonts.plusJakartaSans(color: theme.hintColor)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -80,19 +89,23 @@ extension ChatControllerLiveVoice on ChatController {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
+              backgroundColor: theme.primaryColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
-            child: Text("I've Fixed It - Retry", style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+            child: Text("I've Fixed It - Retry",
+                style:
+                    GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStep(int num, String text) {
+  Widget _buildStep(BuildContext context, int num, String text) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Row(
@@ -100,14 +113,22 @@ extension ChatControllerLiveVoice on ChatController {
         children: [
           Container(
             padding: const EdgeInsets.all(6),
-            decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-            child: Text("$num", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            decoration: BoxDecoration(
+                color: theme.primaryColor, shape: BoxShape.circle),
+            child: Text("$num",
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
-              style: GoogleFonts.plusJakartaSans(fontSize: 14, color: Colors.black87, height: 1.4),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurface,
+                  height: 1.4),
             ),
           ),
         ],
@@ -115,18 +136,25 @@ extension ChatControllerLiveVoice on ChatController {
     );
   }
 
-  Future<void> startLiveVoiceMode(BuildContext context, {bool feynmanMode = false}) async {
+  /// Latest user-authored chat snippet, used as a voice-session handoff hint.
+  /// Returns "" when there is no recent user text to pass along.
+  String _latestChatHandoffHint() {
+    for (final m in _messages.reversed) {
+      if (!m.isUser) continue;
+      final t = m.text.trim();
+      if (t.isEmpty) continue;
+      return t.length > 200 ? t.substring(0, 200) : t;
+    }
+    return '';
+  }
+
+  Future<void> startLiveVoiceMode(BuildContext context,
+      {bool feynmanMode = false}) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (_isVoiceMode) return;
-    if (authProvider.userModel == null && !authProvider.isGuestMode) return;
+    if (authProvider.userModel == null) return;
 
     if (!authProvider.canSendMessage) {
-      if (authProvider.isGuestMode) {
-        if (context.mounted) {
-          authProvider.exitGuestMode();
-          context.go('/login');
-        }
-      }
       return;
     }
 
@@ -136,11 +164,14 @@ extension ChatControllerLiveVoice on ChatController {
     _lastVisualMessage = null; // Clear any old visuals
     _voiceSessionStartTime = DateTime.now();
     notify(); // Trigger UI immediately
-    
-    developer.log('🎙️ [STEP 0] Voice Session Started at $_voiceSessionStartTime', name: 'ChatController');
+
+    developer.log(
+        '🎙️ [STEP 0] Voice Session Started at $_voiceSessionStartTime',
+        name: 'ChatController');
 
     try {
-      developer.log('🎙️ [STEP 1] Requesting Permissions', name: 'ChatController');
+      developer.log('🎙️ [STEP 1] Requesting Permissions',
+          name: 'ChatController');
       final hasPermission = await requestMicrophoneAccess(context);
       if (!hasPermission) {
         _isVoiceMode = false;
@@ -148,104 +179,224 @@ extension ChatControllerLiveVoice on ChatController {
         notify();
         return;
       }
-      
-      await _audioInput.init();
-      await _audioOutput.init();
-      await _audioOutput.playStream(); 
 
-      developer.log('🎙️ [STEP 3] Connecting to Gemini Live...', name: 'ChatController');
+      // Check if still mounted after async operation
+      if (!context.mounted) {
+        developer.log('Context no longer mounted after permission request',
+            name: 'ChatController');
+        await stopLiveVoiceMode();
+        return;
+      }
 
-      final userId = authProvider.isGuestMode ? authProvider.deviceId : (authProvider.userModel?.uid ?? 'guest');
-      final threadId = _wsService.threadId;
-      var url = '${AppConfig.liveVoiceUrl}?student_id=$userId&thread_id=$threadId';
+      try {
+        await _audioInput.init();
+        await _audioOutput.init();
+        await _audioOutput.playStream();
+      } catch (e) {
+        developer.log('🎙️ Audio initialization failed: $e',
+            name: 'ChatController');
+        if (scaffoldKey.currentContext != null &&
+            scaffoldKey.currentContext!.mounted) {
+          ScaffoldMessenger.of(scaffoldKey.currentContext!).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Audio initialization failed. Voice mode may not work properly.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        // Continue anyway - some features may still work
+      }
+
+      developer.log('🎙️ [STEP 3] Connecting to Gemini Live...',
+          name: 'ChatController');
+
+      final userId = authProvider.userModel?.uid ?? 'anonymous';
+      final userName = authProvider.userModel?.preferredName ??
+          authProvider.userModel?.displayName ??
+          '';
+      final threadId = _wsService?.threadId ?? const Uuid().v4();
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+
+      var url =
+          '${AppConfig.liveVoiceUrl}?student_id=$userId&thread_id=$threadId';
+      if (userName.isNotEmpty) {
+        url += '&student_name=${Uri.encodeQueryComponent(userName)}';
+      }
+      if (token != null) {
+        url += '&auth_token=$token';
+      }
+
       if (feynmanMode) {
         url += '&feynman_mode=true';
       }
-      
+
+      // Pass a short handoff hint so the voice agent knows what the student
+      // was just chatting about. Light-touch: one message, URL-encoded, capped.
+      final hint = _latestChatHandoffHint();
+      if (hint.isNotEmpty) {
+        url += '&context_hint=${Uri.encodeQueryComponent(hint)}';
+      }
+
       await _geminiLiveService.connect(url);
-      developer.log('🎙️ [STEP 4] Connected successfully', name: 'ChatController');
+
+      // Check if still in voice mode after async connection
+      if (!_isVoiceMode) {
+        developer.log('Voice mode was stopped during connection',
+            name: 'ChatController');
+        return;
+      }
+
+      developer.log('🎙️ [STEP 4] Connected successfully',
+          name: 'ChatController');
+      _currentAiStatus = 'Listening...';
+      notify();
+
+      // --- Context Injection (Silent) ---
+      // If the user launched Voice from a PDF or uploaded a file but hasn't sent it,
+      // inject the URL silently so the Voice agent is grounded in the document.
+      if (_pendingAttachments.isNotEmpty) {
+        final urls =
+            _pendingAttachments.map((a) => a.url).whereType<String>().toList();
+        if (urls.isNotEmpty) {
+          final contextString =
+              "SYSTEM: The user just opened this document. Be prepared to answer questions about it: ${urls.join(', ')}";
+          _geminiLiveService.sendSystemContext(contextString);
+        }
+      }
 
       // --- Audio Input Pipeline with Barge-In VAD ---
-      _liveAudioSubscription = (await _audioInput.startRecordingStream())?.listen((data) {
-        if (!_isMicMuted && _isVoiceMode) {
-          _geminiLiveService.sendAudio(data);
-        }
-      });
+      _liveAudioSubscription =
+          (await _audioInput.startRecordingStream())?.listen(
+        (data) {
+          if (!_isMicMuted && _isVoiceMode) {
+            _geminiLiveService.sendAudio(data);
+          }
+        },
+        onError: (error) {
+          developer.log('Audio input stream error: $error',
+              name: 'ChatController');
+        },
+        cancelOnError: false,
+      );
 
       // --- AI Audio Output ---
-      _liveGeminiAudioSubscription = _geminiLiveService.audioStream.listen((data) {
-        if (_isVoiceMode) {
-          _audioOutput.addDataToAudioStream(data);
-          _resetSilenceTimer(); // AI is speaking → reset silence
-        }
-      });
+      _liveGeminiAudioSubscription = _geminiLiveService.audioStream.listen(
+        (data) {
+          if (_isVoiceMode) {
+            _audioOutput.addDataToAudioStream(data);
+            _resetSilenceTimer(); // AI is speaking → reset silence
+
+            if (_currentAiStatus != 'Speaking...') {
+              _currentAiStatus = 'Speaking...';
+              notify();
+            }
+          }
+        },
+        onError: (error) {
+          developer.log('Gemini audio stream error: $error',
+              name: 'ChatController');
+        },
+        cancelOnError: false,
+      );
 
       // --- Event Handling (Interruptions, Tool Calls, Turn Complete) ---
-      _liveGeminiEventSubscription = _geminiLiveService.events.listen((event) {
-        final bool wasNudge = _isSystemNudgeTurn;
+      _liveGeminiEventSubscription = _geminiLiveService.events.listen(
+        (event) async {
+          final bool wasNudge = _isSystemNudgeTurn;
 
-        switch (event.type) {
-          case GeminiLiveEventType.error:
-            developer.log('Live Voice Session Error: ${event.error}');
-            _liveVoiceErrorMessage = event.error;
-            _isLoading = false;
-            notify();
-            break;
-          case GeminiLiveEventType.interrupted:
-            developer.log('Live Voice: AI was interrupted (barge-in)');
-            _audioOutput.flushBuffer(); 
-            _isSystemNudgeTurn = false;
-            _resetInactivityTimer();
-            break;
-          case GeminiLiveEventType.turnComplete:
-            developer.log('Live Voice: Turn complete');
-            _resetSilenceTimer(); 
-            if (!wasNudge) {
+          switch (event.type) {
+            case GeminiLiveEventType.error:
+              developer.log('Live Voice Session Error: ${event.error}');
+              _liveVoiceErrorMessage = event.error;
+              _isLoading = false;
+              _currentAiStatus = null;
+              notify();
+              break;
+            case GeminiLiveEventType.interrupted:
+              developer.log('Live Voice: AI was interrupted (barge-in)');
+              _audioOutput.flushBuffer();
+              _isSystemNudgeTurn = false;
               _resetInactivityTimer();
-            }
-            _isSystemNudgeTurn = false;
-            break;
-          case GeminiLiveEventType.toolCall:
-            _handleLiveToolCall(event);
-            break;
-          case GeminiLiveEventType.message:
-          case GeminiLiveEventType.quiz:
-          case GeminiLiveEventType.flashcards:
-          case GeminiLiveEventType.interactiveGraph:
-          case GeminiLiveEventType.mnemonic:
-          case GeminiLiveEventType.punnettSquare:
-          case GeminiLiveEventType.status:
-            // Forward rich visuals/messages to the standard chat handler
-            if (event.raw != null) {
-               final message = handleIncomingMessage(event.raw!);
-               // If it's a rich visual (contains more than just text, or is a specific tool type),
-               // set it as the last visual message for the peek overlay.
-               if (message != null && _isVoiceMode) {
-                 final isRich = message.imageUrl != null || 
-                                message.quizDataJson != null || 
-                                message.flashcardDataJson != null || 
-                                message.desmosDataJson != null ||
-                                message.graphDataJson != null;
-                 if (isRich) {
+              _currentAiStatus = 'Listening...';
+              notify();
+              break;
+            case GeminiLiveEventType.turnComplete:
+              developer.log('Live Voice: Turn complete');
+              _resetSilenceTimer();
+              if (!wasNudge) {
+                _resetInactivityTimer();
+              }
+              _isSystemNudgeTurn = false;
+              _currentAiStatus = 'Listening...';
+              notify();
+              break;
+            case GeminiLiveEventType.sessionEnd:
+              developer.log('Live Voice: Session ended, reconnecting...',
+                  name: 'ChatController');
+              _geminiLiveService.stop();
+              await Future.delayed(const Duration(milliseconds: 800));
+              if (_isVoiceMode && context.mounted) {
+                unawaited(startLiveVoiceMode(context));
+              }
+              break;
+            case GeminiLiveEventType.ping:
+              break;
+            case GeminiLiveEventType.suggestions:
+              final list = event.raw?['suggestions'];
+              if (list is List) {
+                _voiceSuggestions = list
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList();
+                notify();
+              }
+              break;
+            case GeminiLiveEventType.toolCall:
+              _handleLiveToolCall(event);
+              break;
+            case GeminiLiveEventType.message:
+            case GeminiLiveEventType.quiz:
+            case GeminiLiveEventType.flashcards:
+            case GeminiLiveEventType.interactiveGraph:
+            case GeminiLiveEventType.mnemonic:
+            case GeminiLiveEventType.punnettSquare:
+            case GeminiLiveEventType.status:
+              // Forward rich visuals/messages to the standard chat handler
+              if (event.raw != null) {
+                final message = handleIncomingMessage(event.raw!);
+                // If it's a rich visual (contains more than just text, or is a specific tool type),
+                // set it as the last visual message for the peek overlay.
+                if (message != null && _isVoiceMode) {
+                  final isRich = message.imageUrl != null ||
+                      message.quizDataJson != null ||
+                      message.flashcardDataJson != null;
+                  if (isRich) {
                     _lastVisualMessage = message;
                     notify();
-                 }
-               }
+                  }
+                }
 
-               // Auto-scroll so the user sees the new visual in the list behind the overlay
-               Future.delayed(const Duration(milliseconds: 300), () {
-                 scrollToBottom();
-               });
-            }
-            break;
-          default:
-            break;
-        }
-      });
+                // Auto-scroll so the user sees the new visual in the list behind the overlay
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  scrollToBottom();
+                });
+              }
+              break;
+            default:
+              break;
+          }
+        },
+        onError: (error) {
+          developer.log('Gemini event stream error: $error',
+              name: 'ChatController');
+        },
+        cancelOnError: false,
+      );
 
       _isLoading = false;
       notify();
-      
+
       // Delay silence timer to ensure session is settled
       Future.delayed(const Duration(seconds: 2), () {
         if (_isVoiceMode) {
@@ -253,14 +404,15 @@ extension ChatControllerLiveVoice on ChatController {
           _startInactivityTimer();
         }
       });
-      
+
       AnalyticsService.instance.logEvent('voice_mode_engaged');
-    } catch (e) {
-      developer.log('Live Voice Error: $e');
+    } catch (e, stackTrace) {
+      developer.log('Live Voice Error: $e\n$stackTrace',
+          name: 'ChatController');
       if (context.mounted) {
         _showErrorSnackBar(context, 'Failed to connect: $e');
       }
-      stopLiveVoiceMode();
+      await stopLiveVoiceMode();
     }
   }
 
@@ -278,49 +430,95 @@ extension ChatControllerLiveVoice on ChatController {
   // --- Awkward Silence & Inactivity Handlers ---
   void _startInactivityTimer() {
     _inactivityTimer?.cancel();
+    _countdownTimer?.cancel();
+
     _inactivityTimer = Timer(_inactivityTimeout, () {
       if (!_isVoiceMode) return;
-      developer.log('💤 Inactivity timeout reached. Stopping voice mode.', name: 'ChatController');
-      if (scaffoldKey.currentContext != null && scaffoldKey.currentContext!.mounted) {
-        _showErrorSnackBar(scaffoldKey.currentContext!, 'Live Voice session closed due to inactivity.');
+      _triggerInactivityWarning();
+    });
+  }
+
+  void _triggerInactivityWarning() {
+    _isShowingInactivityWarning = true;
+    _inactivitySecondsRemaining = _finalInactivityTimeout.inSeconds;
+    notify();
+
+    developer.log('⚠️ Inactivity warning triggered. Starting countdown.',
+        name: 'ChatController');
+
+    // Proactive AI nudge to warn the user
+    _geminiLiveService.sendSystemContext(
+        '[SYSTEM INSTRUCTION: The user has been inactive for ${_inactivityTimeout.inMinutes} minutes. '
+        'Warn them that the session will close in ${_finalInactivityTimeout.inMinutes} minutes due to inactivity '
+        'unless they say something or interact with the app. Be helpful and polite.]');
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isVoiceMode) {
+        timer.cancel();
+        return;
       }
-      stopLiveVoiceMode();
+
+      if (_inactivitySecondsRemaining > 0) {
+        _inactivitySecondsRemaining--;
+        notify();
+      } else {
+        timer.cancel();
+        developer.log(
+            '💤 Inactivity final timeout reached. Stopping voice mode.',
+            name: 'ChatController');
+        if (scaffoldKey.currentContext != null &&
+            scaffoldKey.currentContext!.mounted) {
+          _showErrorSnackBar(
+              scaffoldKey.currentContext!, 'Session closed due to inactivity.');
+        }
+        stopLiveVoiceMode();
+      }
     });
   }
 
   void _resetInactivityTimer() {
     _inactivityTimer?.cancel();
+    _countdownTimer?.cancel();
+    _isShowingInactivityWarning = false;
+    _inactivitySecondsRemaining = 0;
+
     if (_isVoiceMode) {
       _startInactivityTimer();
     }
+    notify();
   }
 
   void _startSilenceTimer() {
     _silenceTimer?.cancel();
     _silenceTimer = Timer(_silenceTimeout, () {
       if (!_isVoiceMode) {
-        developer.log('🤫 Silence timer ignored (not in voice mode)', name: 'ChatController');
+        developer.log('🤫 Silence timer ignored (not in voice mode)',
+            name: 'ChatController');
         return;
       }
-      
+
       // Guard: Don't send a nudge if the session just started (avoid instant bombardment)
-      final sessionDuration = DateTime.now().difference(_voiceSessionStartTime ?? DateTime.now());
+      final sessionDuration =
+          DateTime.now().difference(_voiceSessionStartTime ?? DateTime.now());
       if (sessionDuration < const Duration(seconds: 15)) {
-         developer.log('🤫 Silence timer ignored (session too new: ${sessionDuration.inSeconds}s)', name: 'ChatController');
-         _startSilenceTimer(); // Reschedule if too new
-         return;
+        developer.log(
+            '🤫 Silence timer ignored (session too new: ${sessionDuration.inSeconds}s)',
+            name: 'ChatController');
+        _startSilenceTimer(); // Reschedule if too new
+        return;
       }
-      
-      developer.log('🤫 Awkward silence detected after ${_silenceTimeout.inSeconds}s. Sending hint nudge.', name: 'ChatController');
-      
+
+      developer.log(
+          '🤫 Awkward silence detected after ${_silenceTimeout.inSeconds}s. Sending hint nudge.',
+          name: 'ChatController');
+
       _isSystemNudgeTurn = true;
 
       // Send a system injection to the Live API so the AI proactively helps
       _geminiLiveService.sendSystemContext(
-        '[SYSTEM INSTRUCTION: The student has been silent for ${_silenceTimeout.inSeconds} seconds. '
-        'They may be stuck or thinking. Gently ask if they would like a hint or if they need help '
-        'getting started. Be warm and encouraging, not pushy.]'
-      );
+          '[SYSTEM INSTRUCTION: The student has been silent for ${_silenceTimeout.inSeconds} seconds. '
+          'They may be stuck or thinking. Gently ask if they would like a hint or if they need help '
+          'getting started. Be warm and encouraging, not pushy.]');
     });
   }
 
@@ -334,12 +532,12 @@ extension ChatControllerLiveVoice on ChatController {
   // --- Live Tool Call Handler (Function Calling → UI Sync) ---
   void _handleLiveToolCall(GeminiLiveEvent event) {
     developer.log('🔧 Tool call received: ${event.toolName}');
-    
+
     switch (event.toolName) {
       case 'open_flashcard':
         final topic = event.toolArgs?['topic'] as String? ?? 'General';
         // Show a floating flashcard overlay
-        addSystemMessage('📋 Opening flashcard: $topic');
+        addSystemMessage('📖 Opening flashcard: $topic');
         // Send tool response back to AI
         _geminiLiveService.sendText(jsonEncode({
           'type': 'tool_response',
@@ -347,17 +545,17 @@ extension ChatControllerLiveVoice on ChatController {
           'result': {'status': 'displayed', 'topic': topic}
         }));
         break;
-        
+
       case 'show_diagram':
         final equation = event.toolArgs?['equation'] as String? ?? '';
-        addSystemMessage('📊 Generating diagram: $equation');
+        addSystemMessage('📈 Generating diagram: $equation');
         _geminiLiveService.sendText(jsonEncode({
           'type': 'tool_response',
           'name': event.toolName,
           'result': {'status': 'displayed', 'equation': equation}
         }));
         break;
-        
+
       case 'highlight_concept':
         final concept = event.toolArgs?['concept'] as String? ?? '';
         addSystemMessage('💡 Key concept: $concept');
@@ -367,29 +565,34 @@ extension ChatControllerLiveVoice on ChatController {
           'result': {'status': 'highlighted', 'concept': concept}
         }));
         break;
-        
+
       default:
         developer.log('Unknown tool call: ${event.toolName}');
     }
   }
 
   Future<void> stopLiveVoiceMode() async {
+    // Mark as stopped first to prevent race conditions
     _isVoiceMode = false;
     _isLoading = false;
     _isAppVisionEnabled = false;
     _isVideoEnabled = false;
-    notify(); // Dismiss UI immediately
 
-    _typingTimer?.cancel(); 
+    // Cancel all timers immediately
+    _typingTimer?.cancel();
     _silenceTimer?.cancel();
     _appVisionTimer?.cancel();
-    _liveAudioSubscription?.cancel();
-    _liveVideoSubscription?.cancel();
-    _liveGeminiAudioSubscription?.cancel();
-    _liveGeminiEventSubscription?.cancel();
-    _silenceTimer?.cancel();
     _inactivityTimer?.cancel();
-    _appVisionTimer?.cancel();
+    _countdownTimer?.cancel();
+
+    // Cancel all subscriptions
+    await _liveAudioSubscription?.cancel();
+    await _liveVideoSubscription?.cancel();
+    await _liveGeminiAudioSubscription?.cancel();
+    await _liveGeminiEventSubscription?.cancel();
+
+    // Clear references
+    _isShowingInactivityWarning = false;
     _voiceSessionStartTime = null;
     _appVisionTimer = null;
     _liveAudioSubscription = null;
@@ -398,14 +601,35 @@ extension ChatControllerLiveVoice on ChatController {
     _liveGeminiEventSubscription = null;
     _silenceTimer = null;
     _inactivityTimer = null;
+    _countdownTimer = null;
 
+    notify(); // Dismiss UI immediately
+
+    // Stop all services with error handling
     try {
       await _audioInput.stopRecording();
+    } catch (e) {
+      developer.log('Error stopping audio input: $e', name: 'ChatController');
+    }
+
+    try {
       await _audioOutput.stopStream();
+    } catch (e) {
+      developer.log('Error stopping audio output: $e', name: 'ChatController');
+    }
+
+    try {
       await _videoInput.stopStreamingImages();
+    } catch (e) {
+      developer.log('Error stopping video input: $e', name: 'ChatController');
+    }
+
+    try {
+      _geminiLiveService.markStopped();
       _geminiLiveService.stop();
     } catch (e) {
-      developer.log('Error during stopLiveVoiceMode: $e');
+      developer.log('Error stopping Gemini Live service: $e',
+          name: 'ChatController');
     }
   }
 
@@ -444,8 +668,7 @@ extension ChatControllerLiveVoice on ChatController {
     });
 
     _geminiLiveService.sendSystemContext(
-      '[SYSTEM: The user has enabled camera vision. Acknowledge what you see on their desk to confirm the connection.]'
-    );
+        '[SYSTEM: The user has enabled camera vision. Acknowledge what you see on their desk to confirm the connection.]');
     notify();
   }
 
@@ -460,37 +683,39 @@ extension ChatControllerLiveVoice on ChatController {
 
     _isAppVisionEnabled = true;
     _geminiLiveService.sendSystemContext(
-      '[SYSTEM: The user has enabled Co-Pilot app vision. Acknowledge that you can see their screen now to confirm the connection.]'
-    );
+        '[SYSTEM: The user has enabled Co-Pilot app vision. Acknowledge that you can see their screen now to confirm the connection.]');
     notify();
 
-    _appVisionTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-       if (!_isVoiceMode || !_isAppVisionEnabled) {
-          timer.cancel();
-          return;
-       }
+    _appVisionTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+      if (!_isVoiceMode || !_isAppVisionEnabled) {
+        timer.cancel();
+        return;
+      }
 
-       try {
-         final boundary = appRepaintBoundaryKey.currentContext?.findRenderObject();
-         if (boundary is! RenderRepaintBoundary) return;
+      try {
+        final boundary =
+            appRepaintBoundaryKey.currentContext?.findRenderObject();
+        if (boundary is! RenderRepaintBoundary) return;
 
-         // Get the image with a lower pixel ratio for compression
-         final ui.Image imageInfo = await boundary.toImage(pixelRatio: 0.5);
-         final ByteData? byteData = await imageInfo.toByteData(format: ui.ImageByteFormat.png);
-         if (byteData == null) return;
-         final Uint8List rawBytes = byteData.buffer.asUint8List();
+        // Get the image with a lower pixel ratio for compression
+        // 0.3 is enough for Gemini to see the general layout and text
+        final ui.Image imageInfo = await boundary.toImage(pixelRatio: 0.3);
+        final ByteData? byteData =
+            await imageInfo.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) return;
+        final Uint8List rawBytes = byteData.buffer.asUint8List();
 
-         // Quick resize/jpeg compression with image package
-         final img.Image? decoded = img.decodePng(rawBytes);
-         if (decoded != null) {
-            // resize to 512 width preserving aspect ratio
-            final img.Image resized = img.copyResize(decoded, width: 512);
-            final Uint8List jpegBytes = img.encodeJpg(resized, quality: 60);
-            _geminiLiveService.sendVideoFrame(base64Encode(jpegBytes));
-         }
-       } catch (e) {
-         developer.log('App Vision capture failed: $e');
-       }
+        // Quick resize/jpeg compression with image package
+        final img.Image? decoded = img.decodePng(rawBytes);
+        if (decoded != null) {
+          // resize to 400 width preserving aspect ratio
+          final img.Image resized = img.copyResize(decoded, width: 400);
+          final Uint8List jpegBytes = img.encodeJpg(resized, quality: 50);
+          _geminiLiveService.sendVideoFrame(base64Encode(jpegBytes));
+        }
+      } catch (e) {
+        developer.log('App Vision capture failed: $e');
+      }
     });
   }
 
@@ -508,23 +733,90 @@ extension ChatControllerLiveVoice on ChatController {
 
   /// Builds the floating voice control bar (bottom of screen).
   Widget buildVoiceControlBar(BuildContext context, ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E24) : Colors.white,
         borderRadius: BorderRadius.circular(36),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, -4),
           ),
         ],
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+        border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.05)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Inactivity Warning
+          if (_isShowingInactivityWarning)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orangeAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: Colors.orangeAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(CupertinoIcons.timer,
+                      color: Colors.orangeAccent, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Still there?',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orangeAccent,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'Say something to stay connected.',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.orangeAccent.withValues(alpha: 0.2)),
+                    ),
+                    child: Text(
+                      '${(_inactivitySecondsRemaining ~/ 60)}:${(_inactivitySecondsRemaining % 60).toString().padLeft(2, '0')}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orangeAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Loading / Error inline
           if (_isLoading)
             Padding(
@@ -532,9 +824,18 @@ extension ChatControllerLiveVoice on ChatController {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.blueAccent, strokeWidth: 2)),
+                  const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.blueAccent, strokeWidth: 2)),
                   const SizedBox(width: 10),
-                  Text('Connecting...', style: GoogleFonts.plusJakartaSans(color: Colors.black54, fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text('Connecting...',
+                      style: GoogleFonts.plusJakartaSans(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
                 ],
               ),
             )
@@ -544,12 +845,14 @@ extension ChatControllerLiveVoice on ChatController {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(CupertinoIcons.bolt_slash_fill, color: Colors.redAccent, size: 16),
+                  const Icon(CupertinoIcons.bolt_slash_fill,
+                      color: Colors.redAccent, size: 16),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       _liveVoiceErrorMessage ?? 'Error',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontSize: 12),
+                      style: GoogleFonts.plusJakartaSans(
+                          color: Colors.redAccent, fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -559,40 +862,64 @@ extension ChatControllerLiveVoice on ChatController {
                     onTap: () {
                       stopLiveVoiceMode();
                     },
-                    child: Text('Retry', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: Text('Retry',
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.blueAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
             )
-          // Voice visualizer
+          // Status & Voice visualizer
           else
             Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
-              child: SizedBox(
-                height: 40,
-                width: double.infinity,
-                child: StreamBuilder<wf.Amplitude>(
-                  stream: aiAmplitudeStream,
-                  builder: (context, snapshot) {
-                    final amp = snapshot.data?.current ?? 0.0;
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(15, (index) {
-                        final height = 4.0 + (amp * 30 * (1.0 - (index - 7).abs() / 7));
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 80),
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          width: 4,
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        );
-                      }),
-                    );
-                  }
-                ),
+              child: Column(
+                children: [
+                  if (_currentAiStatus != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Text(
+                        _currentAiStatus!,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  SizedBox(
+                    height: 40,
+                    width: double.infinity,
+                    child: StreamBuilder<wf.Amplitude>(
+                        stream: aiAmplitudeStream,
+                        builder: (context, snapshot) {
+                          final amp = snapshot.data?.current ?? 0.0;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(15, (index) {
+                              final height = 4.0 +
+                                  (amp * 30 * (1.0 - (index - 7).abs() / 7));
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 80),
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 2),
+                                width: 4,
+                                height: height,
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.blueAccent.withValues(alpha: 0.8),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              );
+                            }),
+                          );
+                        }),
+                  ),
+                ],
               ),
             ),
 
@@ -602,33 +929,57 @@ extension ChatControllerLiveVoice on ChatController {
             children: [
               _buildActionCircle(
                 icon: _isMicMuted ? CupertinoIcons.mic_off : CupertinoIcons.mic,
-                color: _isMicMuted ? Colors.redAccent.withValues(alpha: 0.1) : Colors.blueAccent.withValues(alpha: 0.08),
+                color: _isMicMuted
+                    ? Colors.redAccent.withValues(alpha: 0.1)
+                    : Colors.blueAccent.withValues(alpha: 0.08),
                 iconColor: _isMicMuted ? Colors.redAccent : Colors.blueAccent,
                 onPressed: toggleMic,
               ),
               _buildActionCircle(
-                icon: _isVideoEnabled ? CupertinoIcons.videocam_fill : CupertinoIcons.videocam,
-                color: _isVideoEnabled ? Colors.blueAccent : Colors.black.withValues(alpha: 0.05),
-                iconColor: _isVideoEnabled ? Colors.white : Colors.black87,
+                icon: _isVideoEnabled
+                    ? CupertinoIcons.videocam_fill
+                    : CupertinoIcons.videocam,
+                color: _isVideoEnabled
+                    ? Colors.blueAccent
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.black.withValues(alpha: 0.05)),
+                iconColor: _isVideoEnabled
+                    ? Colors.white
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : theme.colorScheme.onSurface),
                 onPressed: () {
-                   if (_isAppVisionEnabled) toggleAppVision();
-                   toggleVideo();
+                  if (_isAppVisionEnabled) toggleAppVision();
+                  toggleVideo();
                 },
               ),
               _buildActionCircle(
-                icon: _isAppVisionEnabled ? CupertinoIcons.eyeglasses : CupertinoIcons.eye,
-                color: _isAppVisionEnabled ? Colors.purpleAccent : Colors.black.withValues(alpha: 0.05),
-                iconColor: _isAppVisionEnabled ? Colors.white : Colors.black87,
+                icon: _isAppVisionEnabled
+                    ? CupertinoIcons.eyeglasses
+                    : CupertinoIcons.eye,
+                color: _isAppVisionEnabled
+                    ? Colors.purpleAccent
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.black.withValues(alpha: 0.05)),
+                iconColor: _isAppVisionEnabled
+                    ? Colors.white
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : theme.colorScheme.onSurface),
                 onPressed: () {
-                   if (_isVideoEnabled) toggleVideo();
-                   toggleAppVision();
+                  if (_isVideoEnabled) toggleVideo();
+                  toggleAppVision();
                 },
               ),
               if (_isVideoEnabled)
                 _buildActionCircle(
                   icon: CupertinoIcons.switch_camera,
-                  color: Colors.black.withValues(alpha: 0.05),
-                  iconColor: Colors.black87,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.05),
+                  iconColor: theme.colorScheme.onSurface,
                   onPressed: flipCamera,
                 ),
               _buildActionCircle(
@@ -652,7 +1003,10 @@ extension ChatControllerLiveVoice on ChatController {
       decoration: BoxDecoration(
         color: Colors.redAccent.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(
+              color: AppColors.text.withValues(alpha: 0.26), blurRadius: 10)
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -662,8 +1016,10 @@ extension ChatControllerLiveVoice on ChatController {
           Text(
             _isVideoEnabled ? 'LAB LIVE' : 'CO-PILOT LIVE',
             style: GoogleFonts.plusJakartaSans(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5
-            ),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                letterSpacing: 0.5),
           ),
         ],
       ),
@@ -672,22 +1028,27 @@ extension ChatControllerLiveVoice on ChatController {
 
   /// Builds the floating camera preview widget.
   Widget? buildCameraPreview(BuildContext context) {
-    if (!_isVideoEnabled || _videoInput.cameraController == null || !_videoInput.cameraController!.value.isInitialized) {
+    if (!_isVideoEnabled ||
+        _videoInput.cameraController == null ||
+        !_videoInput.cameraController!.value.isInitialized) {
       return null;
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Container(
-         width: 120,
-         height: 180,
-         decoration: BoxDecoration(
-           border: Border.all(color: Colors.white24, width: 2),
-           boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 20)],
-         ),
-         child: AspectRatio(
-           aspectRatio: _videoInput.cameraController!.value.aspectRatio,
-           child: CameraPreview(_videoInput.cameraController!),
-         ),
+        width: 120,
+        height: 180,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white24, width: 2),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.text.withValues(alpha: 0.45), blurRadius: 20)
+          ],
+        ),
+        child: AspectRatio(
+          aspectRatio: _videoInput.cameraController!.value.aspectRatio,
+          child: CameraPreview(_videoInput.cameraController!),
+        ),
       ),
     );
   }
@@ -744,6 +1105,4 @@ extension ChatControllerLiveVoice on ChatController {
       ),
     );
   }
-
 }
-

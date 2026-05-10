@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "974459699084-26jkbujkour3lms2t3376cf7or2m55vf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.topscoreapp.ai",
+            "certificate_hash": "3f0be1281cc36b65e9444d7b6f6665efa906e2b8"
+          }
+        },
+        {
           "client_id": "974459699084-rpf7th68isjj6jt53jrfb1cibk672dgb.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

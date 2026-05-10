@@ -2,7 +2,7 @@ name: topscore_ai  # Suggestion: Use snake_case for package names (Flutter stand
 description: "Kenya's #1 AI-powered learning app for CBC, 8-4-4 & Cambridge IGCSE students."
 publish_to: 'none' 
 
-version: 1.0.1+1
+version: 1.0.5+4
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -25,47 +25,47 @@ dependencies:
     sdk: flutter
 
   # --- Core Firebase (Aligned Versions) ---
-  firebase_core: ^4.5.0
-  firebase_auth: ^6.1.4
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
   cloud_firestore: ^6.1.2
   firebase_storage: ^13.1.0
   firebase_database: ^12.1.2
-  firebase_messaging: ^16.1.1
+  firebase_messaging: ^16.2.0
   firebase_analytics: ^12.2.0
     # --- Google ---
   google_sign_in: ^7.2.0
 
   # --- Modern Web Support (The Fix for your errors) ---
   web: ^1.1.0               # Forces modern web support
-  go_router: ^17.0.1
-  app_links: ^6.3.3         # Deep link handling for app shortcuts
+  go_router: ^17.2.2
+  app_links: ^7.0.0         # Deep link handling for app shortcuts
   
   # --- State & Utilities ---
   provider: ^6.1.2
   shared_preferences: ^2.2.3
-  http: ^1.2.1
+  http: ^1.6.0
   package_info_plus: ^8.0.2
   path_provider: ^2.1.5
   permission_handler: ^12.0.1
-  connectivity_plus: ^7.0.0
-  uuid: ^4.4.0
+  connectivity_plus: ^7.1.1
+  uuid: ^4.5.3
   intl: ^0.20.2
   url_launcher: ^6.3.2
   flutter_animate: ^4.5.2
   
   # UPDATED: share_plus 10+ supports 'web ^1.0.0'
-  share_plus: ^12.0.1       
+  share_plus: ^12.0.2       
   
   universal_io: ^2.3.1
 
   # --- In-app WebView (Paystack checkout) ---
-  webview_flutter: ^4.10.0
+  webview_flutter: ^4.13.1
 
   google_fonts: ^8.0.0
   cupertino_icons: ^1.0.6
   font_awesome_flutter: ^10.7.0
   flip_card: ^0.7.0
-  fl_chart: ^1.1.1
+  fl_chart: ^1.2.0
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
   flutter_staggered_grid_view: ^0.7.0
@@ -88,23 +88,26 @@ dependencies:
 
   # --- Math & Markdown ---
   flutter_math_fork: ^0.7.2
-  math_expressions: ^3.1.0
-  flutter_markdown: ^0.7.2
+  gpt_markdown: ^1.1.6
   markdown: ^7.2.2
 
   # --- Files & PDF ---
 
-  syncfusion_flutter_pdf: any
-  syncfusion_flutter_pdfviewer: any
-  syncfusion_flutter_core: any
+  syncfusion_flutter_pdf: ^33.1.46
+  syncfusion_flutter_pdfviewer: ^33.1.46
+  syncfusion_flutter_core: ^33.1.46
   # For the "Lens" UI
   croppy: ^1.4.1
   file_picker: ^10.3.8
   pdf: ^3.11.0
 
   
-  # Mobile Only (Must wrap in kIsWeb check)
-  cunning_document_scanner: ^1.2.0 
+  # Mobile Only (Must wrap in kIsWeb check).
+  # NOTE: Do NOT add the `google_ml_kit` meta-package back — it pulls in
+  # every ML Kit model (face, pose, barcode, translate, digital-ink, etc.)
+  # and adds ~40 MB of native libraries per ABI. Add the specific
+  # `google_mlkit_*` package you need instead.
+  google_mlkit_document_scanner: ^0.2.0
   google_mlkit_text_recognition: ^0.15.0
 
   image: ^4.3.0
@@ -112,6 +115,7 @@ dependencies:
   # --- Storage ---
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.2.2
   flutter_local_notifications: ^19.5.0
   video_player: ^2.8.6
   chewie: ^1.8.1
@@ -129,13 +133,18 @@ dependencies:
 
   flutter_image_compress: ^2.3.0
   firebase_crashlytics: ^5.1.0
+
   photo_view: ^0.15.0
   flutter_inappwebview: ^6.1.5
   receive_sharing_intent: ^1.6.3
   flutter_native_splash: ^2.4.7
-  home_widget: ^0.9.0
   quick_actions: ^1.1.0
   youtube_player_iframe: ^5.2.2
+
+  # Modern Transitions & Presentation
+  animations: ^2.2.0
+  carousel_slider: ^5.1.2
+  confetti: ^0.8.0
 
 dev_dependencies:
   flutter_test:
@@ -150,6 +159,7 @@ dev_dependencies:
 
 
 flutter:
+  generate: true
   uses-material-design: true
   
   assets:

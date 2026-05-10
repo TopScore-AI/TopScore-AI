@@ -32,7 +32,7 @@ const schema = {
 
 export default function PricingPage() {
     return (
-        <main className="bg-black min-h-screen text-white">
+        <main className="min-h-screen">
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-4 pt-32">

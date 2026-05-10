@@ -33,26 +33,30 @@ class TtsService {
     if (_initialized) return;
     _initialized = true;
 
-    // Language & voice quality
-    await _tts.setLanguage('en-US');
+    // 1. Initial State
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
 
-    // Platform-specific speech rate
-    // Web speechSynthesis default is 1.0 (words/sec), flutter_tts maps 0–1
-    // iOS/Android: 0.5 is comfortable reading pace
-    await _tts.setSpeechRate(kIsWeb ? 0.9 : 0.5);
-
-    if (kIsWeb) {
-      // Browsers often load voices asynchronously. Wait a bit if none are available.
-      int attempts = 0;
-      while (attempts < 5) {
-        final voices = await _tts.getVoices;
-        if (voices.isNotEmpty) break;
-        await Future.delayed(const Duration(milliseconds: 200));
-        attempts++;
+    // 2. Platform-specific Setup
+    if (!kIsWeb) {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _tts.setSharedInstance(true);
+        await _tts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+            IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+          ],
+          IosTextToSpeechAudioMode.defaultMode,
+        );
+      } else if (defaultTargetPlatform == TargetPlatform.android) {
+        await _tts.awaitSpeakCompletion(true);
       }
     }
+
+    // 3. Default Voice & Language
+    await setLanguage('en-US');
 
     // iOS: configure audio session so TTS plays over silent mode
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
@@ -193,11 +197,75 @@ class TtsService {
   }
 
   Future<void> setSpeechRate(double rate) async {
-    await _tts.setSpeechRate(rate);
+    // Normalizing across platforms to achieve a consistent cadence.
+    // 0.5 matches comfort on iOS, ~0.45 on Android, ~0.9 on Web.
+    double platformRate = rate;
+    if (kIsWeb) {
+      platformRate = rate * 0.9;
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      platformRate = rate * 0.45;
+    } else {
+      platformRate = rate * 0.5;
+    }
+    await _tts.setSpeechRate(platformRate);
   }
 
   Future<void> setLanguage(String lang) async {
     await _tts.setLanguage(lang);
+    await _selectBestVoice(lang);
+    // Refresh rate after language change as some engines reset it
+    await setSpeechRate(1.0);
+  }
+
+  Future<void> _selectBestVoice(String langCode) async {
+    try {
+      final List<dynamic> voices = await _tts.getVoices;
+      if (voices.isEmpty) return;
+
+      // Prioritize "Natural", "Google", "Enhanced", or "Samantha" (iOS)
+      final List<String> priorityKeywords = [
+        'natural',
+        'google',
+        'enhanced',
+        'premium',
+        'samantha'
+      ];
+
+      Map<String, dynamic>? bestVoice;
+      int highestPriority = -1;
+
+      for (final v in voices) {
+        final Map<String, dynamic> voice = Map<String, dynamic>.from(v);
+        final name = (voice['name'] as String? ?? '').toLowerCase();
+        final locale = (voice['locale'] as String? ?? '').toLowerCase();
+
+        if (locale.contains(langCode.toLowerCase())) {
+          int priority = 0;
+          for (int i = 0; i < priorityKeywords.length; i++) {
+            if (name.contains(priorityKeywords[i])) {
+              priority = priorityKeywords.length - i;
+              break;
+            }
+          }
+
+          if (priority > highestPriority) {
+            highestPriority = priority;
+            bestVoice = voice;
+          }
+        }
+      }
+
+      if (bestVoice != null) {
+        if (kDebugMode) {
+          debugPrint('[TtsService] Selecting best voice: ${bestVoice['name']} ($langCode)');
+        }
+        await _tts.setVoice(
+          bestVoice.map((k, v) => MapEntry(k, v?.toString() ?? '')),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[TtsService] Error selecting voice: $e');
+    }
   }
 
   Future<List<dynamic>> getLanguages() async {

@@ -30,13 +30,15 @@ def send_email(to_email: str, subject: str, template_name: str, context: dict, f
     aliases = {
         "onboarding": "onboarding@topscoreapp.ai",
         "subscriptions": "subscriptions@topscoreapp.ai",
-        "payments": "payments@topscoreapp.ai"
+        "payments": "payments@topscoreapp.ai",
+        "feedback": "feedback@topscoreapp.ai"
     }
     from_address = aliases.get(from_alias, aliases["onboarding"])
     from_name = {
         "onboarding": "TopScore AI Onboarding",
         "subscriptions": "TopScore AI Subscriptions",
-        "payments": "TopScore AI Payments"
+        "payments": "TopScore AI Payments",
+        "feedback": "TopScore Tester Feedback"
     }.get(from_alias, "TopScore AI")
 
     try:

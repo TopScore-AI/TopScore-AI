@@ -13,7 +13,7 @@ extension ChatControllerAttachments on ChatController {
 
     try {
       await RecoveryService.saveNavigationState('/ai-tutor',
-          threadId: _wsService.threadId);
+          threadId: _wsService?.threadId);
 
       final results = await MediaPickerService.instance.pickFiles(
         allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'csv', 'md'],
@@ -47,6 +47,13 @@ extension ChatControllerAttachments on ChatController {
             fileName: file.name,
             mimeType: file.mimeType,
           ).then((url) {
+            if (url == null) {
+              _pendingAttachments.removeWhere((a) => a.id == id);
+              _showUploadErrorSnackBar();
+              _checkUploadsFinished();
+              notify();
+              return;
+            }
             attachment.url = url;
             attachment.isUploaded = true;
             _checkUploadsFinished();
@@ -57,6 +64,7 @@ extension ChatControllerAttachments on ChatController {
     } catch (e) {
       await RecoveryService.clearRecoveryState();
       developer.log('File picker error: $e');
+      _showUploadErrorSnackBar();
       _checkUploadsFinished();
       notify();
     }
@@ -70,7 +78,7 @@ extension ChatControllerAttachments on ChatController {
 
     try {
       await RecoveryService.saveNavigationState('/ai-tutor',
-          threadId: _wsService.threadId);
+          threadId: _wsService?.threadId);
 
       final results = await MediaPickerService.instance.pickImages(
         source: source,
@@ -143,12 +151,21 @@ extension ChatControllerAttachments on ChatController {
         mimeType: pick.mimeType,
       );
 
+      if (url == null) {
+        _pendingAttachments.removeWhere((a) => a.id == id);
+        _showUploadErrorSnackBar();
+        _checkUploadsFinished();
+        notify();
+        return;
+      }
+
       attachment.url = url;
       attachment.isUploaded = true;
       _checkUploadsFinished();
       notify();
     } catch (e) {
       developer.log('Media processing/upload error: $e');
+      _showUploadErrorSnackBar();
       _checkUploadsFinished();
       notify();
     }
@@ -163,23 +180,92 @@ extension ChatControllerAttachments on ChatController {
     final context = scaffoldKey.currentContext;
     if (context == null) return;
 
-    // Use Custom In-App Camera to prevent Background Kill
-    final XFile? result = await Navigator.push<XFile?>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const DocumentScannerView(),
-        fullscreenDialog: true,
-      ),
-    );
+    // Check premium access for document scanner
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (!FeatureGateService.canUseDocumentScanner(user)) {
+      await PremiumFeatureDialog.show(
+        context,
+        featureName: 'Document Scanner',
+        icon: Icons.document_scanner,
+      );
+      return;
+    }
 
-    if (result != null) {
-      await _processAndUploadMedia(MediaPickResult(
-        bytes: await result.readAsBytes(),
-        name: result.name,
-        extension: result.path.split('.').last.toLowerCase(),
-        filePath: result.path,
-        mimeType: 'image/jpeg',
-      ));
+    // 1. Request Permissions
+    final status = await Permission.camera.request();
+    if (status.isDenied || status.isPermanentlyDenied) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Camera Permission"),
+            content: const Text(
+                "Please enable camera access in settings to scan your work."),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Cancel")),
+              TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    openAppSettings();
+                  },
+                  child: const Text("Settings")),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. Launch Native Multi-Page Scanner
+    List<String>? images;
+    try {
+      images = await ScannerService().scanDocument();
+    } on ScannerUnavailableException catch (e) {
+      final ctx = scaffoldKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Scanner unexpected error: $e');
+      final ctx = scaffoldKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content:
+                const Text('Could not open the scanner. Please try again.'),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (images != null && images.isNotEmpty) {
+      // 3. Process & Upload each page
+      for (final path in images) {
+        final file = File(path);
+        final name = path.split('/').last;
+
+        await _processAndUploadMedia(MediaPickResult(
+          bytes: await file.readAsBytes(),
+          name: name,
+          extension: name.split('.').last.toLowerCase(),
+          filePath: path,
+          mimeType: 'image/jpeg',
+        ));
+      }
+
+      // 4. Scanned images are now in _pendingAttachments, visible at the chat input
     }
   }
 
@@ -227,6 +313,33 @@ extension ChatControllerAttachments on ChatController {
     }
   }
 
+  void _showUploadErrorSnackBar() {
+    final context = scaffoldKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white, size: 20),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to upload file. Please try again.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
   Future<void> handlePaste(CustomPasteEvent event) async {
     if (_pendingAttachments.length >= 3) {
       _showLimitReachedSnackBar();
@@ -254,6 +367,13 @@ extension ChatControllerAttachments on ChatController {
         fileName: name,
         mimeType: 'image/png',
       ).then((url) {
+        if (url == null) {
+          _pendingAttachments.removeWhere((a) => a.id == id);
+          _showUploadErrorSnackBar();
+          _checkUploadsFinished();
+          notify();
+          return;
+        }
         attachment.url = url;
         attachment.isUploaded = true;
         _checkUploadsFinished();
@@ -312,12 +432,21 @@ extension ChatControllerAttachments on ChatController {
         if (bytes == null) throw Exception("Bytes required for Web upload");
         uploadTask = ref.putData(bytes, metadata);
       } else {
+        File? resolvedFile;
         if (filePath != null) {
-          uploadTask = ref.putFile(File(filePath), metadata);
-        } else if (bytes != null) {
+          final tempFile = File(filePath);
+          if (tempFile.existsSync()) {
+            resolvedFile = tempFile;
+          }
+        }
+
+        // Prioritize writing from memory bytes on android/ios where path loss occurs randomly or if `File` is unreadable
+        if (bytes != null) {
           uploadTask = ref.putData(bytes, metadata);
+        } else if (resolvedFile != null) {
+          uploadTask = ref.putFile(resolvedFile, metadata);
         } else {
-          throw Exception("Either filePath or bytes must be provided");
+          throw Exception("Either a valid filePath or bytes must be provided");
         }
       }
 
@@ -329,39 +458,42 @@ extension ChatControllerAttachments on ChatController {
     }
   }
 
-  void showAttachmentMenu(BuildContext context, ThemeData theme, bool isDark) {
+  void showAttachmentMenu(BuildContext context, ThemeData theme, bool isDark,
+      {LayerLink? link}) {
     // Determine position of the button
-    final RenderBox? box =
-        _attachButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    Offset targetOffset = const Offset(20, 90); // Fallback
+    final renderObject = _attachButtonKey.currentContext?.findRenderObject();
+    final RenderBox? box = renderObject is RenderBox ? renderObject : null;
+
+    // Default/Fallback position
+    Offset targetOffset = Offset(20, MediaQuery.of(context).size.height - 100);
     double menuWidth = 220;
 
     if (box != null) {
       final position = box.localToGlobal(Offset.zero);
-      // We want to be center-aligned or left-aligned with the button.
-      // The button is near the bottom-left of the input pill.
       targetOffset = Offset(position.dx, position.dy);
     }
 
-    showDialog(
+    // Use showGeneralDialog to prevent the default centering behavior of showDialog
+    showGeneralDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.1), // Dim background less
-      builder: (context) => Stack(
-        children: [
-          Positioned(
-            left: targetOffset.dx -
-                10, // Slight nudge left for better visual balance
-            bottom: MediaQuery.of(context).size.height -
-                targetOffset.dy +
-                8, // Positioned immediately ON TOP (8px gap)
+      barrierDismissible: true,
+      barrierLabel: 'Close Attachment Menu',
+      barrierColor: Colors.black.withValues(alpha: 0.1),
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (context, anim1, anim2) {
+        final menuContent = FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+                CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic)),
             child: Material(
               color: Colors.transparent,
               child: Container(
                 width: menuWidth,
                 decoration: BoxDecoration(
                   color: isDark
-                      ? const Color(0xFF1C1C1E).withValues(alpha: 0.9)
-                      : Colors.white.withValues(alpha: 0.9),
+                      ? const Color(0xFF1C1C1E).withValues(alpha: 0.95)
+                      : Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
@@ -389,7 +521,6 @@ extension ChatControllerAttachments on ChatController {
                         onTap: () => pickAndUploadImage(ImageSource.gallery),
                         theme: theme,
                       ),
-                      // Camera and OCR are not supported on web
                       if (!kIsWeb) ...[
                         _buildAttachmentOption(
                           context,
@@ -419,8 +550,30 @@ extension ChatControllerAttachments on ChatController {
               ),
             ),
           ),
-        ],
-      ),
+        );
+
+        return Stack(
+          children: [
+            if (link != null)
+              CompositedTransformFollower(
+                link: link,
+                showWhenUnlinked: false,
+                offset: const Offset(-10, -8),
+                followerAnchor: Alignment.bottomLeft,
+                targetAnchor: Alignment.topLeft,
+                child: menuContent,
+              )
+            else
+              Positioned(
+                left: (targetOffset.dx - 10).clamp(
+                    10.0, MediaQuery.of(context).size.width - menuWidth - 10.0),
+                bottom:
+                    (MediaQuery.of(context).size.height - targetOffset.dy + 8.0),
+                child: menuContent,
+              ),
+          ],
+        );
+      },
     );
   }
 

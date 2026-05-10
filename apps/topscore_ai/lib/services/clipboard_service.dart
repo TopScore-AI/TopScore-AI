@@ -54,20 +54,20 @@ class ClipboardService {
     await Clipboard.setData(ClipboardData(text: text));
   }
 
-  /// Copy text and show a themed snackbar with content-aware feedback.
+  /// Copy text and show a small tooltip near the cursor.
   void copyWithFeedback(BuildContext context, String text) {
     final type = detectContentType(text);
     copyText(text);
     HapticFeedback.lightImpact();
 
-    final (icon, label) = switch (type) {
-      ClipboardContentType.code => (Icons.code_rounded, 'Code copied'),
-      ClipboardContentType.url => (Icons.link_rounded, 'Link copied'),
-      ClipboardContentType.markdown => (Icons.content_copy_rounded, 'Copied to clipboard'),
-      _ => (Icons.check_rounded, 'Copied to clipboard'),
+    final label = switch (type) {
+      ClipboardContentType.code => 'Copied!',
+      ClipboardContentType.url => 'Copied!',
+      ClipboardContentType.markdown => 'Copied!',
+      _ => 'Copied!',
     };
 
-    _showFeedbackSnackbar(context, icon, label);
+    _showTooltipFeedback(context, label);
   }
 
   /// Copy an image to the system clipboard (mobile/desktop only).
@@ -143,7 +143,8 @@ class ClipboardService {
   /// replacing any selected text.
   void pasteIntoController(TextEditingController controller, String text) {
     final selection = controller.selection;
-    final start = selection.start < 0 ? controller.text.length : selection.start;
+    final start =
+        selection.start < 0 ? controller.text.length : selection.start;
     final end = selection.end < 0 ? start : selection.end;
 
     final newText = controller.text.replaceRange(start, end, text);
@@ -188,7 +189,8 @@ class ClipboardService {
         final response = await http.get(Uri.parse(url));
         if (response.statusCode != 200) throw Exception('Download failed');
 
-        final fileName = 'topscore_${DateTime.now().millisecondsSinceEpoch}.png';
+        final fileName =
+            'topscore_${DateTime.now().millisecondsSinceEpoch}.png';
         WebDownloadHelper.downloadBytes(response.bodyBytes, fileName);
         return;
       }
@@ -212,8 +214,7 @@ class ClipboardService {
         ShareParams(files: [XFile(file.path)], text: caption),
       );
     } catch (e) {
-      developer.log('ClipboardService.shareImage error: $e',
-          name: 'Clipboard');
+      developer.log('ClipboardService.shareImage error: $e', name: 'Clipboard');
       if (context.mounted) {
         _showFeedbackSnackbar(
           context,
@@ -290,12 +291,12 @@ class ClipboardService {
 
   static bool _isMarkdown(String text) {
     final mdPatterns = [
-      RegExp(r'^#{1,6}\s+', multiLine: true),       // headings
-      RegExp(r'\*\*[^*]+\*\*'),                       // bold
-      RegExp(r'\[[^\]]+\]\([^)]+\)'),                 // links
-      RegExp(r'^[-*+]\s+', multiLine: true),          // unordered lists
-      RegExp(r'^\d+\.\s+', multiLine: true),          // ordered lists
-      RegExp(r'^>\s+', multiLine: true),              // blockquotes
+      RegExp(r'^#{1,6}\s+', multiLine: true), // headings
+      RegExp(r'\*\*[^*]+\*\*'), // bold
+      RegExp(r'\[[^\]]+\]\([^)]+\)'), // links
+      RegExp(r'^[-*+]\s+', multiLine: true), // unordered lists
+      RegExp(r'^\d+\.\s+', multiLine: true), // ordered lists
+      RegExp(r'^>\s+', multiLine: true), // blockquotes
     ];
 
     int matches = 0;
@@ -328,6 +329,107 @@ class ClipboardService {
   // ---------------------------------------------------------------------------
   // UI FEEDBACK
   // ---------------------------------------------------------------------------
+
+  /// Show a small tooltip overlay near the cursor position
+  void _showTooltipFeedback(BuildContext context, String label) {
+    if (!context.mounted) return;
+
+    try {
+      final overlay = Overlay.maybeOf(context);
+      final renderObject = context.findRenderObject();
+
+      // If we can't find the position or overlay, fallback to a standard SnackBar
+      if (overlay == null || renderObject is! RenderBox) {
+        _showFeedbackSnackbar(
+          context,
+          Icons.check_circle,
+          label,
+        );
+        return;
+      }
+
+      final renderBox = renderObject;
+      final offset = renderBox.localToGlobal(Offset.zero);
+      final size = renderBox.size;
+      final textDirection = Directionality.maybeOf(context) ?? TextDirection.ltr;
+
+      final overlayEntry = OverlayEntry(
+        builder: (context) => Positioned(
+          left: offset.dx + size.width / 2 - 40,
+          top: offset.dy - 40,
+          child: Directionality(
+            textDirection: textDirection,
+            child: Material(
+              color: Colors.transparent,
+              child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 200),
+              builder: (context, value, child) {
+                return Opacity(
+                  opacity: value,
+                  child: Transform.translate(
+                    offset: Offset(0, -10 * (1 - value)),
+                    child: child,
+                  ),
+                );
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F2937),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF10B981),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),);
+
+      overlay.insert(overlayEntry);
+
+      // Auto-remove after animation
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (overlayEntry.mounted) {
+          overlayEntry.remove();
+        }
+      });
+    } catch (e) {
+      developer.log('Error showing tooltip feedback: $e', name: 'Clipboard');
+      // Final fallback if everything else fails
+      _showFeedbackSnackbar(
+        context,
+        Icons.check_circle,
+        label,
+      );
+    }
+  }
 
   void _showFeedbackSnackbar(
     BuildContext context,

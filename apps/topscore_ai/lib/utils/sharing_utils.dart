@@ -19,7 +19,7 @@ class SharingUtils {
           final pathAndQuery = decodedUrl.substring(oIndex + oMarker.length);
           path = pathAndQuery.split('?').first;
         }
-      } 
+      }
       // storage.googleapis.com format
       else if (decodedUrl.contains('storage.googleapis.com/')) {
         final uri = Uri.parse(decodedUrl);
@@ -33,10 +33,10 @@ class SharingUtils {
       // Encode path to base64 for the URL slug
       final bytes = utf8.encode(path);
       final slug = base64Url.encode(bytes);
-      
+
       return '$appDomain/share/$slug';
     } catch (e) {
-      if (kDebugMode) print('Error generating share link: $e');
+      if (kDebugMode) debugPrint('Error generating share link: $e');
       return storageUrl;
     }
   }
@@ -47,7 +47,7 @@ class SharingUtils {
       final bytes = base64Url.decode(slug);
       return utf8.decode(bytes);
     } catch (e) {
-      if (kDebugMode) print('Error decoding share slug: $e');
+      if (kDebugMode) debugPrint('Error decoding share slug: $e');
       return null;
     }
   }

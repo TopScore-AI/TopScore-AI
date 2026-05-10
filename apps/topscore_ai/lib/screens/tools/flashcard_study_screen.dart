@@ -2,10 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 import '../../models/flashcard_model.dart';
 import '../../widgets/shared/flippable_flashcard.dart';
-
+import '../../widgets/experience_evaluation_modal.dart';
 
 class FlashcardStudyScreen extends StatefulWidget {
   final FlashcardSet flashcardSet;
@@ -86,6 +88,14 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
       _dragPosition = Offset.zero;
       if (_currentIndex < _deck.length) {
         _currentIndex++;
+        if (_currentIndex >= _deck.length) {
+          // Trigger evaluation modal on completion
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              ExperienceEvaluationModal.show(context, 'Flashcards');
+            }
+          });
+        }
       }
     });
   }
@@ -117,13 +127,11 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
   }
 
   void _reviewUnknownOnly() {
-    final unknown = widget.flashcardSet.cards
-        .where((c) {
-          final id = _identityOf(c);
-          // Keep cards not marked, and cards explicitly marked unknown
-          return _knownMarks[id] != true;
-        })
-        .toList();
+    final unknown = widget.flashcardSet.cards.where((c) {
+      final id = _identityOf(c);
+      // Keep cards not marked, and cards explicitly marked unknown
+      return _knownMarks[id] != true;
+    }).toList();
     if (unknown.isEmpty) return;
     setState(() {
       _deck = unknown;
@@ -133,10 +141,8 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
     });
   }
 
-  int get _knownCount =>
-      _knownMarks.values.where((v) => v == true).length;
-  int get _unknownCount =>
-      _knownMarks.values.where((v) => v == false).length;
+  int get _knownCount => _knownMarks.values.where((v) => v == true).length;
+  int get _unknownCount => _knownMarks.values.where((v) => v == false).length;
 
   @override
   Widget build(BuildContext context) {
@@ -207,11 +213,12 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                         ? Duration.zero
                         : const Duration(milliseconds: 400),
                     curve: Curves.easeOutQuart,
-                    transform: (_dragPosition.dx.isFinite && _dragPosition.dy.isFinite)
-                        ? (Matrix4.translationValues(
-                            _dragPosition.dx, _dragPosition.dy, 0)
-                          ..rotateZ(_dragPosition.dx / 1000))
-                        : Matrix4.identity(),
+                    transform:
+                        (_dragPosition.dx.isFinite && _dragPosition.dy.isFinite)
+                            ? (Matrix4.translationValues(
+                                _dragPosition.dx, _dragPosition.dy, 0)
+                              ..rotateZ(_dragPosition.dx / 1000))
+                            : Matrix4.identity(),
                     transformAlignment: Alignment.center,
                     child: SizedBox(
                       width: MediaQuery.of(context).size.width - 48,
@@ -223,7 +230,8 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                 ),
 
                 // Swiping Overlays (Horizontal)
-                if (_isDragging && _dragPosition.dx.abs() > _dragPosition.dy.abs()) ...[
+                if (_isDragging &&
+                    _dragPosition.dx.abs() > _dragPosition.dy.abs()) ...[
                   Positioned(
                     right: 20 +
                         (_dragPosition.dx < 0
@@ -256,11 +264,12 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.8),
+                            color: theme.colorScheme.surface
+                                .withValues(alpha: 0.9),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
+                                  color: Colors.black.withValues(alpha: 0.15),
                                   blurRadius: 10)
                             ],
                           ),
@@ -272,7 +281,8 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                 ],
 
                 // Vertical-swipe overlays (known / unknown)
-                if (_isDragging && _dragPosition.dy.abs() > _dragPosition.dx.abs()) ...[
+                if (_isDragging &&
+                    _dragPosition.dy.abs() > _dragPosition.dx.abs()) ...[
                   if (_dragPosition.dy < 0)
                     Positioned(
                       top: 16 + (_dragPosition.dy.abs() / 8),
@@ -403,8 +413,11 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.celebration_rounded,
-                size: 80, color: Colors.green),
+            Lottie.asset(
+              'assets/lottie/achievement.json',
+              height: 180,
+              repeat: false,
+            ),
             const SizedBox(height: 24),
             Text(
               "Deck Completed!",
@@ -455,7 +468,10 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                   ),
                 ),
                 OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    context.go('/home');
+                  },
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 14),

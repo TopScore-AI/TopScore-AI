@@ -21,7 +21,7 @@ const schema = {
 
 export default function ReviewsPage() {
     return (
-        <main className="bg-black min-h-screen text-white" suppressHydrationWarning>
+        <main className="min-h-screen" suppressHydrationWarning>
             <JsonLd data={schema} />
             <Nav />
             <div className="container mx-auto px-6 pt-32 pb-24">

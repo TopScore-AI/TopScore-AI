@@ -1,20 +1,38 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:universal_io/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/web_download_helper.dart';
 import '../models/resource_model.dart';
 import '../models/download_model.dart';
+import 'notification_service.dart';
 
 class DownloadService {
   static const String _storageKey = 'elimu_downloads';
 
   Future<String> get _localPath async {
-    if (kIsWeb) return ''; // No local path on web
-    final directory = await getApplicationDocumentsDirectory();
+    if (kIsWeb) return '';
+
+    // Use app-specific storage on every platform. On Android this is
+    // /Android/data/<pkg>/files, which requires no permission on any API
+    // level and survives app upgrades. Users access the files through the
+    // in-app Downloads list.
+    Directory? directory;
+    if (Platform.isAndroid) {
+      directory = await getExternalStorageDirectory() ??
+          await getApplicationDocumentsDirectory();
+    } else if (Platform.isIOS) {
+      directory = await getApplicationDocumentsDirectory();
+    } else {
+      directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+    }
+
     final elimuDir = Directory('${directory.path}/TopScoreAI');
     if (!await elimuDir.exists()) {
       await elimuDir.create(recursive: true);
@@ -43,7 +61,7 @@ class DownloadService {
     if (kIsWeb) {
       final processedUrl = _processUrl(downloadUrl);
       try {
-        final response = await http.get(Uri.parse(processedUrl));
+        final response = await http.get(Uri.parse(processedUrl)).timeout(const Duration(seconds: 60));
         if (response.statusCode == 200) {
           final fileName = '${title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.pdf';
           WebDownloadHelper.downloadBytes(response.bodyBytes, fileName);
@@ -55,61 +73,125 @@ class DownloadService {
       }
       return 'web_download_triggered';
     }
-    final path = await _localPath;
 
-    // Process URL to handle Google Drive links
+    final path = await _localPath;
     final processedUrl = _processUrl(downloadUrl);
 
-    // Try to determine extension from URL, default to pdf if not clear
     String extension = 'pdf';
     final uri = Uri.parse(processedUrl);
-    final pathSegments = uri.pathSegments;
-    if (pathSegments.isNotEmpty) {
-      final lastSegment = pathSegments.last;
+    if (uri.pathSegments.isNotEmpty) {
+      final lastSegment = uri.pathSegments.last;
       if (lastSegment.contains('.')) {
         extension = lastSegment.split('.').last;
       }
     }
 
-    final filename =
-        '${title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.$extension';
+    final filename = '${title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.$extension';
     final file = File('$path/$filename');
 
-    final request = http.Request('GET', Uri.parse(processedUrl));
-    final response = await http.Client().send(request);
-    final contentLength = response.contentLength ?? 0;
+    // 1. Firebase Storage Optimization (Highly Robust)
+    if (_isFirebaseStorageUrl(processedUrl)) {
+      try {
+        final ref = FirebaseStorage.instance.refFromURL(processedUrl);
+        final downloadTask = ref.writeToFile(file);
 
-    List<int> bytes = [];
-    double received = 0;
+        final completer = Completer<String>();
+        
+        downloadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+          if (snapshot.totalBytes > 0) {
+            final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+            onProgress(progress);
+          }
+        }, onError: (e) {
+          if (!completer.isCompleted) completer.completeError(e);
+        });
 
-    response.stream.listen(
-      (List<int> newBytes) {
-        bytes.addAll(newBytes);
-        received += newBytes.length;
-        if (contentLength > 0) {
-          onProgress(received / contentLength);
-        }
-      },
-      onDone: () async {
-        await file.writeAsBytes(bytes);
-        await _saveDownloadRecord(
-          DownloadTaskModel(
-            id: id,
-            resourceId: id,
-            localPath: file.path,
-            downloadedAt: DateTime.now().millisecondsSinceEpoch,
-            filename: filename,
-          ),
+        await downloadTask;
+        
+        final task = DownloadTaskModel(
+          id: id,
+          resourceId: id,
+          localPath: file.path,
+          downloadedAt: DateTime.now().millisecondsSinceEpoch,
+          filename: filename,
         );
-      },
-      onError: (e) {
-        throw e;
-      },
-      cancelOnError: true,
-    );
+        await _saveDownloadRecord(task);
+        
+        await NotificationService().showNotification(
+          title: 'Download Complete',
+          body: 'Finished downloading $title',
+          payload: file.path,
+        );
 
-    return file.path;
+        return file.path;
+      } catch (e) {
+        if (kDebugMode) debugPrint("[TOPSCORE] Firebase SDK download failed, falling back to HTTP: $e");
+        // Continue to HTTP fallback
+      }
+    }
+
+    // 2. HTTP Streaming Fallback
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(processedUrl));
+      final response = await client.send(request).timeout(const Duration(seconds: 120));
+      final contentLength = response.contentLength ?? 0;
+
+      if (response.statusCode != 200) {
+        throw Exception('Server returned status code ${response.statusCode}');
+      }
+
+      final IOSink sink = file.openWrite();
+      double received = 0;
+      double lastReportedProgress = 0;
+
+      try {
+        await for (final List<int> chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          
+          if (contentLength > 0) {
+            final progress = received / contentLength;
+            if (progress - lastReportedProgress > 0.01 || progress == 1.0) {
+              onProgress(progress);
+              lastReportedProgress = progress;
+            }
+          } else {
+            // Indeterminate progress: report received MBs or fake progress
+            // For now, just report 0.05 increments to show activity
+            final fakeProgress = (received / (5 * 1024 * 1024)).clamp(0.0, 0.95);
+            if (fakeProgress - lastReportedProgress > 0.05) {
+              onProgress(fakeProgress);
+              lastReportedProgress = fakeProgress;
+            }
+          }
+        }
+      } finally {
+        await sink.flush();
+        await sink.close();
+      }
+
+      final task = DownloadTaskModel(
+        id: id,
+        resourceId: id,
+        localPath: file.path,
+        downloadedAt: DateTime.now().millisecondsSinceEpoch,
+        filename: filename,
+      );
+      await _saveDownloadRecord(task);
+      
+      await NotificationService().showNotification(
+        title: 'Download Complete',
+        body: 'Finished downloading $title',
+        payload: file.path,
+      );
+
+      return file.path;
+    } finally {
+      client.close();
+    }
   }
+
 
   String _processUrl(String url) {
     // Convert Google Drive View URLs to Download URLs
@@ -125,6 +207,16 @@ class DownloadService {
       }
     }
     return url;
+  }
+
+  bool _isFirebaseStorageUrl(String url) {
+    if (url.contains('firebasestorage.googleapis.com')) return true;
+    if (url.contains('storage.googleapis.com')) {
+      if (url.contains('firebasestorage.app')) return true;
+      if (url.contains('elimisha-90787')) return true;
+    }
+    if (url.startsWith('gs://')) return true;
+    return false;
   }
 
   Future<void> _saveDownloadRecord(DownloadTaskModel task) async {
@@ -171,5 +263,10 @@ class DownloadService {
     }
 
     await prefs.setStringList(_storageKey, downloads);
+  }
+
+  Future<bool> isDownloaded(String id) async {
+    final downloads = await listDownloads();
+    return downloads.any((d) => d.id == id);
   }
 }

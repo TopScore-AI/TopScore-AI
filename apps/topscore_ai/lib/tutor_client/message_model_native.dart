@@ -27,6 +27,15 @@ class SourceMetadata {
       type: json['type'] ?? 'url',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'url': url,
+      'author': author,
+      'type': type,
+    };
+  }
 }
 
 @embedded
@@ -62,6 +71,39 @@ class ChatAttachmentMetadata {
   }
 }
 
+@embedded
+class UiWidgetData {
+  final String? id;
+  final String? type;
+  final String? title;
+  final String? configJson;
+
+  UiWidgetData({
+    this.id,
+    this.type,
+    this.title,
+    this.configJson,
+  });
+
+  factory UiWidgetData.fromJson(Map<String, dynamic> json) {
+    return UiWidgetData(
+      id: json['id'],
+      type: json['type'] ?? json['type_name'] ?? 'unknown',
+      title: json['title'],
+      configJson: json['config'] != null ? jsonEncode(json['config']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'title': title,
+      'config': configJson != null ? jsonDecode(configJson!) : null,
+    };
+  }
+}
+
 @collection
 class ChatMessage {
   Id get isarId => _fastHash(id);
@@ -82,10 +124,10 @@ class ChatMessage {
   final String? mathAnswer;
   final bool isBookmarked;
   final List<VideoResult>? videos; // <--- NEW: Video Results
-  final String? desmosDataJson; // Desmos calculator state
   final String? mnemonicDataJson; // Mnemonics stored as JSON for Isar
-  final String? graphDataJson; // Structured graph data (static/interactive bridge)
   final String? punnettDataJson; // Genetic cross data stored as JSON for Isar
+  final List<String>? uiWidgetsJson; // Dynamic UI widgets stored as JSON strings
+  final List<UiWidgetData>? uiWidgets; // Side-channel widgets synced by ID
 
   // Hybrid Streaming Architecture flags
   final bool isTemporary; // true when from WebSocket (temporary), false when from Firebase (final)
@@ -121,7 +163,6 @@ class ChatMessage {
     this.mathAnswer,
     this.isBookmarked = false,
     this.videos,
-    this.desmosDataJson,
     this.mnemonicDataJson,
     this.isTemporary = false, // Default: final Firebase message
     this.isComplete = true, // Default: complete message
@@ -132,12 +173,13 @@ class ChatMessage {
     this.isKicdCertified = false,
     this.status = MessageStatus.sent,
     this.threadId,
-    this.graphDataJson,
     this.punnettDataJson,
     this.fileId,
     this.fileName,
     this.fileType,
     this.attachments,
+    this.uiWidgetsJson,
+    this.uiWidgets,
   });
 
   ChatMessage copyWith({
@@ -167,14 +209,14 @@ class ChatMessage {
     bool? isKicdCertified,
     MessageStatus? status,
     String? threadId,
-    String? desmosDataJson,
     String? mnemonicDataJson,
-    String? graphDataJson,
     String? punnettDataJson,
     String? fileId,
     String? fileName,
     String? fileType,
     List<ChatAttachmentMetadata>? attachments,
+    List<String>? uiWidgetsJson,
+    List<UiWidgetData>? uiWidgets,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -201,14 +243,14 @@ class ChatMessage {
       isKicdCertified: isKicdCertified ?? this.isKicdCertified,
       status: status ?? this.status,
       threadId: threadId ?? this.threadId,
-      desmosDataJson: desmosDataJson ?? this.desmosDataJson,
       mnemonicDataJson: mnemonicDataJson ?? this.mnemonicDataJson,
-      graphDataJson: graphDataJson ?? this.graphDataJson,
       punnettDataJson: punnettDataJson ?? this.punnettDataJson,
       fileId: fileId ?? this.fileId,
       fileName: fileName ?? this.fileName,
       fileType: fileType ?? this.fileType,
       attachments: attachments ?? this.attachments,
+      uiWidgetsJson: uiWidgetsJson ?? this.uiWidgetsJson,
+      uiWidgets: uiWidgets ?? this.uiWidgets,
     );
   }
 }
@@ -240,6 +282,17 @@ class VideoResult {
       duration: json['duration'] ?? '',
       source: json['source'] ?? 'Unknown',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'thumbnailUrl': thumbnailUrl,
+      'videoUrl': videoUrl,
+      'duration': duration,
+      'source': source,
+    };
   }
 }
 

@@ -1,6 +1,8 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -22,28 +24,19 @@ import 'providers/ai_tutor_history_provider.dart';
 import 'providers/tutor_connection_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/notification_provider.dart';
-import 'providers/ui_provider.dart';
 
 import 'tutor_client/chat_controller.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'screens/loading_screen.dart';
 import 'services/sharing_service.dart';
 import 'router.dart' as app_router;
-
-import 'screens/subscription/subscription_screen.dart';
-import 'screens/auth/email_verification_screen.dart';
-import 'screens/auth/auth_screen.dart';
-import 'screens/dashboard_screen.dart';
 
 import 'firebase_options.dart';
 import 'services/notification_service.dart';
 import 'services/offline_service.dart';
-import 'services/update_service.dart';
 import 'services/analytics_service.dart';
+import 'services/recovery_service.dart';
 import 'config/app_theme.dart';
-import 'services/launcher_service.dart';
-import 'widgets/app_error_widget.dart';
-import 'widgets/update_banner.dart';
+
 import 'services/isar_service.dart';
 import 'repositories/study_repository.dart';
 import 'repositories/study_repository_factory.dart';
@@ -52,9 +45,67 @@ late StudyRepository studyDb;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Initialize Firebase for the background isolate
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  if (kDebugMode) {
+    debugPrint("Handling a background message: ${message.messageId}");
+    debugPrint("Message data: ${message.data}");
+    debugPrint("Message notification: ${message.notification?.title}");
+  }
+
+  // CRITICAL: Initialize local database (Isar) in the background isolate
+  // so that showNotification can persist the notification to the internal center.
+  try {
+    await IsarService().init();
+    studyDb = await createStudyRepository();
+  } catch (e) {
+    if (kDebugMode) debugPrint("Background Isar init error (non-fatal): $e");
+  }
+
+  // Data-only messages (no notification block) - we handle display
+  // This is the primary path now that backend sends data-only messages
+  if (message.data.isNotEmpty) {
+    try {
+      final title = message.data['title'] ?? 'TopScore AI Update';
+      final body = message.data['body'] ?? '';
+      final route = (message.data['route'] as String?)?.trim();
+
+      if (body.isNotEmpty) {
+        final service = NotificationService();
+        await service.initialize();
+        await service.showNotification(
+          id: message.messageId.hashCode, // Use messageId for deduplication
+          title: title,
+          body: body,
+          payload: (route != null && route.startsWith('/')) ? route : null,
+          type: (message.data['nudge_type'] as String?) ?? 'system',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error showing background notification: $e');
+    }
+  }
+  // Legacy: notification block (should not happen with new backend)
+  // Keep for backward compatibility during transition
+  else if (message.notification != null) {
+    if (kDebugMode) {
+      debugPrint(
+          '⚠️  Received notification block (legacy) - backend should send data-only');
+    }
+  }
+}
+
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Set the background messaging handler early on, as a named top-level function
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
 
   // Enable clean URLs for web (removes # from URLs)
   usePathUrlStrategy();
@@ -62,10 +113,7 @@ void main() async {
   // Parallel Initialization: Run independent core services simultaneously to speed up boot.
   // We wait for these critical core services before rendering the first frame.
   await Future.wait([
-    // 1. Isar Service (Local Database)
-    IsarService().init(),
-
-    // 2. Firebase Initialization (handled with error safety)
+    // 1. Firebase Initialization (handled with error safety)
     () async {
       try {
         if (Firebase.apps.isEmpty) {
@@ -92,7 +140,7 @@ void main() async {
       }
     }(),
 
-    // 3. Offline Service (Hive/Prefs)
+    // 2. Offline Service (Hive/Prefs)
     () async {
       try {
         await OfflineService().init();
@@ -100,62 +148,74 @@ void main() async {
         if (kDebugMode) debugPrint('Offline init error: $e');
       }
     }(),
-
-    // 4. Study Repository (Isar/Prefs)
-    () async {
-      try {
-        studyDb = await createStudyRepository();
-      } catch (e) {
-        if (kDebugMode) debugPrint('Study Repository init error: $e');
-      }
-    }(),
   ]);
 
-  // Non-parallel dependencies (these require Firebase to be initialized first)
+  // Sequential Initialization for Isar to prevent race conditions
+  // (Both services might try to open the DB if run concurrently)
+  bool isarInitFailed = false;
+  String isarErrorStr = "";
   try {
-    FirebaseFirestore.instance.settings = const Settings(
+    await IsarService().init();
+    studyDb = await createStudyRepository();
+  } catch (e) {
+    if (kDebugMode) debugPrint('Isar/Repository init error: $e');
+    isarInitFailed = true;
+    isarErrorStr = e.toString();
+  }
+
+  // Modern Firestore Persistence settings (replaces legacy persistenceEnabled)
+  try {
+    FirebaseFirestore.instance.settings = Settings(
       persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
   } catch (e) {
-    if (kDebugMode) debugPrint('Firestore settings error: $e');
+    if (kDebugMode) debugPrint('[TOPSCORE] Firestore settings error: $e');
   }
 
-  // Init Notifications (Skip on web, non-blocking sequence)
-  if (!kIsWeb) {
-    try {
-      final notificationService = NotificationService();
-      await notificationService.initialize();
-      await setupInteractedMessage();
-    } catch (e) {
-      if (kDebugMode) debugPrint('Notification init error: $e');
-    }
+  if (isarInitFailed) {
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeMode.light,
+        home: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.storage, color: Colors.red, size: 64),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Storage Error',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'TopScore AI could not access local storage. This usually happens if your device is completely out of storage space or the local database is corrupted.\n\nPlease free up some space, or try clearing the app data/cache in your device settings.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, height: 1.5),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      isarErrorStr,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
   }
 
-  // Global error handler for uncaught Flutter widget errors
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    if (kDebugMode) {
-      debugPrint('[TOPSCORE] FlutterError: ${details.exceptionAsString()}');
-    }
-  };
-  ErrorWidget.builder =
-      (FlutterErrorDetails details) => AppErrorWidget(details: details);
-
-  // Pre-load Google Fonts to avoid FOUT (flash of unstyled text) on first render.
-  // This runs after Firebase so it doesn't block the critical path.
-  if (!kIsWeb) {
-    try {
-      await Future.wait([
-        GoogleFonts.pendingFonts([
-          GoogleFonts.poppins(),
-          GoogleFonts.nunito(),
-          GoogleFonts.inter(),
-        ]),
-      ]);
-    } catch (_) {
-      // Non-fatal: fonts will load lazily if pre-cache fails
-    }
-  }
 
   runApp(const MyApp());
 }
@@ -169,37 +229,108 @@ Future<void> setupInteractedMessage() async {
   }
   FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
 
+  // Track processed message IDs to prevent duplicates
+  final Set<String> processedMessageIds = {};
+
   // Handle foreground messages
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification != null) {
-      // Personalize with student name if available
-      String body = notification.body ?? "";
+    if (kDebugMode) {
+      debugPrint('Foreground message received: ${message.messageId}');
+    }
+
+    // Deduplication: Skip if we've already processed this message
+    final messageId = message.messageId;
+    if (messageId != null && processedMessageIds.contains(messageId)) {
+      if (kDebugMode) {
+        debugPrint('⚠️  Duplicate message detected, skipping: $messageId');
+      }
+      return;
+    }
+    if (messageId != null) {
+      processedMessageIds.add(messageId);
+      // Clean up old IDs (keep last 100)
+      if (processedMessageIds.length > 100) {
+        processedMessageIds.remove(processedMessageIds.first);
+      }
+    }
+
+    // Data-only messages (primary path with new backend)
+    if (message.data.containsKey('title') && message.data.containsKey('body')) {
+      String body = message.data['body'] ?? "";
+
+      // Personalize with user's first name
       try {
         final auth = AuthProvider.instance;
         final name = auth.userModel?.displayName.split(' ')[0];
-        if (name != null && name.isNotEmpty) {
+        if (name != null && name.isNotEmpty && !body.contains(name)) {
           body = "Hi $name, $body";
         }
-      } catch (e) {
-        // Fallback to original body if name lookup fails
+      } catch (_) {}
+
+      final route = (message.data['route'] as String?)?.trim();
+      await NotificationService().showNotification(
+        id: messageId?.hashCode ?? message.data.hashCode,
+        title: message.data['title'] ?? "TopScore AI Update",
+        body: body,
+        payload: (route != null && route.startsWith('/')) ? route : null,
+        type: (message.data['nudge_type'] as String?) ?? 'system',
+      );
+    }
+    // Legacy: notification block (should not happen with new backend)
+    else if (message.notification != null) {
+      if (kDebugMode) {
+        debugPrint(
+            '⚠️  Received notification block (legacy) - backend should send data-only');
       }
 
+      final notification = message.notification!;
+      String body = notification.body ?? "";
+
+      // Personalize with user's first name
+      try {
+        final auth = AuthProvider.instance;
+        final name = auth.userModel?.displayName.split(' ')[0];
+        if (name != null && name.isNotEmpty && !body.contains(name)) {
+          body = "Hi $name, $body";
+        }
+      } catch (_) {}
+
+      final route = (message.data['route'] as String?)?.trim();
       await NotificationService().showNotification(
         id: notification.hashCode,
         title: notification.title ?? "TopScore AI Update",
         body: body,
+        payload: (route != null && route.startsWith('/')) ? route : null,
+        type: (message.data['nudge_type'] as String?) ?? 'system',
       );
     }
   });
 }
 
 void _handleMessage(RemoteMessage message) {
-  if (message.data['screen'] == 'subscription_page') {
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-    );
+  // Backend nudge workers set data['route'] = '/ai-tutor' | '/subscription' | etc.
+  // Honor that first; fall back to the legacy 'screen' key for older payloads.
+  final data = message.data;
+  final route = (data['route'] as String?)?.trim();
+  if (route != null && route.isNotEmpty && route.startsWith('/')) {
+    _navigateTo(route);
+    return;
   }
+
+  if (data['screen'] == 'subscription_page') {
+    _navigateTo('/subscription');
+  }
+}
+
+void _navigateTo(String path) {
+  // Defer slightly so the app frame is up when the router receives the push.
+  Future.delayed(const Duration(milliseconds: 100), () {
+    try {
+      app_router.router.go(path);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[TOPSCORE] Failed to navigate to $path: $e');
+    }
+  });
 }
 
 class MyApp extends StatefulWidget {
@@ -236,22 +367,42 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _aiTutorHistoryProvider = AiTutorHistoryProvider();
     _tutorConnectionProvider = TutorConnectionProvider();
 
-    UpdateService().startAutoCheck();
 
-    // Initialize deep link handling for app shortcuts
-    if (!kIsWeb) {
-      _appLinks = AppLinks();
-      _initDeepLinks();
-    }
+    // Initialize deep link handling for app shortcuts and auth redirects
+    _appLinks = AppLinks();
+    _initDeepLinks();
 
     // Defer initialization until after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Remove native splash immediately — don't rely on individual screens
       FlutterNativeSplash.remove();
 
-      _authProvider.init();
+      // Initialize notifications FIRST so FCM token is available when
+      // auth resolves and _syncFCMToken() is called.
+      // Initialize notifications for ALL platforms (Web, Android, iOS)
+      NotificationService().initialize().then((_) {
+        setupInteractedMessage();
+        // Re-sync FCM token now that the service is ready — handles the
+        // case where auth resolved before initialize() completed.
+        AuthProvider.instance.reSyncFCMToken();
+      }).catchError((e) {
+        if (kDebugMode) debugPrint('Notification init error: $e');
+      });
+
+      // Connect to WebSocket immediately using Device ID (Token-free flow)
+      final deviceId = _authProvider.deviceId;
+      if (deviceId.isNotEmpty) {
+        _tutorConnectionProvider.preconnect(deviceId);
+      }
+
+      _authProvider.init().then((_) {
+        // Once Firebase resolves, if we have a real user, upgrade the connection
+        final userId = _authProvider.userModel?.uid;
+        if (userId != null) {
+          _tutorConnectionProvider.updateUserId(userId);
+        }
+      });
       _downloadProvider.init();
-      _navigationProvider.init();
       _resourcesProvider.loadRecentlyOpened();
 
       // Set analytics user properties once auth resolves
@@ -260,13 +411,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Initialize sharing intent listener (Mobile Only)
       if (!kIsWeb) {
         SharingService.init(context);
+
+        // Execute OS background death recovery routing
+        RecoveryService.checkAndRouteRecovery(app_router.router);
       }
 
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
-        LauncherService.instance.init(context);
-      });
+      _initDeferredServices();
+
     });
+  }
+
+  Future<void> _initDeferredServices() async {
+    // Pre-load Google Fonts in the background (mobile only).
+    if (!kIsWeb) {
+      unawaited(() async {
+        try {
+          await GoogleFonts.pendingFonts([
+            GoogleFonts.poppins(),
+            GoogleFonts.nunito(),
+            GoogleFonts.inter(),
+            GoogleFonts.plusJakartaSans(),
+            GoogleFonts.lexend(),
+          ]);
+        } catch (_) {}
+      }());
+    }
   }
 
   @override
@@ -281,15 +450,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
-        // Pause the WebSocket keep-alive so it doesn't burn battery in background.
-        // The connection will be re-established when the app resumes.
+        // The database should stay open during lifecycle changes to prevent
+        // crashes during background operations (e.g., scanning or downloads).
+        // WebSocket keep-alive is still paused to save battery.
         _tutorConnectionProvider.pause();
-        // Close Isar cleanly so Android doesn't corrupt the DB file on force-kill.
-        if (!kIsWeb) {
-          IsarService().db.then((isar) {
-            if (isar?.isOpen ?? false) isar!.close();
-          });
-        }
+
         break;
 
       case AppLifecycleState.resumed:
@@ -299,7 +464,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         final userId = _authProvider.userModel?.uid;
         if (userId != null) {
           _tutorConnectionProvider.updateUserId(userId);
+          _tutorConnectionProvider.reconnect();
         }
+        // Check if email verification was completed while app was in background
+        _authProvider.checkEmailVerificationOnResume();
         break;
 
       default:
@@ -322,6 +490,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       // Fast load recent 10 chats first
       _aiTutorHistoryProvider.fetchHistory(user.uid, limit: 10);
+
+      // EAGER LOAD: Fetch file history and general resources immediately on launch/sign-in
+      _resourcesProvider.loadCloudHistory(user.uid);
+      _resourcesProvider.fetchFiles(user: user);
 
       // Load the rest in the background
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -350,6 +522,33 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _handleDeepLink(Uri uri) {
+    if (kDebugMode) debugPrint('[TOPSCORE] Processing deep link: $uri');
+
+    // 1. Firebase Auth Actions (Verification, Reset, Sign-In)
+    final isFirebaseAuthLink = uri.host.contains('firebaseapp.com') ||
+        uri.host.contains('firebase') ||
+        uri.path.contains('__/auth/') ||
+        uri.queryParameters.containsKey('oobCode');
+
+    if (isFirebaseAuthLink) {
+      if (kDebugMode) {
+        debugPrint(
+            '[TOPSCORE] Firebase auth link detected — processing action');
+      }
+      _authProvider.handleAuthLink(uri.toString());
+      return;
+    }
+
+    // 2. topscoreapp.ai HTTPS deep links
+    if (uri.host.contains('topscoreapp.ai')) {
+      final path = uri.path.isEmpty ? '/home' : uri.path;
+      Future.delayed(const Duration(milliseconds: 100), () {
+        app_router.router.go(path);
+      });
+      return;
+    }
+
+    // 3. Custom scheme: topscore://app/...
     if (uri.scheme == 'topscore' && uri.host == 'app') {
       final path = uri.path.isEmpty ? '/home' : uri.path;
       Future.delayed(const Duration(milliseconds: 100), () {
@@ -379,7 +578,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             value: _tutorConnectionProvider),
         ChangeNotifierProvider<SearchProvider>(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProvider(create: (_) => UIProvider()),
         ChangeNotifierProvider<ChatController>(
             create: (context) => ChatController()),
       ],
@@ -398,19 +596,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           locale: s.locale
         ),
         builder: (context, settings, _) {
-          return UpdateBanner(
-            child: MaterialApp.router(
-              title: 'TopScore AI',
-              debugShowCheckedModeBanner: false,
-              theme:
-                  AppTheme.lightTheme(settings.fontSize, settings.lineHeight),
-              darkTheme:
-                  AppTheme.darkTheme(settings.fontSize, settings.lineHeight),
-              themeMode: settings.themeMode,
-              locale: settings.locale,
-              supportedLocales: const [Locale('en'), Locale('sw')],
-              routerConfig: app_router.router,
-            ),
+          return MaterialApp.router(
+            title: 'TopScore AI',
+            debugShowCheckedModeBanner: false,
+            theme:
+                AppTheme.lightTheme(settings.fontSize, settings.lineHeight),
+            darkTheme:
+                AppTheme.darkTheme(settings.fontSize, settings.lineHeight),
+            themeMode: settings.themeMode,
+            locale: settings.locale,
+            supportedLocales: const [Locale('en'), Locale('sw')],
+            routerConfig: app_router.router,
+            builder: (context, child) {
+              return child!;
+            },
           );
         },
       ),
@@ -418,31 +617,5 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-
-    if (authProvider.isLoading) {
-      return const LoadingScreen(status: "Syncing your learning history...");
-    }
-
-    // Force a minimum splash duration if it's the first load
-    // We can use a FutureBuilder or a state flag. For simplicity, we'll assume
-    // the LandingScreen has its own internal timer or the authProvider.isLoading
-    // covers the initial setup time.
-
-    if (authProvider.requiresEmailVerification) {
-      return const EmailVerificationScreen();
-    }
-
-    if (authProvider.userModel == null) {
-      return const AuthScreen();
-    }
-
-    // Always route to student dashboard screen - teacher and parent screens disabled
-    return const DashboardScreen();
-  }
-}
+// AuthWrapper is intentionally removed — authentication routing is handled
+// entirely by the GoRouter redirect in router.dart.

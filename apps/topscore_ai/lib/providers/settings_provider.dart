@@ -4,13 +4,14 @@ import '../config/app_theme.dart';
 import '../services/offline_service.dart';
 
 class SettingsProvider with ChangeNotifier {
-  final OfflineService? _offlineService = kIsWeb ? null : OfflineService();
-  bool _isLiteMode = false;
+  final OfflineService _offlineService = OfflineService();
+
   ThemeMode _themeMode = ThemeMode.light; // Default to Light Mode
   double _fontSize = 14.0;
   double _lineHeight = 1.5;
 
-  bool get isLiteMode => _isLiteMode;
+  // Lite Mode is always ON to save data
+  bool get isLiteMode => true;
   ThemeMode get themeMode => _themeMode;
   double get fontSize => _fontSize;
   double get lineHeight => _lineHeight;
@@ -20,23 +21,23 @@ class SettingsProvider with ChangeNotifier {
   }
 
   void _loadSettings() {
-    if (!kIsWeb && _offlineService != null) {
-      _isLiteMode = _offlineService.getLiteMode();
-    }
-    // In a real app, save/load theme mode from SharedPreferences here
+    // _isLiteMode = _offlineService.getLiteMode(); // No longer needed as we force true
+    _themeMode = _offlineService.getThemeMode();
     notifyListeners();
   }
 
   Future<void> toggleLiteMode(bool value) async {
-    _isLiteMode = value;
-    if (!kIsWeb && _offlineService != null) {
-      await _offlineService.saveLiteMode(value);
+    // Force true regardless of input
+    if (!kIsWeb) {
+      await _offlineService.saveLiteMode(true);
     }
     notifyListeners();
   }
 
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (_themeMode == mode) return;
     _themeMode = mode;
+    await _offlineService.saveThemeMode(mode);
     AppTheme.clearCache();
     notifyListeners();
   }

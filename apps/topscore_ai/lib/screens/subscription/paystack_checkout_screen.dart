@@ -1,5 +1,7 @@
+import '../../constants/colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/app_spinner.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../services/paystack_service.dart';
@@ -171,9 +173,16 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
           'Complete Payment',
           style: GoogleFonts.nunito(fontWeight: FontWeight.bold),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
+        leadingWidth: 80,
+        leading: TextButton(
           onPressed: _isVerifying ? null : _onCancelTapped,
+          child: Text(
+            'Cancel',
+            style: GoogleFonts.nunito(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
         actions: [
           if (_isVerifying)
@@ -183,7 +192,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
+                  child: AppSpinner(
                     strokeWidth: 2,
                     color: Colors.white,
                   ),
@@ -203,7 +212,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
               ),
             ),
         ],
-        backgroundColor: const Color(0xFF09A5DB),
+        backgroundColor: AppColors.paystackBlue,
         foregroundColor: Colors.white,
       ),
       body: Stack(
@@ -213,7 +222,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
             LinearProgressIndicator(
               value: _loadProgress / 100,
               backgroundColor: Colors.grey[200],
-              color: const Color(0xFF09A5DB),
+              color: AppColors.paystackBlue,
               minHeight: 3,
             ),
           if (_isVerifying)
@@ -226,7 +235,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(),
+                        AppSpinner(),
                         SizedBox(height: 16),
                         Text('Verifying payment…'),
                       ],

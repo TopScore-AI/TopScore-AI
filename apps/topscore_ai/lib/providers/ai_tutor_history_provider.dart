@@ -53,7 +53,23 @@ class AiTutorHistoryProvider with ChangeNotifier {
         queryParameters: limit != null ? {'limit': limit.toString()} : null,
       );
       final headers = await AuthHeaders.getHeaders();
-      final response = await http.get(uri, headers: headers);
+      var response = await http.get(uri, headers: headers);
+
+      // Handle transient 401 (Unauthorized) during early boot race conditions
+      if (response.statusCode == 401) {
+        if (kDebugMode) {
+          debugPrint('Auth: 401 Unauthorized for $userId. Body: ${response.body}');
+          debugPrint('Auth: Retrying with fresh token...');
+        }
+        await Future.delayed(const Duration(seconds: 1));
+        // Force refresh the token on the second attempt
+        final retryHeaders = await AuthHeaders.getHeaders(forceRefresh: true);
+        response = await http.get(uri, headers: retryHeaders);
+        
+        if (response.statusCode == 401 && kDebugMode) {
+          debugPrint('Auth: Still 401 after retry. Body: ${response.body}');
+        }
+      }
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -87,7 +103,9 @@ class AiTutorHistoryProvider with ChangeNotifier {
 
         _sortThreads();
       } else {
-        if (kDebugMode) debugPrint('API Error: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('API Error (${response.statusCode}): ${response.body}');
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading history: $e');
@@ -110,7 +128,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
       if (threadId != null) {
         final count = await _isarService.getMessageCount(threadId);
         if (count == 0) {
-          if (kDebugMode) debugPrint('ðŸ”„ Background Syncing thread: $threadId');
+          if (kDebugMode) debugPrint('🔄 Background Syncing thread: $threadId');
           await syncThreadMessages(threadId, userId);
         }
       }
@@ -145,8 +163,21 @@ class AiTutorHistoryProvider with ChangeNotifier {
             quizDataJson: map['quiz_data'] is Map ? jsonEncode(map['quiz_data']) : map['quiz_data'],
             flashcardDataJson: map['flashcards'] is Map ? jsonEncode(map['flashcards']) : map['flashcards'],
             mnemonicDataJson: map['mnemonics'] is Map ? jsonEncode(map['mnemonics']) : map['mnemonics'],
-            desmosDataJson: map['desmos_data'] is Map ? jsonEncode(map['desmos_data']) : map['desmos_data'],
-            graphDataJson: map['graph_data'] is Map ? jsonEncode(map['graph_data']) : map['graph_data'],
+            punnettDataJson: map['punnett_data'] is Map ? jsonEncode(map['punnett_data']) : map['punnett_data'],
+            uiWidgets: (map['ui_widgets'] ?? map['uiWidgets'] as List?)
+                ?.map((w) => UiWidgetData.fromJson(w as Map<String, dynamic>))
+                .toList(),
+            uiWidgetsJson: map['ui_widgets_json'] is List
+                ? List<String>.from(map['ui_widgets_json'])
+                : (map['uiWidgetsJson'] is List
+                    ? List<String>.from(map['uiWidgetsJson'])
+                    : null),
+            videos: (map['videos'] as List?)
+                ?.map((v) => VideoResult.fromJson(v as Map<String, dynamic>))
+                .toList(),
+            sources: (map['sources'] as List?)
+                ?.map((s) => SourceMetadata.fromJson(s as Map<String, dynamic>))
+                .toList(),
             mathSteps: map['math_steps'] is List ? List<String>.from(map['math_steps']) : null,
             mathAnswer: map['math_answer'],
             fileId: map['file_id'],
@@ -198,8 +229,16 @@ class AiTutorHistoryProvider with ChangeNotifier {
             quizDataJson: map['quiz_data'] is Map ? jsonEncode(map['quiz_data']) : map['quiz_data'],
             flashcardDataJson: map['flashcards'] is Map ? jsonEncode(map['flashcards']) : map['flashcards'],
             mnemonicDataJson: map['mnemonics'] is Map ? jsonEncode(map['mnemonics']) : map['mnemonics'],
-            desmosDataJson: map['desmos_data'] is Map ? jsonEncode(map['desmos_data']) : map['desmos_data'],
-            graphDataJson: map['graph_data'] is Map ? jsonEncode(map['graph_data']) : map['graph_data'],
+            punnettDataJson: map['punnett_data'] is Map ? jsonEncode(map['punnett_data']) : map['punnett_data'],
+            uiWidgets: (map['ui_widgets'] as List?)
+                ?.map((w) => UiWidgetData.fromJson(w as Map<String, dynamic>))
+                .toList(),
+            videos: (map['videos'] as List?)
+                ?.map((v) => VideoResult.fromJson(v as Map<String, dynamic>))
+                .toList(),
+            sources: (map['sources'] as List?)
+                ?.map((s) => SourceMetadata.fromJson(s as Map<String, dynamic>))
+                .toList(),
             mathSteps: map['math_steps'] is List ? List<String>.from(map['math_steps']) : null,
             mathAnswer: map['math_answer'],
             fileId: map['file_id'],
@@ -249,7 +288,7 @@ class AiTutorHistoryProvider with ChangeNotifier {
     try {
       final headers = await AuthHeaders.getHeaders();
       final response = await http.delete(
-        Uri.parse('$_backendUrl/threads/$threadId'),
+        Uri.parse('$_backendUrl/api/threads/$threadId'),
         headers: headers,
       );
 
@@ -327,3 +366,4 @@ class AiTutorHistoryProvider with ChangeNotifier {
     notifyListeners();
   }
 }
+

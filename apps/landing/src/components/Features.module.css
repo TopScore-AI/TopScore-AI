@@ -56,11 +56,9 @@
 }
 
 .card {
-    background: rgba(255, 255, 255, 0.02);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
     border-radius: 28px;
     padding: 40px;
     height: 100%;
@@ -86,11 +84,11 @@
 
 .card:hover {
     transform: translateY(-12px) scale(1.02);
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: var(--bg-card-hover);
+    border-color: var(--primary);
     box-shadow: 
-        0 40px 80px rgba(0, 0, 0, 0.6),
-        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        0 20px 40px rgba(43, 78, 154, 0.1),
+        0 0 0 1px rgba(43, 78, 154, 0.05);
 }
 
 .card:hover .cardGlow {
@@ -120,7 +118,7 @@
 
 .cardDesc {
     font-size: 15px;
-    color: #94A3B8;
+    color: var(--text-muted);
     line-height: 1.6;
     margin-bottom: 24px;
 }

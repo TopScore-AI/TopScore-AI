@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_spinner.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
 import '../../services/subscription_service.dart';
-import '../screens/subscription/subscription_screen.dart'; // Adjust path if needed
 
 class PremiumFeatureGuard extends StatelessWidget {
   final Widget child;
@@ -20,7 +21,7 @@ class PremiumFeatureGuard extends StatelessWidget {
       future: SubscriptionService().isSessionPremiumOrTrial(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return AppSpinner.center();
         }
 
         bool isPremium = snapshot.data ?? false;
@@ -68,14 +69,7 @@ class PaywallView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SubscriptionScreen(),
-                  ),
-                );
-              },
+              onPressed: () => context.push('/subscription'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.googleBlue,
                 shape: RoundedRectangleBorder(

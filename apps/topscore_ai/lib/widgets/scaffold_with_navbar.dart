@@ -1,4 +1,7 @@
+import '../../constants/colors.dart';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -7,15 +10,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
-import '../providers/ui_provider.dart';
-import '../tutor_client/widgets/topscore_calculator.dart';
 import '../services/haptics_service.dart';
 import 'package:intl/intl.dart';
 import '../providers/ai_tutor_history_provider.dart';
 import '../utils/image_cache_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
-import 'trial_completed_overlay.dart';
 
 class ScaffoldWithNavBar extends StatefulWidget {
   const ScaffoldWithNavBar({required this.navigationShell, Key? key})
@@ -29,28 +28,67 @@ class ScaffoldWithNavBar extends StatefulWidget {
 
 class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   bool _isCollapsed = false;
+  bool _showAppPromo = false;
 
   @override
   void initState() {
     super.initState();
     _restoreLastTab();
+    _checkAppPromo();
+  }
+
+  Future<void> _checkAppPromo() async {
+    // Only show on Web mobile browsers
+    if (!kIsWeb) return;
+
+    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
+    if (!isMobile) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final hidePromo = prefs.getBool('hide_app_promo') ?? false;
+    if (!hidePromo) {
+      // Small delay to make the entry feel smooth and premium after the app loads
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted) {
+        setState(() {
+          _showAppPromo = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _dismissAppPromo() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hide_app_promo', true);
+    if (mounted) {
+      setState(() {
+        _showAppPromo = false;
+      });
+    }
   }
 
   Future<void> _restoreLastTab() async {
     final prefs = await SharedPreferences.getInstance();
-    final lastTab = prefs.getInt('last_tab');
 
-    // Safety check: Ensure the saved tab index is valid for our new 3-tab layout.
-    // Invalid indices (from previous 5-tab layout) will be ignored and cleared.
+    // Use a unified key across the app to prevent conflicts
+    final lastTab = prefs.getInt('active_tab_index');
+
     if (lastTab != null) {
+      // Safety check: The current layout has exactly 3 tabs (0: Home, 1: Tutor, 2: Library)
       if (lastTab >= 0 && lastTab < 3) {
         if (lastTab != widget.navigationShell.currentIndex && mounted) {
           widget.navigationShell.goBranch(lastTab);
         }
       } else {
-        // Clear invalid index to prevent future conflicts
-        await prefs.remove('last_tab');
+        // If the persisted index is invalid (e.g. from an old 5-tab layout),
+        // default to Home and clear the bad data.
+        await prefs.setInt('active_tab_index', 0);
       }
+    } else {
+      // First boot: Explicitly set to 0 to ensure we land on Home
+      await prefs.setInt('active_tab_index', 0);
     }
   }
 
@@ -63,9 +101,15 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
     HapticFeedback.lightImpact();
     widget.navigationShell.goBranch(index, initialLocation: true);
 
-    // Persist the current tab so we can restore if the app is killed in bg
+    // Persist using the unified key
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('last_tab', index);
+    await prefs.setInt('active_tab_index', index);
+
+    // Cleanup old/conflicting legacy keys if they exist
+    if (prefs.containsKey('last_tab')) await prefs.remove('last_tab');
+    if (prefs.containsKey('current_nav_index')) {
+      await prefs.remove('current_nav_index');
+    }
   }
 
   void _toggleSidebar() {
@@ -92,302 +136,259 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   }
 
   Widget _buildMobileLayout(bool isDark) {
-    return Selector<AuthProvider,
-            ({bool isGuestMode, bool isGuestLimitReached})>(
-        selector: (_, auth) => (
-              isGuestMode: auth.isGuestMode,
-              isGuestLimitReached: auth.isGuestLimitReached
-            ),
-        builder: (context, auth, child) {
-          final theme = Theme.of(context);
-          final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
-          final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final theme = Theme.of(context);
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
-          return Scaffold(
-            backgroundColor: theme.scaffoldBackgroundColor,
-            body: Stack(
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(
-                      bottom:
-                          isKeyboardOpen ? 0 : 90), // Buffer for floating bar
-                  child: widget.navigationShell,
-                ),
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(
+                bottom: isKeyboardOpen ? 0 : 90), // Buffer for floating bar
+            child: widget.navigationShell,
+          ),
 
-                // --- GLOBAL SCIENTIFIC CALCULATOR OVERLAY ---
-                Selector<UIProvider, bool>(
-                  selector: (_, ui) => ui.isCalculatorOpen,
-                  builder: (context, isOpen, _) {
-                    return AnimatedPositioned(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOutCubic,
-                      right:
-                          isOpen ? 0 : -MediaQuery.of(context).size.width * 0.9,
-                      top: 0,
-                      bottom: isKeyboardOpen
-                          ? 0
-                          : 90, // Adjusted to not overflow below nav bar
-                      width: MediaQuery.of(context).size.width > 600
-                          ? 500
-                          : MediaQuery.of(context).size.width * 0.9,
-                      child: RepaintBoundary(
-                        child: Material(
-                          elevation: 20,
-                          color: Colors.transparent,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .scaffoldBackgroundColor
-                                  .withValues(alpha: 0.95),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 30,
-                                  offset: const Offset(-5, 0),
-                                ),
-                              ],
-                            ),
-                            child: SafeArea(
-                              left: false,
-                              child: TopScoreCalculator(
-                                onClose: () => context
-                                    .read<UIProvider>()
-                                    .toggleCalculator(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
 
-                // --- PERSISTENT CALCULATOR TOGGLE BUTTON ---
-                Selector<UIProvider, bool>(
-                  selector: (_, ui) => ui.isCalculatorOpen,
-                  builder: (context, isOpen, child) {
-                    if (isOpen || isKeyboardOpen) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      right: 0,
-                      top: MediaQuery.of(context).size.height * 0.4,
-                      child: GestureDetector(
-                        onTap: () {
-                          HapticsService.instance.lightImpact();
-                          context.read<UIProvider>().toggleCalculator();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 20),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .primaryColor
-                                .withValues(alpha: 0.9),
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(20),
-                              bottomLeft: Radius.circular(20),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 10,
-                                offset: const Offset(-2, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.calculate_rounded,
-                                  color: Colors.white, size: 28),
-                              SizedBox(height: 10),
-                              RotatedBox(
-                                quarterTurns: 3,
-                                child: Text(
-                                  "CALCULATOR",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
 
-                // Floating Pill Navigation - Hide when keyboard is open
-                if (!isKeyboardOpen)
-                  Positioned(
-                    bottom: 12, // Pushed a little lower
-                    left: 24,
-                    right: 24,
-                    child: SafeArea(
-                      child: RepaintBoundary(
-                        child: _FloatingPillNavBar(
-                          currentIndex: widget.navigationShell.currentIndex,
-                          onTap: _goBranch,
-                          isDark: isDark,
-                        ),
-                      ),
-                    ),
+          // Floating Pill Navigation - Hide when keyboard is open
+          if (!isKeyboardOpen)
+            Positioned(
+              bottom: 12, // Pushed a little lower
+              left: 24,
+              right: 24,
+              child: SafeArea(
+                child: RepaintBoundary(
+                  child: _FloatingPillNavBar(
+                    currentIndex: widget.navigationShell.currentIndex,
+                    onTap: _goBranch,
+                    isDark: isDark,
                   ),
-                if (showTrialBlock)
-                  const Positioned.fill(
-                    child: TrialCompletedOverlay(),
-                  ),
-              ],
+                ),
+              ),
             ),
-          );
-        });
+
+          // Mobile App Promo Popup - Slide-up from bottom
+          _buildAppPromoBanner(context, isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppPromoBanner(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.elasticOut,
+      bottom: _showAppPromo ? 104 : -300, // Slides up from bottom
+      left: 16,
+      right: 16,
+      child: SafeArea(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceElevatedDark.withValues(alpha: 0.85)
+                    : Colors.white.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : AppColors.primary.withValues(alpha: 0.15),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Icon(
+                          isAndroid
+                              ? Icons.android_rounded
+                              : Icons.phone_iphone_rounded,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Study Smarter on the App!',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Open in the TopScore AI app for real-time multiplayer revision, live AI tutor voice chat, and physical paper scanning.',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        onPressed: _dismissAppPromo,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        style: IconButton.styleFrom(
+                          foregroundColor: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            HapticsService.instance.lightImpact();
+                            final uri = Uri.parse('topscore://home');
+                            try {
+                              final launched = await launchUrl(uri,
+                                  mode: LaunchMode.externalApplication);
+                              if (!launched) {
+                                final storeUri = Uri.parse(isAndroid
+                                    ? 'https://play.google.com/store/apps/details?id=com.topscoreapp.ai'
+                                    : 'https://apps.apple.com/app/topscore-ai/id6476140411');
+                                await launchUrl(storeUri,
+                                    mode: LaunchMode.externalApplication);
+                              }
+                            } catch (_) {
+                              final storeUri = Uri.parse(isAndroid
+                                  ? 'https://play.google.com/store/apps/details?id=com.topscoreapp.ai'
+                                  : 'https://apps.apple.com/app/topscore-ai/id6476140411');
+                              await launchUrl(storeUri,
+                                  mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                          label: Text(
+                            'Open App',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            HapticsService.instance.lightImpact();
+                            final storeUri = Uri.parse(isAndroid
+                                ? 'https://play.google.com/store/apps/details?id=com.topscoreapp.ai'
+                                : 'https://apps.apple.com/app/topscore-ai/id6476140411');
+                            await launchUrl(storeUri,
+                                mode: LaunchMode.externalApplication);
+                          },
+                          icon: Icon(
+                            isAndroid
+                                ? Icons.play_arrow_rounded
+                                : Icons.apple_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            'Install App',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: theme.colorScheme.onSurface,
+                            side: BorderSide(
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.15),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildDesktopLayout(bool isDark, dynamic user) {
-    return Selector<AuthProvider,
-            ({bool isGuestMode, bool isGuestLimitReached})>(
-        selector: (_, auth) => (
-              isGuestMode: auth.isGuestMode,
-              isGuestLimitReached: auth.isGuestLimitReached
-            ),
-        builder: (context, auth, child) {
-          final showTrialBlock = auth.isGuestMode && auth.isGuestLimitReached;
 
-          final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    return Scaffold(
+      body: Stack(
+        children: [
+          Row(
+            children: [
+              _DesktopSidebar(
+                currentIndex: widget.navigationShell.currentIndex,
+                onTap: _goBranch,
+                isDark: isDark,
+                isCollapsed: _isCollapsed,
+                onToggle: _toggleSidebar,
+                user: user,
+              ),
+              Expanded(child: widget.navigationShell),
+            ],
+          ),
 
-          return Scaffold(
-            body: Stack(
-              children: [
-                Row(
-                  children: [
-                    _DesktopSidebar(
-                      currentIndex: widget.navigationShell.currentIndex,
-                      onTap: _goBranch,
-                      isDark: isDark,
-                      isCollapsed: _isCollapsed,
-                      onToggle: _toggleSidebar,
-                      user: user,
-                    ),
-                    Expanded(child: widget.navigationShell),
-                  ],
-                ),
 
-                // --- GLOBAL SCIENTIFIC CALCULATOR OVERLAY ---
-                Selector<UIProvider, bool>(
-                  selector: (_, ui) => ui.isCalculatorOpen,
-                  builder: (context, isOpen, _) {
-                    return AnimatedPositioned(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOutCubic,
-                      right: isOpen ? 0 : -500,
-                      top: 0,
-                      bottom: 0,
-                      width: 500,
-                      child: RepaintBoundary(
-                        child: Material(
-                          elevation: 20,
-                          color: Colors.transparent,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .scaffoldBackgroundColor
-                                  .withValues(alpha: 0.95),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 30,
-                                  offset: const Offset(-5, 0),
-                                ),
-                              ],
-                            ),
-                            child: SafeArea(
-                              left: false,
-                              child: TopScoreCalculator(
-                                onClose: () => context
-                                    .read<UIProvider>()
-                                    .toggleCalculator(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                // --- PERSISTENT CALCULATOR TOGGLE BUTTON ---
-                Selector<UIProvider, bool>(
-                  selector: (_, ui) => ui.isCalculatorOpen,
-                  builder: (context, isOpen, child) {
-                    if (isOpen || isKeyboardOpen) {
-                      return const SizedBox.shrink();
-                    }
-                    return Positioned(
-                      right: 0,
-                      top: MediaQuery.of(context).size.height * 0.4,
-                      child: GestureDetector(
-                        onTap: () {
-                          HapticsService.instance.lightImpact();
-                          context.read<UIProvider>().toggleCalculator();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 20),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .primaryColor
-                                .withValues(alpha: 0.9),
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(20),
-                              bottomLeft: Radius.circular(20),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 10,
-                                offset: const Offset(-2, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.calculate_rounded,
-                                  color: Colors.white, size: 28),
-                              SizedBox(height: 10),
-                              RotatedBox(
-                                quarterTurns: 3,
-                                child: Text(
-                                  "CALCULATOR",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                if (showTrialBlock)
-                  const Positioned.fill(
-                    child: TrialCompletedOverlay(),
-                  ),
-              ],
-            ),
-          );
-        });
+        ],
+      ),
+    );
   }
 }
 
@@ -416,7 +417,7 @@ class _FloatingPillNavBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: isDark
-                ? const Color(0xFF1E293B).withValues(alpha: 0.7)
+                ? AppColors.surfaceElevatedDark.withValues(alpha: 0.7)
                 : Colors.white.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(32),
             boxShadow: [
@@ -454,8 +455,9 @@ class _FloatingPillNavBar extends StatelessWidget {
       {bool isCenter = false}) {
     final isSelected = currentIndex == index;
     final icon = isSelected ? filledIcon : outlinedIcon;
+    final theme = Theme.of(context);
     const primaryColor =
-        Color(0xFF2563EB); // Consistent Blue for all active tabs
+        AppColors.primary; // Consistent Blue for all active tabs
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -490,7 +492,9 @@ class _FloatingPillNavBar extends StatelessWidget {
               size: 24,
               color: isSelected
                   ? primaryColor
-                  : (isDark ? Colors.white54 : Colors.black54),
+                  : (isDark
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.8)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.7)),
             ),
             if (isSelected) ...[
               const SizedBox(width: 8),
@@ -602,8 +606,7 @@ class _DesktopSidebar extends StatelessWidget {
             isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
           if (!isCollapsed) ...[
-            Image.asset('assets/images/logo.png',
-                width: 28, height: 28),
+            Image.asset('assets/images/logo.png', width: 28, height: 28),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -672,7 +675,7 @@ class _DesktopSidebar extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 17,
-                backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                 backgroundImage:
                     user?.photoURL != null && user!.photoURL!.isNotEmpty
                         ? CachedNetworkImageProvider(
@@ -686,7 +689,7 @@ class _DesktopSidebar extends StatelessWidget {
                             ? user!.displayName[0].toUpperCase()
                             : 'S',
                         style: const TextStyle(
-                            color: Color(0xFF2563EB),
+                            color: AppColors.primary,
                             fontWeight: FontWeight.bold),
                       )
                     : null,
@@ -754,8 +757,10 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final activeColor = widget.isSelected
-        ? (widget.isPrimary ? const Color(0xFF6366F1) : const Color(0xFF2563EB))
-        : (widget.isDark ? Colors.white60 : Colors.black54);
+        ? (widget.isPrimary ? const Color(0xFF6366F1) : AppColors.primary)
+        : (widget.isDark
+            ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8)
+            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7));
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -774,7 +779,7 @@ class _SidebarItemState extends State<_SidebarItem> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: widget.isSelected
-                  ? const Color(0xFF2563EB).withValues(alpha: 0.1)
+                  ? AppColors.primary.withValues(alpha: 0.1)
                   : (_isHovered
                       ? Colors.black.withValues(alpha: 0.05)
                       : Colors.transparent),

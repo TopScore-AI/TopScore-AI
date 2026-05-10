@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
@@ -6,7 +6,7 @@ import 'package:waveform_flutter/waveform_flutter.dart' as wf;
 import 'dart:developer' as developer;
 
 /// Web-specific audio input using the Web Audio API to capture raw PCM16
-/// at 16kHz — the format required by TopScore AI.
+/// at 16kHz â€” the format required by TopScore AI.
 ///
 /// Key design decisions for Android Chrome compatibility:
 /// - [requestPermission] must be called directly from a user gesture (tap handler)
@@ -28,7 +28,7 @@ class AudioInput extends ChangeNotifier {
   Stream<wf.Amplitude>? amplitudeStream;
 
   static const int _sampleRate = 16000;
-  static const int _bufferSize = 2048; // Reduced for lower latency (128ms)
+  static const int _bufferSize = 512; // 32ms at 16kHz for lower latency
 
   /// Call this FIRST, directly from the button's onPressed handler,
   /// before any other async work. Stores the MediaStream for reuse.
@@ -50,11 +50,11 @@ class AudioInput extends ChangeNotifier {
         .toDart;
   }
 
-  /// Called during setup — just ensures permission was granted.
+  /// Called during setup â€” just ensures permission was granted.
   Future<void> init() async {
     // Permission is requested eagerly via requestPermission().
     // If _stream is null here it means requestPermission() wasn't called
-    // in time — try anyway (may fail on Android if gesture context is gone).
+    // in time â€” try anyway (may fail on Android if gesture context is gone).
     if (_stream == null) {
       await requestPermission();
     }
@@ -69,7 +69,7 @@ class AudioInput extends ChangeNotifier {
     amplitudeStream = _amplitudeStreamController!.stream;
 
     try {
-      // Reuse existing stream — avoids needing getUserMedia again
+      // Reuse existing stream â€” avoids needing getUserMedia again
       if (_stream == null) {
         await requestPermission();
       }
@@ -164,7 +164,7 @@ class AudioInput extends ChangeNotifier {
       final tracks = _stream!.getTracks().toDart;
       for (final track in tracks) {
         track.stop();
-        developer.log('🎙️ Audio track stopped: ${track.label}', name: 'AudioInput');
+        developer.log('ðŸŽ™ï¸ Audio track stopped: ${track.label}', name: 'AudioInput');
       }
       _stream = null;
     }

@@ -161,7 +161,7 @@ class NotificationInboxScreen extends StatelessWidget {
                       notification.body,
                       style: GoogleFonts.nunito(
                         fontSize: 13,
-                        color: (isDark ? Colors.white70 : Colors.black54),
+                        color: (isDark ? Colors.white70 : theme.colorScheme.onSurface.withValues(alpha: 0.6)),
                         height: 1.4,
                       ),
                     ),

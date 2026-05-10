@@ -44,12 +44,12 @@
     align-items: center;
     gap: 12px;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
     border-radius: 100px;
     font-size: 14px;
     font-weight: 600;
-    color: #FFFFFF;
+    color: var(--primary);
     margin-bottom: 32px;
 }
 
@@ -59,7 +59,6 @@
     background: #ef4444;
     border-radius: 50%;
     position: relative;
-    box-shadow: 0 0 10px #ef4444;
 }
 
 .livePulse::after {
@@ -80,7 +79,8 @@
     font-size: clamp(48px, 6vw, 76px);
     line-height: 1.1;
     margin-bottom: 24px;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.01em;
+    color: var(--text);
 }
 
 .gradText {
@@ -108,22 +108,24 @@
 
 .btnPrimary {
     background: var(--primary) !important;
-    border-radius: 12px;
+    border-radius: 8px;
     height: 56px;
     padding: 0 32px;
     font-size: 16px;
     font-weight: 700;
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.39);
+    color: white !important;
+    box-shadow: 0 4px 14px rgba(43, 78, 154, 0.2);
 }
 
 .btnSecondary {
-    border-radius: 12px;
+    border-radius: 8px;
     height: 56px;
     padding: 0 32px;
     font-size: 16px;
     font-weight: 700;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text);
+    border: 1px solid var(--border);
+    background: white !important;
+    color: var(--text) !important;
 }
 
 .socialProof {
@@ -141,14 +143,15 @@
 .avatar {
     width: 40px;
     height: 40px;
-    background: #1e293b;
-    border: 3px solid #000;
+    background: var(--bg-subtle);
+    border: 2px solid white;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-left: -12px;
     font-size: 18px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .avatar:first-child { margin-left: 0; }
@@ -203,8 +206,7 @@
     display: block;
     font-size: 40px;
     font-weight: 800;
-    color: #FFFFFF;
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+    color: var(--text);
     margin-bottom: 8px;
 }
 

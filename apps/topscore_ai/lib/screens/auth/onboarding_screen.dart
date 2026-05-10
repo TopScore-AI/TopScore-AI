@@ -91,7 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         backgroundColor: textColor.withValues(alpha: 0.15),
         selectedColor: textColor,
         labelStyle: TextStyle(color: textColor),
-        secondaryLabelStyle: TextStyle(color: AppColors.edupoaBlue),
+        secondaryLabelStyle: TextStyle(color: AppColors.topscoreBlue),
         disabledColor: textColor.withValues(alpha: 0.1),
         surfaceTintColor: Colors.transparent,
       ),
@@ -103,7 +103,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         backgroundColor: Colors.transparent,
         body: Container(
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: AppColors.text,
             image: DecorationImage(
               image: const AssetImage('assets/images/auth_background.png'),
               fit: BoxFit.cover,
@@ -205,6 +205,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // --- Curriculum Selection ---
                       Text(
                         "Select Curriculum",
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.nunito(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -212,16 +213,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: _curriculums.map((curriculum) {
+                      Center(
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children: _curriculums.map((curriculum) {
                           final isSelected = _selectedCurriculum == curriculum;
                           return ChoiceChip(
                             label: Text(
                               curriculum,
                               style: TextStyle(
-                                color: isSelected ? AppColors.edupoaBlue : textColor,
+                                color: isSelected ? AppColors.topscoreBlue : textColor,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
                               ),
@@ -255,12 +258,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           );
                         }).toList(),
                       ),
+                    ),
                       const SizedBox(height: 40),
 
                       // --- Grade Selection ---
                       if (_selectedCurriculum != null) ...[
                         Text(
                           "Select Level",
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.nunito(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -268,16 +273,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: _availableGrades.map((grade) {
+                        Center(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            alignment: WrapAlignment.center,
+                            children: _availableGrades.map((grade) {
                             final isSelected = _selectedGrade == grade;
                             return ChoiceChip(
                               label: Text(
                                 grade,
                                 style: TextStyle(
-                                  color: isSelected ? AppColors.edupoaBlue : textColor,
+                                  color: isSelected ? AppColors.topscoreBlue : textColor,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -307,6 +314,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             );
                           }).toList(),
                         ),
+                      ),
                       ],
 
                       const Spacer(),
@@ -318,7 +326,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           onPressed: _finishSetup,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
-                            foregroundColor: AppColors.edupoaBlue,
+                            foregroundColor: AppColors.topscoreBlue,
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),

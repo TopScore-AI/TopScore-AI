@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import '../../constants/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -22,7 +22,8 @@ class EmptyStateWidget extends StatefulWidget {
   State<EmptyStateWidget> createState() => _EmptyStateWidgetState();
 }
 
-class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProviderStateMixin {
+class _EmptyStateWidgetState extends State<EmptyStateWidget>
+    with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -54,25 +55,6 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Static background gradient instead of animation
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: widget.isDark
-                  ? const [
-                      Color(0xFF0A0A0A),
-                      Color(0xFF16213E),
-                    ]
-                  : const [
-                      Color(0xFFF8F9FA),
-                      Color(0xFFFFFFFF),
-                    ],
-            ),
-          ),
-        ),
-
         // Content overlay - Centered
         Center(
           child: ConstrainedBox(
@@ -85,45 +67,6 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
                 children: [
                   const SizedBox(height: 40),
 
-                  // Animated sparkle icon
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: 1.0),
-                    duration: const Duration(milliseconds: 1000),
-                    curve: Curves.elasticOut,
-                    builder: (context, value, child) {
-                      return Transform.scale(
-                        scale: value,
-                        child: child,
-                      );
-                    },
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: widget.isDark
-                              ? [const Color(0xFF6366F1), const Color(0xFFA855F7)]
-                              : [const Color(0xFF4F46E5), const Color(0xFF9333EA)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (widget.isDark ? const Color(0xFFA855F7) : const Color(0xFF4F46E5)).withValues(alpha: 0.3),
-                            blurRadius: 32,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.sparkles,
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
-                  ),
-
                   const SizedBox(height: 32),
 
                   // Greeting with reveal animation
@@ -131,18 +74,22 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
                     opacity: _fadeAnimation,
                     child: SlideTransition(
                       position: _fadeAnimation.drive(
-                        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero),
+                        Tween<Offset>(
+                            begin: const Offset(0, 0.1), end: Offset.zero),
                       ),
                       child: Column(
                         children: [
                           Text(
-                            widget.userName != null && widget.userName!.isNotEmpty
+                            widget.userName != null &&
+                                    widget.userName!.isNotEmpty
                                 ? 'Welcome back, ${widget.userName}'
                                 : 'Start your first lesson',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: isCompact ? 32 : 44,
                               fontWeight: FontWeight.w800,
-                              color: widget.isDark ? Colors.white : const Color(0xFF1E293B),
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : widget.theme.colorScheme.onSurface,
                               letterSpacing: -1,
                               height: 1.1,
                             ),
@@ -175,8 +122,10 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
                       spacing: 12,
                       runSpacing: 12,
                       alignment: WrapAlignment.center,
-                      children: List.generate(widget.suggestions!.length, (index) {
-                        return _buildAnimatedChip(widget.suggestions![index], index);
+                      children:
+                          List.generate(widget.suggestions!.length, (index) {
+                        return _buildAnimatedChip(
+                            widget.suggestions![index], index);
                       }),
                     ),
 
@@ -224,7 +173,7 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           decoration: BoxDecoration(
-            color: widget.isDark ? const Color(0xFF1E293B) : Colors.white,
+            color: widget.isDark ? AppColors.surfaceElevatedDark : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: widget.isDark
@@ -234,7 +183,8 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.05),
+                color:
+                    Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.05),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -252,7 +202,7 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget> with TickerProvider
                   fontWeight: FontWeight.w600,
                   color: widget.isDark
                       ? Colors.white.withValues(alpha: 0.95)
-                      : const Color(0xFF1E293B),
+                      : widget.theme.colorScheme.onSurface,
                 ),
               ),
             ],

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // Ensure you have this
+import '../widgets/gpt_markdown_wrapper.dart';
 
 class MathStepperWidget extends StatefulWidget {
   final List<String> steps;
@@ -163,19 +163,12 @@ class _MathStepperWidgetState extends State<MathStepperWidget> {
     return SizedBox(
       key: ValueKey<int>(_currentStep), // For animation
       width: double.infinity,
-      child: MarkdownBody(
-        data: content,
-        styleSheet: MarkdownStyleSheet(
-          p: GoogleFonts.dmSans(
-            fontSize: 18,
-            height: 1.5,
-            color: theme.colorScheme.onSurface,
-          ),
-          code: GoogleFonts.firaCode(
-            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-            color: theme.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
+      child: StyledGptMarkdown(
+        content,
+        style: GoogleFonts.dmSans(
+          fontSize: 18,
+          height: 1.5,
+          color: theme.colorScheme.onSurface,
         ),
       ),
     );
@@ -204,14 +197,12 @@ class _MathStepperWidgetState extends State<MathStepperWidget> {
             ),
           ),
           const SizedBox(height: 8),
-          MarkdownBody(
-            data: widget.finalAnswer!,
-            styleSheet: MarkdownStyleSheet(
-              p: GoogleFonts.dmSans(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
+          StyledGptMarkdown(
+            widget.finalAnswer!,
+            style: GoogleFonts.dmSans(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
             ),
           ),
         ],

@@ -12,7 +12,7 @@ const en = {
     'hero.h1a': 'Kenya\'s ',
     'hero.h1Grad': '#1 Personalized AI Tutor',
     'hero.h1b': 'for CBC, 8-4-4 & Cambridge IGCSE',
-    'hero.sub': " Kenya's most powerful AI tutor. Get instant homework help with Live Voice, AI-graded compositions, CBC (Early Years - Grade 12), 8-4-4 (Form 1 - Form 4) & Cambridge IGCSE past papers — all in one premium app.",
+    'hero.sub': "Experience Kenya's most advanced AI learning ecosystem. Master CBC, 8-4-4, and Cambridge IGCSE with a personalized 1-on-1 AI tutor, 100,000+ localized resources, and interactive study groups — all in one premium, beautifully designed app.",
     'hero.cta': '🚀 Start Learning Free',
     'hero.explore': 'See Features →',
     'hero.stat.resources': 'Study Resources',
@@ -57,6 +57,18 @@ const en = {
     'features.7.title': 'Live Voice Tutor',
     'features.7.desc': 'Talk directly to your AI tutor for a natural, hands-free learning experience. Perfect for language practice, pronunciation, and quick explanations on the go.',
     'features.7.tags': 'Voice,Real-time,Multimodal,Hands-free',
+
+    'features.8.title': 'AI-Moderated Study Groups',
+    'features.8.desc': 'Study with friends in interactive virtual rooms. An AI moderator guides your session, answers group questions in real-time, and provides a concise meeting recap.',
+    'features.8.tags': 'Groups,Collaboration,AI Moderator,Recaps',
+
+    'features.9.title': 'Multiplayer Learning',
+    'features.9.desc': 'Transform revision into a social experience. Challenge classmates to real-time, gamified quizzes on any topic and climb the national leaderboard.',
+    'features.9.tags': 'Multiplayer,Leaderboards,Quizzes,Competitive',
+
+    'features.10.title': 'Personal Study Vault',
+    'features.10.desc': 'Upload your own PDFs, textbooks, and notes. Our AI indexer organizes your materials and converts them into searchable, interactive study units.',
+    'features.10.tags': 'File Manager,Cloud Sync,PDF Tools,Indexer',
 
     // ── How It Works ──
     'howItWorks.label': '🗺️ How it Works',
@@ -154,14 +166,14 @@ const en = {
     'screenshots.title': 'See TopScore AI',
     'screenshots.titleBr': 'in action.',
     'screenshots.sub': 'A beautifully designed app that puts powerful learning tools at your fingertips.',
-    'screenshots.0.name': 'AI Tutor',
-    'screenshots.0.desc': 'Ask anything — get step-by-step explanations powered by AI.',
-    'screenshots.1.name': 'Resource Library',
-    'screenshots.1.desc': 'Past papers, notes, and exercises organised by subject and grade.',
-    'screenshots.2.name': 'Dashboard',
-    'screenshots.2.desc': 'Track streaks, achievements, and daily progress at a glance.',
-    'screenshots.3.name': 'Smart Revision',
-    'screenshots.3.desc': 'Access specialized revision notes and mock exams for every subject.',
+    'screenshots.0.name': 'AI Tutor Chat',
+    'screenshots.0.desc': 'Chat with your personal AI tutor about any topic, anytime.',
+    'screenshots.1.name': 'Explorer Library',
+    'screenshots.1.desc': 'Access 100,000+ localized curriculum resources organized for you.',
+    'screenshots.2.name': 'Smart Dashboard',
+    'screenshots.2.desc': 'Track your study streaks, tools, and learning progress at a glance.',
+    'screenshots.3.name': 'Secure Access',
+    'screenshots.3.desc': 'Sign in securely to sync your progress across all your devices.',
 
     // ── Pricing ──
     'pricing.label': '💰 Pricing',
@@ -210,7 +222,7 @@ const en = {
     'faq.6.q': 'What subjects does the AI Tutor cover?',
     'faq.6.a': 'The AI Tutor covers Mathematics, Sciences (Biology, Chemistry, Physics), English, Kiswahili, History, Geography, Business Studies, CRE/IRE, and more.',
     'faq.7.q': 'How do I contact support?',
-    'faq.7.a': 'You can reach us via the in-app help centre or email support@topscore-ai.com. We typically respond within 24 hours.',
+    'faq.7.a': 'You can reach us via the in-app help centre or email admin@topscoreapp.ai. We typically respond within 24 hours.',
 
     // ── Video Demo ──
     'video.label': '🎥 See It In Action',
@@ -271,7 +283,7 @@ const en = {
     'contact.sub': 'Have questions or need support? Our team is here to help you succeed with TopScore AI.',
     'contact.whatsapp': 'WhatsApp: 0717273230',
     'contact.telephone': 'Telephone: 0717273230',
-    'contact.email': 'Email: support@topscoreapp.ai',
+    'contact.email': 'Email: admin@topscoreapp.ai',
     'contact.facebook': 'Facebook: TopScore AI',
     'contact.linkedin': 'LinkedIn: TopScore AI',
     'contact.twitter': 'X (Twitter): TopScore AI',

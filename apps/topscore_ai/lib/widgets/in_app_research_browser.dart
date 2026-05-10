@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../constants/colors.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
@@ -56,7 +57,7 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
         children: [
           // Header Bar
           _buildHeader(context, isDark, theme),
-          
+
           // Progress Bar
           if (_progress < 1.0)
             LinearProgressIndicator(
@@ -65,7 +66,7 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
               color: theme.primaryColor,
               minHeight: 2,
             ),
-            
+
           // WebView
           Expanded(
             child: ClipRRect(
@@ -75,7 +76,8 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
                   transparentBackground: true,
                   safeBrowsingEnabled: true,
                 ),
-                onWebViewCreated: (controller) => _webViewController = controller,
+                onWebViewCreated: (controller) =>
+                    _webViewController = controller,
                 onProgressChanged: (controller, progress) {
                   final newProgress = progress / 100.0;
                   if (newProgress.isFinite) {
@@ -94,7 +96,7 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
               ),
             ),
           ),
-          
+
           // Bottom Navigation for WebView
           if (_canGoBack) _buildBottomNavbar(theme, isDark),
         ],
@@ -108,7 +110,9 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.05),
           ),
         ),
       ),
@@ -120,13 +124,16 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 CupertinoIcons.xmark,
                 size: 18,
-                color: isDark ? Colors.white70 : Colors.black54,
+                color: theme.colorScheme.onSurface
+                    .withValues(alpha: 0.8), // Better visibility
               ),
             ),
           ),
@@ -141,7 +148,7 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : Colors.black87,
+                    color: isDark ? Colors.white : theme.colorScheme.onSurface,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -150,7 +157,9 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
                   widget.url,
                   style: TextStyle(
                     fontSize: 10,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                    color: isDark
+                        ? Colors.white38
+                        : AppColors.text.withValues(alpha: 0.38),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -163,11 +172,14 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
           Row(
             children: [
               IconButton(
-                icon: Icon(CupertinoIcons.share, size: 20, color: theme.primaryColor),
-                onPressed: () => SharePlus.instance.share(ShareParams(text: widget.url)),
+                icon: Icon(CupertinoIcons.share,
+                    size: 20, color: theme.primaryColor),
+                onPressed: () =>
+                    SharePlus.instance.share(ShareParams(text: widget.url)),
               ),
               IconButton(
-                icon: Icon(CupertinoIcons.compass, size: 20, color: theme.primaryColor),
+                icon: Icon(CupertinoIcons.compass,
+                    size: 20, color: theme.primaryColor),
                 onPressed: () => launchUrl(Uri.parse(widget.url)),
               ),
             ],
@@ -189,7 +201,9 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.05),
           ),
         ),
       ),
@@ -205,7 +219,9 @@ class _InAppResearchBrowserState extends State<InAppResearchBrowser> {
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white38 : Colors.black38,
+              color: isDark
+                  ? Colors.white38
+                  : AppColors.text.withValues(alpha: 0.38),
             ),
           ),
           IconButton(

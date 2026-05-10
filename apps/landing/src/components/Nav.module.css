@@ -10,16 +10,16 @@
 }
 
 .scrolled {
-    background: rgba(0, 0, 0, 0.9);
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    background: var(--bg);
+    border-bottom-color: var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .inner {
     max-width: 1280px;
     margin: 0 auto;
     padding: 0 32px;
-    height: 72px;
+    height: 80px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -31,17 +31,15 @@
     gap: 12px;
     font-family: var(--font-display);
     font-weight: 800;
-    font-size: 24px;
-    color: #FFFFFF;
+    font-size: 22px;
+    color: var(--primary);
     letter-spacing: -0.01em;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
 }
 
 .logoImg {
-    border-radius: 10px;
+    border-radius: 8px;
     object-fit: contain;
     flex-shrink: 0;
-    box-shadow: 0 0 15px rgba(37, 99, 235, 0.3);
 }
 
 .links {
@@ -51,57 +49,55 @@
 }
 
 .links a {
-    font-size: 14px;
-    font-weight: 500;
-    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
     transition: all 0.2s;
-    opacity: 0.85;
+    opacity: 0.8;
 }
 
 .links a:hover {
-    color: #FFFFFF;
+    color: var(--primary);
     opacity: 1;
-    transform: translateY(-1px);
 }
 
 .active {
-    color: var(--text) !important;
+    color: var(--primary) !important;
     font-weight: 700 !important;
+    opacity: 1 !important;
 }
 
 .cta {
     background: var(--primary) !important;
     color: #fff !important;
     padding: 10px 24px;
-    border-radius: 12px;
+    border-radius: 8px;
     font-size: 14px;
     font-weight: 700;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    transition: all 0.3s ease;
 }
 
 .cta:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.5);
-    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(43, 78, 154, 0.2);
+    filter: brightness(1.05);
 }
 
 .openApp {
-    border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--primary) !important;
+    background: transparent !important;
     padding: 10px 20px;
-    border-radius: 12px;
+    border-radius: 8px;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
     transition: all 0.25s ease;
     white-space: nowrap;
 }
 
 .openApp:hover {
-    background: rgba(255, 255, 255, 0.12) !important;
-    border-color: rgba(255, 255, 255, 0.5) !important;
-    transform: translateY(-1px);
+    background: var(--bg-subtle) !important;
+    border-color: var(--primary) !important;
 }
 
 .burger {
@@ -109,52 +105,51 @@
 }
 
 .drawer {
-    background: rgba(0, 0, 0, 0.95);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg);
+    border-right: 1px solid var(--border);
     width: 300px !important;
 }
 
 .drawerLinks {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
     padding: 32px 16px;
 }
 
 .drawerLink {
-    padding: 16px;
-    font-size: 18px;
+    padding: 14px 16px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-muted);
-    border-radius: 12px;
+    border-radius: 8px;
     transition: all 0.2s;
 }
 
 .drawerActive {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text);
+    background: var(--bg-subtle);
+    color: var(--primary);
 }
 
 .drawerOpenApp {
     margin-top: 16px;
-    border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    color: #fff !important;
+    border: 1px solid var(--border) !important;
+    background: white !important;
+    color: var(--primary) !important;
     padding: 14px;
-    border-radius: 12px;
+    border-radius: 8px;
     text-align: center;
     font-weight: 700;
 }
 
 .drawerCta {
-    margin-top: 24px;
+    margin-top: 12px;
     background: var(--primary);
     color: #fff;
-    padding: 16px;
-    border-radius: 12px;
+    padding: 14px;
+    border-radius: 8px;
     text-align: center;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 @media (max-width: 768px) {

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -136,11 +137,26 @@ class OfflineService {
   }
 
   bool getLiteMode() {
-    if (!_isInitialized) return false;
+    if (!_isInitialized) return true; // Default to true
     if (kIsWeb) {
-      return _prefs.getBool('lite_mode') ?? false;
+      return _prefs.getBool('lite_mode') ?? true;
     }
-    return _settingsBox.get('lite_mode', defaultValue: false);
+    return _settingsBox.get('lite_mode', defaultValue: true);
+  }
+
+  /// Save and persist the user's preferred theme mode.
+  Future<void> saveThemeMode(ThemeMode mode) async {
+    if (!_isInitialized) return;
+    await _prefs.setString('theme_mode', mode.name);
+  }
+
+  /// Retrieve the persisted theme mode. Defaults to system if not set.
+  ThemeMode getThemeMode() {
+    if (!_isInitialized) return ThemeMode.system;
+    final name = _prefs.getString('theme_mode');
+    if (name == null) return ThemeMode.system;
+    return ThemeMode.values
+        .firstWhere((e) => e.name == name, orElse: () => ThemeMode.system);
   }
 
   /// Generic String List Getter (SharedPreferences style)
@@ -170,6 +186,18 @@ class OfflineService {
     await _prefs.remove(key);
   }
 
+  /// Generic Int Getter
+  int? getInt(String key) {
+    if (!_isInitialized) return null;
+    return _prefs.getInt(key);
+  }
+
+  /// Generic Int Setter
+  Future<void> setInt(String key, int value) async {
+    if (!_isInitialized) return;
+    await _prefs.setInt(key, value);
+  }
+
   /// Clear all settings
   Future<void> clearSettings() async {
     if (!_isInitialized) return;
@@ -184,6 +212,10 @@ class OfflineService {
   // ==========================================
 
   /// Get or generate a persistent device-specific identifier.
+  /// Uses the same SharedPreferences key ('device_id') that DeviceIdService
+  /// reads during its migration step, so both services return the same value
+  /// once DeviceIdService has run at least once.
+  /// For the authoritative secure-storage value, use DeviceIdService.get().
   String getDeviceId() {
     if (!_isInitialized) return 'unknown';
     String? id = _prefs.getString('device_id');
@@ -194,34 +226,23 @@ class OfflineService {
     return id;
   }
 
-  /// Get current guest message count for this device.
+  /// Last-known guest message count cached from the server's /usage response.
+  ///
+  /// The backend (TutorAgent guest_limit_manager) is the single source of truth
+  /// for guest quotas — Redis + Firestore + IP fingerprint — and cannot be
+  /// bypassed by clearing app data. This cache exists only to smooth cold-start
+  /// UI; it is WRITTEN from server responses and READ for display hints.
   int getGuestMessageCount() {
     if (!_isInitialized) return 0;
     return _prefs.getInt('guest_message_count') ?? 0;
   }
 
-  /// Increment the guest message count for this device.
-  Future<void> incrementGuestMessageCount() async {
+  /// Persist the server-reported used-count so cold-start UI has a value to
+  /// show before /usage resolves. Called by AuthProvider after every
+  /// UsageService.fetchUsage().
+  Future<void> cacheGuestMessageCount(int used) async {
     if (!_isInitialized) return;
-    final current = getGuestMessageCount();
-    await _prefs.setInt('guest_message_count', current + 1);
-  }
-
-  /// Mark the guest trial as completed manually for this device.
-  Future<void> setGuestLimitReached(bool reached) async {
-    if (!_isInitialized) return;
-    // For compatibility, setting reached=true sets count to 5
-    if (reached) {
-      await _prefs.setInt('guest_message_count', 5);
-    } else {
-      await _prefs.setInt('guest_message_count', 0);
-    }
-  }
-
-  /// Check if this device has reached its guest message limit (3).
-  bool isGuestLimitReached() {
-    if (!_isInitialized) return false;
-    return getGuestMessageCount() >= 5;
+    await _prefs.setInt('guest_message_count', used);
   }
 
   // ── App-visit XP debounce ────────────────────────────────────────────────────
@@ -291,6 +312,4 @@ class OfflineService {
     }
     return null;
   }
-
-
 }

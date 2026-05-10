@@ -70,5 +70,33 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>UIFileSharingEnabled</key>
+		<true/>
+		<key>LSSupportsOpeningDocumentsInPlace</key>
+		<true/>
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>mailto</string>
+		</array>
+		<!-- Camera Permission -->
+		<key>NSCameraUsageDescription</key>
+		<string>TopScore AI needs camera access to scan documents, take photos for homework help, and participate in video study sessions.</string>
+		<!-- Microphone Permission -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>TopScore AI needs microphone access for voice chat with the AI tutor and video study sessions with classmates.</string>
+		<!-- Photo Library Permission -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>TopScore AI needs access to your photos to help you upload images of homework, notes, and study materials.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>TopScore AI needs permission to save study materials, notes, and generated content to your photo library.</string>
+		<!-- Notifications Permission -->
+		<key>NSUserNotificationsUsageDescription</key>
+		<string>TopScore AI sends you study reminders, class notifications, and updates about your learning progress.</string>
+		<!-- Speech Recognition Permission (if using speech-to-text) -->
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>TopScore AI uses speech recognition to help you interact with the AI tutor using your voice.</string>
+		<!-- Location Permission (if needed for future features) -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>TopScore AI may use your location to provide localized content and study resources.</string>
 	</dict>
 </plist>

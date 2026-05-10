@@ -1,41 +1,38 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../../config/app_config.dart';
-import 'chat_media_viewers.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
+
+import '../../config/app_config.dart';
+import 'chat_media_viewers.dart';
+import '../../widgets/gpt_markdown_wrapper.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
 import '../../services/clipboard_service.dart';
 import '../../services/haptics_service.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../widgets/network_aware_image.dart';
 import '../../widgets/gemini_reasoning_view.dart';
 import '../../widgets/math_markdown.dart';
 import '../../widgets/youtube_embed_widget.dart';
 import '../../widgets/quiz_widget.dart';
 import '../../widgets/flashcard_artifact_widget.dart';
 import '../../widgets/math_stepper_widget.dart';
-
 import '../../widgets/shared/video_carousel.dart';
-import '../../utils/markdown/mermaid_builder.dart';
-import '../../utils/markdown/table_builder.dart';
-import '../../utils/markdown/desmos_builder.dart';
-import '../../widgets/desmos_calculator_widget.dart';
 import '../message_model.dart';
 import '../../models/user_model.dart';
 import 'mnemonic_card.dart';
-import '../../widgets/graph_artifact_widget.dart';
 import 'punnett_square_widget.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../widgets/in_app_research_browser.dart';
+import '../../utils/cors_proxy_helper.dart';
+import 'ui_widget_factory.dart';
 
 class ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
@@ -107,37 +104,8 @@ class ChatMessageBubble extends StatefulWidget {
 
 class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   bool isPlaybackError = false;
+  final GlobalKey<SelectableRegionState> _selectableKey = GlobalKey();
 
-  Widget _buildDesmosCalculator(String jsonStr) {
-    try {
-      final data = jsonDecode(jsonStr);
-      final type = data['calculator_type'] ?? data['type'] ?? 'graphing';
-      
-      // Handle both list of strings and comma-separated string
-      List<String> expressions = [];
-      final rawExpressions = data['expressions'] ?? data['expression'];
-      if (rawExpressions is List) {
-        expressions = List<String>.from(rawExpressions);
-      } else if (rawExpressions != null) {
-        expressions = rawExpressions.toString().split(',')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-      }
-
-      final settings = data['settings'] as Map<String, dynamic>?;
-      final viewport = data['viewport'] as Map<String, dynamic>?;
-
-      return DesmosCalculatorWidget(
-        calculatorType: type == 'desmos_config' ? 'graphing' : type,
-        expressions: expressions,
-        settings: settings,
-        viewport: viewport,
-      );
-    } catch (e) {
-      return const SizedBox.shrink();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,10 +150,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
   Widget _buildUserBubble(BuildContext context, ThemeData theme, bool isDark,
       SettingsProvider settings) {
-    final hasLegacyAttachment = widget.message.fileId != null || 
-                               widget.message.imageUrl != null || 
-                               extractAttachedDocumentUrl(widget.message.text) != null;
-    final hasNewAttachments = widget.message.attachments != null && widget.message.attachments!.isNotEmpty;
+    final hasLegacyAttachment = widget.message.fileId != null ||
+        widget.message.imageUrl != null ||
+        extractAttachedDocumentUrl(widget.message.text) != null;
+    final hasNewAttachments = widget.message.attachments != null &&
+        widget.message.attachments!.isNotEmpty;
     final hasAttachment = hasLegacyAttachment || hasNewAttachments;
 
     return Align(
@@ -198,41 +167,48 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (hasAttachment) _buildAttachmentsCollection(context, theme, isDark),
+            if (hasAttachment)
+              _buildAttachmentsCollection(context, theme, isDark),
             const SizedBox(height: 4),
-            if (_cleanContent(widget.message.text).trim().isNotEmpty || 
-                (widget.message.audioUrl != null && widget.message.text == '🎤 Audio Message'))
+            if (_cleanContent(widget.message.text).trim().isNotEmpty ||
+                (widget.message.audioUrl != null &&
+                    widget.message.text == '🎤 Audio Message'))
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E3A8A).withValues(alpha: 0.35)
-                      : theme.colorScheme.primary,
-                  border: isDark
-                      ? Border.all(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                          width: 1.5,
-                        )
-                      : null,
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? [
+                            theme.colorScheme.primary.withValues(alpha: 0.2),
+                            theme.colorScheme.primary.withValues(alpha: 0.1),
+                          ]
+                        : [
+                            theme.colorScheme.primary,
+                            theme.colorScheme.primary.withValues(alpha: 0.85),
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                    bottomRight: Radius.circular(4),
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(6),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: (isDark
-                          ? Colors.black.withValues(alpha: 0.2)
-                          : theme.colorScheme.primary.withValues(alpha: 0.15)),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      color: theme.colorScheme.primary
+                          .withValues(alpha: isDark ? 0.2 : 0.15),
+                      blurRadius: 15,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: Builder(
                   builder: (context) {
-                    final cleanedText = _cleanContent(widget.message.text).trim();
+                    final cleanedText =
+                        _cleanContent(widget.message.text).trim();
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -246,6 +222,10 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                                 widget.message.text == '🎤 Audio Message') &&
                             cleanedText.isNotEmpty)
                           _buildMarkdown(context, theme, isDark, settings),
+                        // Note: UI widgets are rendered inline by _buildMarkdown via
+                        // the :::ui-widget|id::: placeholder, and unmatched widgets
+                        // fall through to _buildWidgetFallbackArea. Rendering them
+                        // here again would duplicate every widget.
                       ],
                     );
                   },
@@ -304,9 +284,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-  Widget _buildAttachmentsCollection(BuildContext context, ThemeData theme, bool isDark) {
+  Widget _buildAttachmentsCollection(
+      BuildContext context, ThemeData theme, bool isDark) {
     // If we have new structured attachments, use them
-    if (widget.message.attachments != null && widget.message.attachments!.isNotEmpty) {
+    if (widget.message.attachments != null &&
+        widget.message.attachments!.isNotEmpty) {
       return Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -326,32 +308,53 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     }
 
     // Fallback to legacy single attachment
-    final fileUrl = widget.message.imageUrl ?? extractAttachedDocumentUrl(widget.message.text) ?? '';
-    final fileType = widget.message.fileType ?? (fileUrl.isNotEmpty ? (_isImageUrl(fileUrl) ? 'image' : 'pdf') : 'document');
+    final fileUrl = widget.message.imageUrl ??
+        extractAttachedDocumentUrl(widget.message.text) ??
+        '';
+    final fileType = widget.message.fileType ??
+        (fileUrl.isNotEmpty
+            ? (_isImageUrl(fileUrl) ? 'image' : 'pdf')
+            : 'document');
     final fileId = widget.message.fileId ?? (fileUrl.isNotEmpty ? 'FILE' : '');
     final fileName = widget.message.fileName ?? 'Document';
 
-    return _buildAttachmentChip(context, theme, isDark, 
-      url: fileUrl, type: fileType, id: fileId, name: fileName);
+    return _buildAttachmentChip(context, theme, isDark,
+        url: fileUrl, type: fileType, id: fileId, name: fileName);
   }
 
-  Widget _buildAttachmentChip(BuildContext context, ThemeData theme, bool isDark,
-      {required String url, required String type, required String id, required String name}) {
+  Widget _buildAttachmentChip(
+      BuildContext context, ThemeData theme, bool isDark,
+      {required String url,
+      required String type,
+      required String id,
+      required String name}) {
     final isRawImage = widget.message.imageUrl != null &&
         (_isImageUrl(widget.message.imageUrl!) ||
             widget.message.imageUrl!.contains('FirebaseStorage'));
     final isImage = type.contains('image') || isRawImage;
-    
+
     return GestureDetector(
       onTap: () => _handleAttachmentTap(context, url, type, name),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1F22) : Colors.grey[200],
+          color: isDark 
+            ? Colors.white.withValues(alpha: 0.05) 
+            : Colors.black.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.05),
           ),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -366,8 +369,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     width: 32,
                     height: 32,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(color: Colors.grey[800], child: const Icon(CupertinoIcons.photo, size: 16)),
-                    errorWidget: (context, url, error) => const Icon(CupertinoIcons.photo, size: 16),
+                    placeholder: (context, url) => Container(
+                        color: Colors.grey[800],
+                        child: const Icon(CupertinoIcons.photo, size: 16)),
+                    errorWidget: (context, url, error) =>
+                        const Icon(CupertinoIcons.photo, size: 16),
                   ),
                 ),
               )
@@ -396,7 +402,8 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : Colors.black87,
+                      color:
+                          isDark ? Colors.white : theme.colorScheme.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -406,7 +413,10 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                       name,
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? Colors.white70 : Colors.black54,
+                        color: isDark
+                            ? Colors.white70
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -418,7 +428,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
             Icon(
               CupertinoIcons.chevron_right,
               size: 14,
-              color: isDark ? Colors.white38 : Colors.black26,
+              color: isDark
+                  ? Colors.white38
+                  : AppColors.text.withValues(alpha: 0.26),
             ),
           ],
         ),
@@ -426,55 +438,56 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-  void _handleAttachmentTap(BuildContext context, String url, String type, String name) {
+  void _handleAttachmentTap(
+      BuildContext context, String url, String type, String name) {
     if (url.isEmpty) return;
-    
+
     if (type == 'image') {
-       Navigator.of(context).push(
-         CupertinoPageRoute(builder: (_) => FullScreenImageViewer(
-           imageUrl: url,
-           heroTag: 'attachment_$url',
-         ))
-       );
+      Navigator.of(context).push(CupertinoPageRoute(
+          builder: (_) => FullScreenImageViewer(
+                imageUrl: url,
+                heroTag: 'attachment_$url',
+              )));
     } else if (type == 'pdf') {
-       Navigator.of(context).push(
-         CupertinoPageRoute(builder: (_) => PdfViewerScreen(url: url, title: name))
-       );
+      Navigator.of(context).push(CupertinoPageRoute(
+          builder: (_) => PdfViewerScreen(url: url, title: name)));
     } else if (type == 'docx' || type == 'doc') {
-       _showConversionAndViewer(context, url, name);
+      _showConversionAndViewer(context, url, name);
     } else {
-       InAppResearchBrowser.show(context, url, title: name);
+      InAppResearchBrowser.show(context, url, title: name);
     }
   }
 
-  Future<void> _showConversionAndViewer(BuildContext context, String url, String name) async {
+  Future<void> _showConversionAndViewer(
+      BuildContext context, String url, String name) async {
     showCupertinoDialog(
       context: context,
       builder: (context) => const CupertinoActivityIndicator(radius: 20),
     );
-    
+
     try {
       final convertedUrl = await _convertToPdf(url, context);
       if (!context.mounted) return;
       Navigator.pop(context); // Close loading
-      
+
       if (convertedUrl != null) {
-        Navigator.of(context).push(
-          CupertinoPageRoute(builder: (_) => PdfViewerScreen(url: convertedUrl, title: name))
-        );
+        Navigator.of(context).push(CupertinoPageRoute(
+            builder: (_) => PdfViewerScreen(url: convertedUrl, title: name)));
       }
     } catch (e) {
       if (!context.mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Conversion failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Conversion failed: $e')));
     }
   }
 
-  Future<String?> _convertToPdf(String originalUrl, BuildContext context) async {
+  Future<String?> _convertToPdf(
+      String originalUrl, BuildContext context) async {
     final authProvider = context.read<AuthProvider>();
     if (!context.mounted) return null;
     final userId = authProvider.userModel?.uid ?? 'guest';
-    
+
     final response = await http.post(
       Uri.parse('${AppConfig.backendBaseUrl}/documents/convert-from-url'),
       headers: {'Content-Type': 'application/json'},
@@ -483,7 +496,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
         'user_id': userId,
       }),
     );
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['pdf_url'];
@@ -502,244 +515,171 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-                padding: const EdgeInsets.only(bottom: 6, left: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDark ? const Color(0xFF1E1F22) : Colors.white,
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.black.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          width: 22,
-                          height: 22,
-                          fit: BoxFit.cover,
-                        ),
+              padding: const EdgeInsets.only(
+                  top: 8.0, bottom: 24.0, left: 4.0, right: 4.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // A small, clean TopScore icon next to the AI text
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.03),
+                    ),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 18,
+                        height: 18,
+                        fit: BoxFit.contain,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'TopScore AI',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                      ),
-                    ),
-                    if (widget.message.isKicdCertified) ...[
-                      const SizedBox(width: 8),
-                      _buildKicdBadge(isDark),
-                    ],
-                  ],
-                ),
-              ),
-
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                    bottomLeft: Radius.circular(4),
-                    bottomRight: Radius.circular(20),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if ((widget.isStreaming || widget.message.isThinking) &&
-                        widget.message.text.isEmpty &&
-                        (widget.message.reasoning == null ||
-                            widget.message.reasoning!.isEmpty))
-                      _ThinkingSkeleton(
-                        isDark: isDark, 
-                        status: widget.status ?? (widget.message.isThinking ? "Thinking..." : null)
-                      ),
-                    if (widget.message.reasoning != null &&
-                        widget.message.reasoning!.isNotEmpty)
-                      TopScoreReasoningView(
-                        content: widget.message.reasoning!,
-                        isThinking: widget.message.text.isEmpty,
-                      ),
-                    if (widget.message.replyToText != null)
-                      _buildReplyPreview(theme, false),
-                    if (widget.message.text.isNotEmpty)
-                      _buildMarkdown(context, theme, isDark, settings),
-                    if (widget.isStreaming && widget.message.text.isNotEmpty)
-                      const _StreamingCursor(),
-                  ],
-                ),
-              ),
-
-              if (widget.message.quizDataJson != null)
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: QuizWidget(
-                        quizData: _parseQuizData(widget.message.quizDataJson!),
-                        onComplete: (score) {
-
-
-                        },
-                      ),
-                    ),
-                    _buildArtifactActions(
-                      context,
-                      theme,
-                      'quiz',
-                      _parseQuizData(widget.message.quizDataJson!),
-                    ),
-                  ],
-                ),
-              if (widget.message.flashcardDataJson != null)
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: FlashcardArtifactWidget(
-                        flashcardData:
-                            _parseFlashcardData(widget.message.flashcardDataJson!),
-                      ),
-                    ),
-                    _buildArtifactActions(
-                      context,
-                      theme,
-                      'flashcards',
-                      _parseFlashcardData(widget.message.flashcardDataJson!),
-                    ),
-                  ],
-                ),
-              if (widget.message.mnemonicDataJson != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: MnemonicCard(
-                    mnemonicDataJson: widget.message.mnemonicDataJson!,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: widget.message.status == MessageStatus.error
+                        ? _buildAiErrorCard(theme, isDark)
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((widget.isStreaming ||
+                                      widget.message.isThinking) &&
+                                  widget.message.text.isEmpty &&
+                                  (widget.message.reasoning == null ||
+                                      widget.message.reasoning!.isEmpty))
+                                _ThinkingSkeleton(
+                                    isDark: isDark,
+                                    status: widget.status ??
+                                        (widget.message.isThinking
+                                            ? "Thinking..."
+                                            : null)),
+                              if (widget.message.reasoning != null &&
+                                  widget.message.reasoning!.isNotEmpty)
+                                TopScoreReasoningView(
+                                  content: widget.message.reasoning!,
+                                  isThinking: widget.message.text.isEmpty,
+                                ),
+                              if (widget.message.replyToText != null)
+                                _buildReplyPreview(theme, false),
+                              if (widget.message.text.isNotEmpty)
+                                _buildMarkdown(
+                                    context, theme, isDark, settings),
+                              if (widget.isStreaming &&
+                                  widget.message.text.isNotEmpty)
+                                const _StreamingCursor(),
+                            ],
+                          ),
                   ),
-                ),
-              if (widget.message.mathSteps != null &&
-                  widget.message.mathSteps!.isNotEmpty)
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: MathStepperWidget(
-                        steps: widget.message.mathSteps!,
-                        finalAnswer: widget.message.mathAnswer,
-                      ),
-                    ),
-                    _buildArtifactActions(
-                      context,
-                      theme,
-                      'math_steps',
-                      {
-                        'steps': widget.message.mathSteps,
-                        'answer': widget.message.mathAnswer
+                ],
+              ),
+            ),
+
+            if (widget.message.quizDataJson != null)
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: QuizWidget(
+                      quizData: _parseQuizData(widget.message.quizDataJson!),
+                      onComplete: (score) {
+                        final auth = context.read<AuthProvider>();
+                        if (score > 0) {
+                          auth.awardXp(score * 10, 'AI Quiz Result');
+                        }
                       },
                     ),
-                  ],
-                ),
-              if (widget.message.videos != null &&
-                  widget.message.videos!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: VideoCarousel(videos: widget.message.videos!),
-                ),
-              if (widget.message.desmosDataJson != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _buildDesmosCalculator(widget.message.desmosDataJson!),
-                ),
-              if (widget.message.graphDataJson != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: GraphArtifactWidget(
-                    graphDataJson: widget.message.graphDataJson!,
                   ),
-                ),
-              if (widget.message.punnettDataJson != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: PunnettSquareWidget(
-                    dataJson: widget.message.punnettDataJson!,
+                  _buildArtifactActions(
+                    context,
+                    theme,
+                    'quiz',
+                    _parseQuizData(widget.message.quizDataJson!),
                   ),
+                ],
+              ),
+            if (widget.message.flashcardDataJson != null)
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: FlashcardArtifactWidget(
+                      flashcardData: _parseFlashcardData(
+                          widget.message.flashcardDataJson!),
+                    ),
+                  ),
+                  _buildArtifactActions(
+                    context,
+                    theme,
+                    'flashcards',
+                    _parseFlashcardData(widget.message.flashcardDataJson!),
+                  ),
+                ],
+              ),
+            if (widget.message.mnemonicDataJson != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: MnemonicCard(
+                  mnemonicDataJson: widget.message.mnemonicDataJson!,
                 ),
+              ),
+            if (widget.message.mathSteps != null &&
+                widget.message.mathSteps!.isNotEmpty)
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: MathStepperWidget(
+                      steps: widget.message.mathSteps!,
+                      finalAnswer: widget.message.mathAnswer,
+                    ),
+                  ),
+                  _buildArtifactActions(
+                    context,
+                    theme,
+                    'math_steps',
+                    {
+                      'steps': widget.message.mathSteps,
+                      'answer': widget.message.mathAnswer
+                    },
+                  ),
+                ],
+              ),
+            if (widget.message.videos != null &&
+                widget.message.videos!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: VideoCarousel(videos: widget.message.videos!),
+              ),
+            if (widget.message.punnettDataJson != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: PunnettSquareWidget(
+                  dataJson: widget.message.punnettDataJson!,
+                ),
+              ),
+            // Note: UI widgets are rendered inline by _buildMarkdown via
+            // the :::ui-widget|id::: placeholder, and unmatched widgets
+            // fall through to _buildWidgetFallbackArea. Rendering them
+            // here again would duplicate every widget.
+            if (widget.message.sources != null &&
+                widget.message.sources!.isNotEmpty)
+              _buildSources(theme, isDark),
 
-              if (widget.message.sources != null &&
-                  widget.message.sources!.isNotEmpty)
-                _buildSources(theme, isDark),
-
-              if (!widget.message.isUser &&
-                  widget.message.isComplete &&
-                  !widget.isStreaming)
-                _buildAiActions(theme),
-            ],
-          ),
+            if (!widget.message.isUser &&
+                widget.message.isComplete &&
+                !widget.isStreaming)
+              _buildAiActions(theme),
+          ],
         ),
-      );
-  }
-
-  Widget _buildKicdBadge(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFFFFD700), const Color(0xFFFFA500)]
-              : [const Color(0xFF003399), const Color(0xFF0066CC)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            CupertinoIcons.checkmark_seal_fill,
-            color: isDark ? Colors.black : Colors.white,
-            size: 12,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'KICD Certified',
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-              color: isDark ? Colors.black : Colors.white,
-            ),
-          ),
-        ],
       ),
     );
   }
+
+  // _buildKicdBadge removed as it is no longer referenced in the borderless AI response design
 
   Widget _buildVoicePlayer(BuildContext context, ThemeData theme) {
     return Container(
@@ -815,255 +755,305 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-
-
   Widget _buildUserActions(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSmallActionIcon(
-            CupertinoIcons.pencil,
-            widget.onEdit,
-            theme,
+          _TactileActionIcon(
+            icon: CupertinoIcons.pencil,
+            onTap: widget.onEdit,
+            theme: theme,
             tooltip: 'Edit',
+            isSmall: true,
           ),
-          _buildSmallActionIcon(
-            CupertinoIcons.doc_on_clipboard,
-            widget.onCopy,
-            theme,
+          _TactileActionIcon(
+            icon: CupertinoIcons.doc_on_clipboard,
+            onTap: widget.onCopy,
+            theme: theme,
             tooltip: 'Copy',
+            isCopy: true,
+            isSmall: true,
           ),
         ],
+      ),
+    );
+  }
+
+
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (_) => FullScreenImageViewer(
+          imageUrl: imageUrl,
+          heroTag: 'msg_img_$imageUrl',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYouTubeOrTextLink(
+      BuildContext context, String text, String url) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (url.toLowerCase().contains('youtube.com') ||
+        url.toLowerCase().contains('youtu.be')) {
+      final videoId = YoutubePlayerController.convertUrlToId(url);
+      if (videoId != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () => InAppResearchBrowser.show(context, url, title: text),
+              child: Text(
+                text.isEmpty ? url : text,
+                style: GoogleFonts.nunito(
+                  color: Colors.blueAccent,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+            SingleYouTubeCard(
+              videoId: videoId,
+              url: url,
+              title: text.isNotEmpty ? text : null,
+              isDark: isDark,
+            ),
+          ],
+        );
+      }
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (url.toLowerCase().contains('.pdf') ||
+            url.toLowerCase().contains('.docx') ||
+            url.toLowerCase().contains('.doc')) {
+          final type = url.toLowerCase().contains('.pdf') ? 'pdf' : 'docx';
+          _handleAttachmentTap(context, url, type, text);
+        } else if (url.startsWith('/')) {
+          // Internal App Navigation
+          context.push(url);
+        } else {
+          // External/Web Research
+          InAppResearchBrowser.show(context, url, title: text);
+        }
+      },
+      child: Text(
+        text,
+        style: GoogleFonts.nunito(
+          color: Colors.blueAccent,
+          decoration: TextDecoration.underline,
+        ),
       ),
     );
   }
 
   Widget _buildMarkdown(BuildContext context, ThemeData theme, bool isDark,
       SettingsProvider settings) {
-    final markdownStyle = MarkdownStyleSheet(
-      p: GoogleFonts.nunito(
-        fontSize: settings.fontSize + 2,
-        fontWeight: FontWeight.w500,
-        height: settings.lineHeight,
-        color: widget.message.isUser ? Colors.white : theme.colorScheme.onSurface,
-      ),
-      h1: GoogleFonts.poppins(
-        fontSize: 24,
-        fontWeight: FontWeight.w800,
-        color: theme.primaryColor,
-      ),
-      h2: GoogleFonts.poppins(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        color: theme.primaryColor.withValues(alpha: 0.8),
-      ),
-      h3: GoogleFonts.poppins(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
-        color: theme.colorScheme.onSurface,
-      ),
-      strong: const TextStyle(fontWeight: FontWeight.bold),
-      em: const TextStyle(fontStyle: FontStyle.italic),
-      listBullet: GoogleFonts.poppins(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: theme.primaryColor),
-      listIndent: 24.0,
-      blockquote: GoogleFonts.nunito(
-        fontSize: 15,
-        fontStyle: FontStyle.italic,
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-      ),
-      blockquoteDecoration: BoxDecoration(
-        border: Border(left: BorderSide(color: theme.primaryColor, width: 4)),
-        color: theme.primaryColor.withValues(alpha: 0.05),
-      ),
-      code: GoogleFonts.firaCode(
-        fontSize: 14,
-        backgroundColor: isDark
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.08),
-        color: isDark ? Colors.tealAccent : Colors.teal.shade800,
-      ),
-      codeblockPadding: EdgeInsets.zero,
-      codeblockDecoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      tableHead: GoogleFonts.poppins(
-        fontWeight: FontWeight.w700,
-        fontSize: 15,
-        color: theme.primaryColor,
-      ),
-      tableBody: GoogleFonts.nunito(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: widget.message.isUser ? Colors.white : theme.colorScheme.onSurface,
-      ),
-      tableBorder: TableBorder.all(
-        color: theme.dividerColor.withValues(alpha: 0.15),
-        width: 1,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      tableCellsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      tableCellsDecoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.black.withValues(alpha: 0.01),
-      ),
-      tableHeadAlign: TextAlign.center,
+    final baseStyle = GoogleFonts.nunito(
+      fontSize: settings.fontSize + 2,
+      fontWeight: FontWeight.w500,
+      height: widget.message.isUser ? settings.lineHeight : 1.6,
+      color: widget.message.isUser
+          ? Colors.white
+          : theme.colorScheme.onSurface.withValues(alpha: 0.9),
     );
 
-    return MarkdownBody(
-      data: _cleanContent(widget.message.text),
-      selectable: true,
-      softLineBreak: true,
-      sizedImageBuilder: (config) {
-        final imageUrl = config.uri.toString();
-        Widget image;
-        if (config.uri.scheme == 'http' || config.uri.scheme == 'https') {
-          image = NetworkAwareImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.contain,
-            width: config.width,
-            height: config.height,
-          );
-        } else {
-          image = NetworkAwareImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.contain,
-            width: config.width,
-            height: config.height,
-          );
-        }
+    final content = _cleanContent(widget.message.text);
+    final widgetRegex = RegExp(r':::ui-widget\|([a-f0-9-]+):::');
 
-        return GestureDetector(
-          onTap: () {
-            Navigator.of(context).push(
-              CupertinoPageRoute(
-                builder: (_) => FullScreenImageViewer(
-                  imageUrl: imageUrl,
-                  heroTag: 'msg_img_$imageUrl',
+    final List<UiWidgetData> allWidgets = widget.message.uiWidgets ?? [];
+    final Set<String> renderedWidgetIds = {};
+
+    if (!content.contains(widgetRegex)) {
+      return SelectionArea(
+        key: _selectableKey,
+        contextMenuBuilder: _buildContextMenu,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StyledGptMarkdown(
+              content,
+              style: baseStyle,
+              imageBuilder: (context, url) =>
+                  _buildGptImage(context, url, isDark),
+              linkBuilder: (context, span, url, style) =>
+                  _buildYouTubeOrTextLink(context, span.toPlainText(), url),
+              codeBuilder: (context, name, code, closed) => _CodeBlockWidget(
+                code: code,
+                language: name,
+                isDark: isDark,
+              ),
+            ),
+            // Fallback: Render all widgets at bottom if No placeholders found
+            if (allWidgets.isNotEmpty)
+              _buildWidgetFallbackArea(context, allWidgets, renderedWidgetIds),
+          ],
+        ),
+      );
+    }
+
+    // New Side-Channel Architecture: Split and render inline
+    final List<String> segments = content.split(widgetRegex);
+    final List<RegExpMatch> matches = widgetRegex.allMatches(content).toList();
+
+    return SelectionArea(
+      key: _selectableKey,
+      contextMenuBuilder: _buildContextMenu,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < segments.length; i++) ...[
+            if (segments[i].trim().isNotEmpty)
+              StyledGptMarkdown(
+                segments[i],
+                style: baseStyle,
+                imageBuilder: (context, url) =>
+                    _buildGptImage(context, url, isDark),
+                linkBuilder: (context, span, url, style) =>
+                    _buildYouTubeOrTextLink(context, span.toPlainText(), url),
+                codeBuilder: (context, name, code, closed) => _CodeBlockWidget(
+                  code: code,
+                  language: name,
+                  isDark: isDark,
                 ),
               ),
-            );
-          },
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Hero(
-                    tag: 'msg_img_$imageUrl',
-                    child: image,
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: _buildSmallFloatingAction(
-                    CupertinoIcons.arrow_down_circle_fill,
-                    () => SharePlus.instance.share(ShareParams(text: imageUrl)),
-                    theme,
-                    tooltip: 'Download or Share',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      builders: {
-        'latex': LatexElementBuilder(),
-        'mermaid': MermaidElementBuilder(),
-        'interactive-graph': InteractiveGraphElementBuilder(),
-        'table': MarkdownTableBuilder(context, markdownStyle),
-        'a': YouTubeLinkBuilder(context, isDark,
-            isStreaming: widget.isStreaming),
-        'pre': _CodeBlockBuilder(isDark: isDark),
-      },
-      extensionSet: md.ExtensionSet(
-        [...md.ExtensionSet.gitHubFlavored.blockSyntaxes, MermaidBlockSyntax()],
-        [
-          md.EmojiSyntax(),
-          LatexSyntax(),
-          InteractiveGraphSyntax(),
-          ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+            if (i < matches.length) ...[
+              _buildSideChannelWidget(context, matches[i].group(1)!),
+              () {
+                renderedWidgetIds.add(matches[i].group(1)!);
+                return const SizedBox.shrink();
+              }(),
+            ],
+          ],
+          // Fallback: Render any widgets that weren't captured inline
+          _buildWidgetFallbackArea(context, allWidgets, renderedWidgetIds),
         ],
       ),
-      styleSheet: markdownStyle,
-      onTapLink: (text, href, title) {
-        if (href != null) {
-          if (href.toLowerCase().contains('youtube.com') || href.toLowerCase().contains('youtu.be')) {
-            String? videoId = YoutubePlayerController.convertUrlToId(href);
-            if (videoId != null) {
-              _showInAppYouTubePlayer(context, videoId);
-              return;
-            }
-          }
-          
-          if (href.toLowerCase().contains('.pdf') || 
-              href.toLowerCase().contains('.docx') || 
-              href.toLowerCase().contains('.doc')) {
-            final type = href.toLowerCase().contains('.pdf') ? 'pdf' : 'docx';
-            _handleAttachmentTap(context, href, type, text);
-          } else {
-            InAppResearchBrowser.show(context, href, title: text);
-          }
-        }
-      },
     );
   }
 
-  void _showInAppYouTubePlayer(BuildContext context, String videoId) {
-    final controller = YoutubePlayerController.fromVideoId(
-      videoId: videoId,
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        playsInline: true,
-        strictRelatedVideos: true,
+  Widget _buildWidgetFallbackArea(BuildContext context,
+      List<UiWidgetData> allWidgets, Set<String> renderedIds) {
+    final remaining = allWidgets
+        .where((w) => w.id != null && !renderedIds.contains(w.id))
+        .toList();
+    if (remaining.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        children: remaining
+            .map((w) => _buildSideChannelWidget(context, w.id!))
+            .toList(),
       ),
     );
+  }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              YoutubePlayer(
-                controller: controller,
-                aspectRatio: 16 / 9,
-              ),
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  "TopScore AI Study Mode",
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+  Widget _buildSideChannelWidget(BuildContext context, String widgetId) {
+    // Look up the actual widget data by its unique ID
+    final widgets = widget.message.uiWidgets ?? [];
+
+    // We cast to dynamic to allow firstWhere to work smoothly across model variants
+    // Use try-catch instead of orElse to avoid type issues
+    dynamic matchingWidget;
+    try {
+      matchingWidget = widgets.isEmpty
+          ? null
+          : (widgets as List).firstWhere((w) => w.id == widgetId);
+    } catch (e) {
+      matchingWidget = null;
+    }
+
+    if (matchingWidget == null) {
+      // If the text arrives before the side-channel data, show a shimmering placeholder
+      return _ThinkingSkeleton(
+        isDark: Theme.of(context).brightness == Brightness.dark,
+      );
+    }
+
+    // Success: Dispatch to the factory for specialized rendering (Table, Image, etc.)
+    return UiWidgetFactory(jsonConfig: jsonEncode(matchingWidget.toJson()));
+  }
+
+  Widget _buildContextMenu(
+      BuildContext context, SelectableRegionState selectableRegionState) {
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: selectableRegionState.contextMenuAnchors,
+      buttonItems: [
+        ...selectableRegionState.contextMenuButtonItems,
+        ContextMenuButtonItem(
+          label: 'Select All',
+          onPressed: () {
+            selectableRegionState.selectAll();
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGptImage(BuildContext context, String url, bool isDark) {
+    // Reject obviously malformed URLs before we prepend backendBaseUrl and issue
+    // a doomed network request. gpt_markdown occasionally mis-parses embedded
+    // tool output like `[IMAGE_FOUND] ![alt](actual_url)` and hands the whole
+    // blob in as the "url" — which used to produce 404s against the backend.
+    final trimmed = url.trim();
+    if (trimmed.isEmpty ||
+        trimmed.contains(' ') ||
+        trimmed.contains('\n') ||
+        trimmed.contains('[') ||
+        trimmed.contains(']') ||
+        trimmed.contains('!')) {
+      return const SizedBox.shrink();
+    }
+
+    var imageUrl = trimmed;
+    // Resolve relative URLs from backend
+    if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
+      final base = AppConfig.backendBaseUrl;
+      imageUrl = base + (imageUrl.startsWith('/') ? '' : '/') + imageUrl;
+    }
+
+    final sanitizedUrl = CorsProxyHelper.getCorsProxyUrl(imageUrl);
+
+    return GestureDetector(
+      onTap: () => _showFullScreenImage(context, sanitizedUrl),
+      child: Hero(
+        tag: 'msg_img_$sanitizedUrl',
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CachedNetworkImage(
+            imageUrl: sanitizedUrl,
+            httpHeaders: CorsProxyHelper.standardHeaders,
+            fit: BoxFit.contain,
+            placeholder: (pContext, pUrl) => Shimmer.fromColors(
+              baseColor: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.grey[300]!,
+              highlightColor: isDark
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100]!,
+              child: Container(
+                height: 200,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              )
-            ],
+              ),
+            ),
+            errorWidget: (eContext, eUrl, error) => Container(
+              height: 150,
+              color: isDark ? Colors.grey[900] : Colors.grey[200],
+              child: const Center(child: Icon(Icons.broken_image)),
+            ),
           ),
-        );
-      },
-    ).then((value) {
-      controller.close();
-    });
+        ),
+      ),
+    );
   }
 
   Widget _buildAiActions(ThemeData theme) {
@@ -1077,29 +1067,25 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
               widget.isTtsSpeaking)
             ..._buildTtsControls(theme)
           else
-            _buildActionIcon(
-              CupertinoIcons.speaker_2,
-              () => widget.onSpeak(widget.message.text),
-              theme,
+            _TactileActionIcon(
+              icon: CupertinoIcons.speaker_2,
+              onTap: () => widget.onSpeak(widget.message.text),
+              theme: theme,
               tooltip: 'Read aloud',
             ),
-          _buildActionIcon(CupertinoIcons.doc_on_doc, widget.onCopy, theme,
-              tooltip: 'Copy'),
-          _buildActionIcon(
-              CupertinoIcons.arrow_clockwise, widget.onRegenerate, theme,
-              tooltip: 'Regenerate'),
-          _buildActionIcon(
-            widget.message.isBookmarked
-                ? CupertinoIcons.bookmark_fill
-                : CupertinoIcons.bookmark,
-            widget.onToggleBookmark,
-            theme,
-            tooltip: 'Bookmark',
-            color: widget.message.isBookmarked ? Colors.amber : null,
+          _TactileActionIcon(
+            icon: CupertinoIcons.doc_on_doc,
+            onTap: widget.onCopy,
+            theme: theme,
+            tooltip: 'Copy',
+            isCopy: true,
           ),
-          _buildActionIcon(CupertinoIcons.share, widget.onShare, theme,
-              tooltip: 'Share'),
-
+          _TactileActionIcon(
+            icon: CupertinoIcons.arrow_clockwise,
+            onTap: widget.onRegenerate,
+            theme: theme,
+            tooltip: 'Regenerate',
+          ),
           Container(
             width: 1,
             height: 16,
@@ -1108,18 +1094,17 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 ? Colors.white.withValues(alpha: 0.1)
                 : Colors.black.withValues(alpha: 0.2),
           ),
-
-          _buildActionIcon(
-            CupertinoIcons.hand_thumbsup,
-            () => widget.onFeedback(1),
-            theme,
+          _TactileActionIcon(
+            icon: CupertinoIcons.hand_thumbsup,
+            onTap: () => widget.onFeedback(1),
+            theme: theme,
             isActive: widget.message.feedback == 1,
             color: widget.message.feedback == 1 ? AppColors.accentTeal : null,
           ),
-          _buildActionIcon(
-            CupertinoIcons.hand_thumbsdown,
-            () => widget.onFeedback(-1),
-            theme,
+          _TactileActionIcon(
+            icon: CupertinoIcons.hand_thumbsdown,
+            onTap: () => widget.onFeedback(-1),
+            theme: theme,
             isActive: widget.message.feedback == -1,
             color: widget.message.feedback == -1 ? Colors.redAccent : null,
           ),
@@ -1131,110 +1116,31 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   List<Widget> _buildTtsControls(ThemeData theme) {
     return [
       if (widget.isTtsPaused)
-        _buildActionIcon(
-          CupertinoIcons.play_fill,
-          widget.onResumeTts,
-          theme,
+        _TactileActionIcon(
+          icon: CupertinoIcons.play_fill,
+          onTap: widget.onResumeTts,
+          theme: theme,
           isActive: true,
           color: AppColors.googleBlue,
         )
       else
-        _buildActionIcon(
-          CupertinoIcons.pause_fill,
-          widget.onPauseTts,
-          theme,
+        _TactileActionIcon(
+          icon: CupertinoIcons.pause_fill,
+          onTap: widget.onPauseTts,
+          theme: theme,
           isActive: true,
           color: AppColors.googleBlue,
         ),
-      _buildActionIcon(
-        CupertinoIcons.stop_fill,
-        widget.onStopTts,
-        theme,
+      _TactileActionIcon(
+        icon: CupertinoIcons.stop_fill,
+        onTap: widget.onStopTts,
+        theme: theme,
         isActive: true,
         color: Colors.redAccent,
       ),
     ];
   }
 
-  Widget _buildActionIcon(
-    IconData icon,
-    VoidCallback onTap,
-    ThemeData theme, {
-    String? tooltip,
-    bool isActive = false,
-    Color? color,
-  }) {
-    final finalColor = color ??
-        (isActive
-            ? AppColors.googleBlue
-            : theme.iconTheme.color?.withValues(alpha: 0.6));
-    return Semantics(
-      label: tooltip ?? 'Action button',
-      button: true,
-      child: IconButton(
-        icon: Icon(icon, size: 18, color: finalColor),
-        tooltip: tooltip,
-        onPressed: onTap,
-        splashRadius: 20,
-        constraints: const BoxConstraints(),
-        padding: const EdgeInsets.all(8),
-      ),
-    );
-  }
-
-  Widget _buildSmallActionIcon(
-    IconData icon,
-    VoidCallback onTap,
-    ThemeData theme, {
-    String? tooltip,
-  }) {
-    return Semantics(
-      label: tooltip ?? 'Small action button',
-      button: true,
-      child: IconButton(
-        icon: Icon(icon,
-            size: 16, color: theme.iconTheme.color?.withValues(alpha: 0.5)),
-        onPressed: onTap,
-        tooltip: tooltip,
-        constraints: const BoxConstraints(),
-        padding: const EdgeInsets.all(8),
-      ),
-    );
-  }
-
-  Widget _buildSmallFloatingAction(
-    IconData icon,
-    VoidCallback onTap,
-    ThemeData theme, {
-    String? tooltip,
-  }) {
-    return Semantics(
-      label: tooltip ?? 'Action button',
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 18,
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildArtifactActions(
     BuildContext context,
@@ -1249,17 +1155,18 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _buildArtifactActionIcon(
-            CupertinoIcons.doc_on_clipboard,
-            () => _copyArtifactToClipboard(context, type, data),
-            theme,
+          _TactileArtifactActionIcon(
+            icon: CupertinoIcons.doc_on_clipboard,
+            onTap: () => _copyArtifactToClipboard(context, type, data),
+            theme: theme,
             label: 'Copy text',
+            isCopy: true,
           ),
           const SizedBox(width: 8),
-          _buildArtifactActionIcon(
-            CupertinoIcons.share,
-            () => _shareArtifact(context, type, data),
-            theme,
+          _TactileArtifactActionIcon(
+            icon: CupertinoIcons.share,
+            onTap: () => _shareArtifact(context, type, data),
+            theme: theme,
             label: 'Share',
           ),
         ],
@@ -1267,46 +1174,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-  Widget _buildArtifactActionIcon(
-    IconData icon,
-    VoidCallback onTap,
-    ThemeData theme, {
-    required String label,
-  }) {
-    final isDark = theme.brightness == Brightness.dark;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.black.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: theme.iconTheme.color?.withValues(alpha: 0.5),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _copyArtifactToClipboard(
     BuildContext context,
@@ -1314,7 +1181,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     Map<String, dynamic> data,
   ) {
     final text = _formatArtifactAsText(type, data);
-    ClipboardService.instance.copyWithFeedback(context, text);
+    ClipboardService.instance.copyText(text);
     HapticsService.instance.lightImpact();
   }
 
@@ -1354,7 +1221,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           buffer += 'Card ${i + 1}:\n';
           buffer += 'Front: ${c['front']}\n';
           buffer += 'Back: ${c['back']}\n';
-          if (c['explanation'] != null) buffer += 'Explanation: ${c['explanation']}\n';
+          if (c['explanation'] != null) {
+            buffer += 'Explanation: ${c['explanation']}\n';
+          }
           buffer += '\n';
         }
         return buffer.trim();
@@ -1379,7 +1248,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       margin: const EdgeInsets.only(top: 12, bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF252525) : Colors.grey[100],
+        color: isDark ? AppColors.surfaceVariantDark : Colors.grey[100],
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
       ),
@@ -1389,8 +1258,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           Row(
             children: [
               IconButton(
-                icon: Icon(CupertinoIcons.share, size: 20, color: theme.primaryColor),
-                onPressed: () => SharePlus.instance.share(ShareParams(text: widget.message.sources!.map((s) => s.url).join('\n'))),
+                icon: Icon(CupertinoIcons.share,
+                    size: 20, color: theme.primaryColor),
+                onPressed: () => SharePlus.instance.share(ShareParams(
+                    text:
+                        widget.message.sources!.map((s) => s.url).join('\n'))),
               ),
               const SizedBox(width: 8),
               Text(
@@ -1459,7 +1331,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   }
 
   String _cleanContent(String content) {
-    return cleanContent(content);
+    // Strip legacy :::ui-widget\n{...}\n::: blocks but RETAIN :::ui-widget|id:::
+    // The legacy regex match requires a newline following ':::ui-widget'
+    final clean = content.replaceAll(
+        RegExp(r':::ui-widget[\r\n]+.*?([\r\n]+:::|$)', dotAll: true), '');
+    return cleanContent(clean);
   }
 
   String _formatDuration(Duration duration) {
@@ -1500,8 +1376,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
-
-
   bool _isImageUrl(String url) {
     if (url.isEmpty) return false;
     if (url.startsWith('data:image/')) return true;
@@ -1525,41 +1399,80 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           lower.endsWith('.bmp');
     }
   }
-}
 
-// --- Code Block with Copy Button ---
-
-class _CodeBlockBuilder extends MarkdownElementBuilder {
-  final bool isDark;
-
-  _CodeBlockBuilder({required this.isDark});
-
-  @override
-  Widget? visitElementAfterWithContext(
-    BuildContext context,
-    md.Element element,
-    TextStyle? preferredStyle,
-    TextStyle? parentStyle,
-  ) {
-    // Extract code text from the element tree
-    String codeText = element.textContent;
-
-    // Try to detect language from the class attribute of the <code> child
-    String? language;
-    if (element.children != null && element.children!.isNotEmpty) {
-      final firstChild = element.children!.first;
-      if (firstChild is md.Element && firstChild.attributes['class'] != null) {
-        final className = firstChild.attributes['class']!;
-        if (className.startsWith('language-')) {
-          language = className.substring('language-'.length);
-        }
-      }
-    }
-
-    return _CodeBlockWidget(
-      code: codeText,
-      language: language,
-      isDark: isDark,
+  Widget _buildAiErrorCard(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(CupertinoIcons.exclamationmark_triangle_fill,
+                  color: Colors.redAccent, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'An Error occurred',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color:
+                          isDark ? Colors.white : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    'Please try again with the button below.',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (widget.onRetrySend != null)
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                onPressed: widget.onRetrySend,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(CupertinoIcons.arrow_clockwise,
+                        size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Try Again',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1583,7 +1496,7 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget> {
   bool _copied = false;
 
   void _copyCode() {
-    ClipboardService.instance.copyWithFeedback(context, widget.code);
+    ClipboardService.instance.copyText(widget.code);
     HapticFeedback.mediumImpact();
     setState(() => _copied = true);
     Future.delayed(const Duration(seconds: 2), () {
@@ -1742,7 +1655,6 @@ class _StreamingCursorState extends State<_StreamingCursor>
       ),
     );
   }
-
 }
 
 // --- Thinking Skeleton Widget ---
@@ -1760,19 +1672,31 @@ class _ThinkingSkeleton extends StatefulWidget {
 class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
+  late Animation<double> _shimmerAnimation;
+  late Animation<double> _pulseScale;
+  late Animation<double> _pulseOpacity;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    _animation = Tween<double>(
-      begin: 0.3,
-      end: 0.7,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    _shimmerAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0.0, 1.0, curve: Curves.easeInOut)),
+    );
+
+    _pulseScale = Tween<double>(begin: 0.8, end: 1.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    _pulseOpacity = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -1784,11 +1708,11 @@ class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _animation,
+      animation: _controller,
       builder: (context, child) {
         final shimmerColor = widget.isDark
-            ? Colors.white.withValues(alpha: _animation.value * 0.15)
-            : Colors.grey.withValues(alpha: _animation.value * 0.2);
+            ? Colors.white.withValues(alpha: _shimmerAnimation.value * 0.15)
+            : Colors.grey.withValues(alpha: _shimmerAnimation.value * 0.2);
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1801,27 +1725,49 @@ class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
               const SizedBox(height: 8),
               _buildLine(shimmerColor, 0.45),
               if (widget.status != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Row(
                   children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.blueAccent,
+                    // Gemini-style Pulsing Logo
+                    Transform.scale(
+                      scale: _pulseScale.value,
+                      child: Opacity(
+                        opacity: _pulseOpacity.value,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: widget.isDark
+                                ? Colors.white10
+                                : Colors.black.withValues(alpha: 0.05),
+                          ),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            color: widget.isDark
+                                ? Colors.white
+                                : Theme.of(context).colorScheme.onSurface,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.star),
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         widget.status!,
                         style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color:
-                              widget.isDark ? Colors.white70 : Colors.black54,
-                          fontStyle: FontStyle.italic,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: widget.isDark
+                              ? Colors.white70
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.6),
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),
@@ -1835,7 +1781,6 @@ class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
     );
   }
 
-
   Widget _buildLine(Color color, double widthFraction) {
     return Container(
       height: 12,
@@ -1844,6 +1789,163 @@ class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
         borderRadius: BorderRadius.circular(6),
       ),
       width: 300 * widthFraction,
+    );
+  }
+}
+
+class _TactileActionIcon extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final ThemeData theme;
+  final String? tooltip;
+  final bool isActive;
+  final Color? color;
+  final bool isSmall;
+  final bool isCopy;
+
+  const _TactileActionIcon({
+    required this.icon,
+    required this.onTap,
+    required this.theme,
+    this.tooltip,
+    this.isActive = false,
+    this.color,
+    this.isSmall = false,
+    this.isCopy = false,
+  });
+
+  @override
+  State<_TactileActionIcon> createState() => _TactileActionIconState();
+}
+
+class _TactileActionIconState extends State<_TactileActionIcon> {
+  bool _showCheck = false;
+
+  void _handleTap() {
+    widget.onTap();
+    if (widget.isCopy) {
+      setState(() => _showCheck = true);
+      HapticFeedback.mediumImpact();
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _showCheck = false);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final finalColor = _showCheck
+        ? AppColors.accentTeal
+        : (widget.color ??
+            (widget.isActive
+                ? AppColors.googleBlue
+                : widget.theme.iconTheme.color?.withValues(alpha: 0.6)));
+
+    return Semantics(
+      label: widget.tooltip ?? 'Action button',
+      button: true,
+      child: IconButton(
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Icon(
+            _showCheck ? CupertinoIcons.checkmark_alt : widget.icon,
+            key: ValueKey(_showCheck),
+            size: widget.isSmall ? 16 : 18,
+            color: finalColor,
+          ),
+        ),
+        tooltip: widget.tooltip,
+        onPressed: _showCheck ? null : _handleTap,
+        splashRadius: 20,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(8),
+      ),
+    );
+  }
+}
+
+class _TactileArtifactActionIcon extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final ThemeData theme;
+  final String label;
+  final bool isCopy;
+
+  const _TactileArtifactActionIcon({
+    required this.icon,
+    required this.onTap,
+    required this.theme,
+    required this.label,
+    this.isCopy = false,
+  });
+
+  @override
+  State<_TactileArtifactActionIcon> createState() =>
+      _TactileArtifactActionIconState();
+}
+
+class _TactileArtifactActionIconState extends State<_TactileArtifactActionIcon> {
+  bool _showCheck = false;
+
+  void _handleTap() {
+    widget.onTap();
+    if (widget.isCopy) {
+      setState(() => _showCheck = true);
+      HapticFeedback.mediumImpact();
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _showCheck = false);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.theme.brightness == Brightness.dark;
+    final activeColor = AppColors.accentTeal;
+
+    return InkWell(
+      onTap: _showCheck ? null : _handleTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: _showCheck
+              ? activeColor.withValues(alpha: 0.1)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.03)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Row(
+            key: ValueKey(_showCheck),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _showCheck ? CupertinoIcons.checkmark_alt : widget.icon,
+                size: 14,
+                color: _showCheck
+                    ? activeColor
+                    : widget.theme.iconTheme.color?.withValues(alpha: 0.5),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _showCheck ? 'Copied' : widget.label,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: _showCheck
+                      ? activeColor
+                      : widget.theme.colorScheme.onSurface
+                          .withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

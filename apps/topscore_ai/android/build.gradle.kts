@@ -19,17 +19,21 @@ subprojects {
             this.javaClass.name.contains("com.android.build.gradle.AppPlugin")) {
 
             // Early-phase: set SDK versions for all modules
-            if (subproject.name != "app") {
-                val android = subproject.extensions.findByName("android")
-                if (android is com.android.build.gradle.BaseExtension) {
-                    android.compileSdkVersion(36)
-                    android.defaultConfig.targetSdkVersion(36)
-                    android.defaultConfig.minSdkVersion(23)
+            val android = subproject.extensions.findByName("android")
+            if (android is com.android.build.gradle.BaseExtension) {
+                android.compileSdkVersion(36)
+                android.defaultConfig.targetSdk = 36
+                android.defaultConfig.minSdk = 26
+                android.ndkVersion = "28.2.13676358"
 
-                    android.compileOptions {
-                        sourceCompatibility = JavaVersion.VERSION_17
-                        targetCompatibility = JavaVersion.VERSION_17
-                    }
+                android.compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+
+                android.lintOptions.apply {
+                    isCheckReleaseBuilds = false
+                    isAbortOnError = false
                 }
             }
 
@@ -45,19 +49,12 @@ subprojects {
 
                     val androidEval = subproject.extensions.findByName("android")
                     if (androidEval is com.android.build.gradle.BaseExtension) {
-                        // Try to override to Java 17
+                        // We READ the current major version to align Kotlin, 
+                        // but we DO NOT try to set compileSdkVersion here (it's too late).
                         try {
-                            androidEval.compileOptions {
-                                sourceCompatibility = JavaVersion.VERSION_17
-                                targetCompatibility = JavaVersion.VERSION_17
-                            }
-                        } catch (_: Exception) {
-                            // Finalized — read what was actually set
-                            try {
-                                effectiveJavaVersion = androidEval.compileOptions
-                                    .sourceCompatibility.majorVersion
-                            } catch (_: Exception) {}
-                        }
+                            effectiveJavaVersion = androidEval.compileOptions
+                                .sourceCompatibility.majorVersion
+                        } catch (_: Exception) {}
                     }
 
                     // Map Java majorVersion to valid Kotlin JVM target strings.

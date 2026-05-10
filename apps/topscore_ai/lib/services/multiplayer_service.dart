@@ -20,6 +20,7 @@ class MultiplayerService {
   QuizQuestion? currentQuestion;
   int currentQuestionIndex = -1;
   List<Map<String, dynamic>> leaderboard = [];
+  String topic = "General Knowledge";
 
   String? _roomCode;
   String? get roomCode => _roomCode;
@@ -29,7 +30,7 @@ class MultiplayerService {
     required Quiz quiz,
   }) async {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/multiplayer/create');
-    final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+    final headers = await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
     
     final response = await http.post(
       url,
@@ -55,7 +56,7 @@ class MultiplayerService {
     required String name,
   }) async {
     _roomCode = roomCode;
-    final wsUrl = '${AppConfig.wsUrl}/ws/multiplayer/$roomCode?user_id=$userId&name=$name';
+    final wsUrl = '${AppConfig.wsUrl}/multiplayer/$roomCode?user_id=$userId&name=$name';
     
     try {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
@@ -85,9 +86,19 @@ class MultiplayerService {
     final type = data['type'];
     
     switch (type) {
+      case 'room_state':
+        players = List<Map<String, dynamic>>.from(data['players']);
+        topic = data['topic'] ?? "General Knowledge";
+        status = MultiplayerStatus.lobby;
+        break;
       case 'player_joined':
+        final newPlayer = Map<String, dynamic>.from(data['player']);
+        if (!players.any((p) => p['id'] == newPlayer['id'])) {
+          players.add(newPlayer);
+        }
+        break;
       case 'player_left':
-        // Update local player list logic could go here if server sends full list
+        players.removeWhere((p) => p['id'] == data['user_id']);
         break;
       case 'game_started':
         status = MultiplayerStatus.playing;
@@ -95,6 +106,9 @@ class MultiplayerService {
       case 'new_question':
         currentQuestionIndex = data['index'];
         currentQuestion = QuizQuestion.fromJson(data['question']);
+        break;
+      case 'intermediate_leaderboard':
+        leaderboard = List<Map<String, dynamic>>.from(data['leaderboard']);
         break;
       case 'game_finished':
         status = MultiplayerStatus.finished;

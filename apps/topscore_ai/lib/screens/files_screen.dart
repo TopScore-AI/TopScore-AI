@@ -3,11 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import 'package:go_router/go_router.dart';
 import '../models/firebase_file.dart';
 import '../services/storage_service.dart';
 import '../shared/services/media_picker_service.dart';
 import '../providers/auth_provider.dart';
-import 'pdf_viewer_screen.dart';
+import '../widgets/app_spinner.dart';
 
 class FilesScreen extends StatefulWidget {
   const FilesScreen({super.key});
@@ -35,10 +36,10 @@ class _FilesScreenState extends State<FilesScreen> {
   Future<List<FirebaseFile>> _fetchAndFilterFiles() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      
+
       // 1. Fetch public files
       final publicFiles = await StorageService.getAllFilesFromFirestore();
-      
+
       // 2. Fetch user files if logged in
       List<FirebaseFile> userFiles = [];
       if (user != null) {
@@ -98,7 +99,8 @@ class _FilesScreenState extends State<FilesScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Upload failed: $e"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text("Upload failed: $e"), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -140,13 +142,10 @@ class _FilesScreenState extends State<FilesScreen> {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            PdfViewerScreen(storagePath: file.path, title: file.name),
-      ),
-    );
+    context.push('/pdf-viewer', extra: {
+      'storagePath': file.path,
+      'title': file.name,
+    });
   }
 
   @override
@@ -187,14 +186,15 @@ class _FilesScreenState extends State<FilesScreen> {
             future: _filesFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return AppSpinner.center();
               }
               if (snapshot.hasError) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 48),
                       const SizedBox(height: 16),
                       Text(
                         "Error loading resources",
@@ -211,7 +211,8 @@ class _FilesScreenState extends State<FilesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.folder_open, size: 60, color: theme.disabledColor),
+                      Icon(Icons.folder_open,
+                          size: 60, color: theme.disabledColor),
                       const SizedBox(height: 16),
                       Text(
                         "No documents found",
@@ -227,11 +228,12 @@ class _FilesScreenState extends State<FilesScreen> {
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: files.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final file = files[index];
                     final isUserFile = file.path.contains('uploads/');
-                    
+
                     return Card(
                       elevation: 2,
                       shape: RoundedRectangleBorder(
@@ -247,8 +249,13 @@ class _FilesScreenState extends State<FilesScreen> {
                             color: theme.colorScheme.onSurface,
                           ),
                         ),
-                        subtitle: isUserFile ? Text("Personal", style: TextStyle(color: theme.primaryColor, fontSize: 12)) : null,
-                        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                        subtitle: isUserFile
+                            ? Text("Personal",
+                                style: TextStyle(
+                                    color: theme.primaryColor, fontSize: 12))
+                            : null,
+                        trailing:
+                            const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () => _openFile(file),
                       ),
                     );
@@ -259,7 +266,10 @@ class _FilesScreenState extends State<FilesScreen> {
           ),
           if (_isUploading)
             Container(
-              color: Colors.black26,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.15),
               child: const Center(
                 child: Card(
                   child: Padding(
@@ -267,7 +277,7 @@ class _FilesScreenState extends State<FilesScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(),
+                        AppSpinner(),
                         SizedBox(height: 16),
                         Text("Uploading document..."),
                       ],

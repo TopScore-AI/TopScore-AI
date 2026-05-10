@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
+import '../../widgets/app_spinner.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   const EmailVerificationScreen({super.key});
@@ -50,7 +51,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     final verified = await authProvider.reloadAndCheckEmailVerified();
     if (verified && mounted) {
       _pollTimer?.cancel();
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // No manual Navigator.pop needed: GoRouter's refreshListenable (AuthProvider)
+      // will see requiresEmailVerification change to false and redirect to /home.
     }
   }
 
@@ -62,7 +64,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     setState(() => _isCheckingManually = false);
     if (verified) {
       _pollTimer?.cancel();
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // No manual Navigator.pop needed: GoRouter will handle the redirect.
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -125,7 +127,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       extendBodyBehindAppBar: true,
       body: Container(
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: AppColors.text,
           image: DecorationImage(
             image: const AssetImage('assets/images/auth_background.png'),
             fit: BoxFit.cover,
@@ -228,7 +230,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                               SizedBox(
                                 width: 12,
                                 height: 12,
-                                child: CircularProgressIndicator(
+                                child: AppSpinner(
                                   strokeWidth: 2,
                                   color: AppColors.accentTeal,
                                 ),
@@ -263,7 +265,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                                   ? const SizedBox(
                                       width: 22,
                                       height: 22,
-                                      child: CircularProgressIndicator(
+                                      child: AppSpinner(
                                         strokeWidth: 2,
                                         color: Colors.white,
                                       ),

@@ -1,7 +1,7 @@
 'use client';
 import { useLocale } from '@/i18n';
 import AnimatedSection from './AnimatedSection';
-import { Brain, Headphones, GraduationCap, CloudOff, Target, Sparkles } from 'lucide-react';
+import { Brain, Headphones, GraduationCap, CloudOff, Target, Sparkles, Users, Trophy, FolderOpen } from 'lucide-react';
 import styles from './BentoFeatures.module.css';
 
 export default function BentoFeatures() {
@@ -28,10 +28,8 @@ export default function BentoFeatures() {
                             <div className={styles.iconWrapper} style={{ '--color': '#3b82f6' } as any}>
                                 <Headphones size={24} />
                             </div>
-                            <h3 className={styles.cardTitle}>Real-Time Voice Tutor</h3>
-                            <p className={styles.cardDesc}>
-                                Engage in natural, human-like conversations with your AI. Powered by Gemini, TopScore listens, understands, and explains complex topics step-by-step.
-                            </p>
+                            <h3 className={styles.cardTitle}>{t('features.0.title')}</h3>
+                            <p className={styles.cardDesc}>{t('features.0.desc')}</p>
                         </div>
                         <div className={styles.visualAITutor}>
                              <div className={styles.aiOrb} />
@@ -47,33 +45,31 @@ export default function BentoFeatures() {
                             </div>
                             <h3 className={styles.cardTitle}>Localized Content</h3>
                             <p className={styles.cardDesc}>
-                                Comprehensive support for Kenya CBC, KCSE, and Cambridge IGCSE curricula.
+                                Comprehensive support for Kenya CBC, 8-4-4, and Cambridge IGCSE curricula.
                             </p>
                         </div>
                     </div>
 
-                    {/* Small Card: Offline */}
+                    {/* Small Card: AI Study Groups (NEW) */}
                     <div className={`${styles.card} glass`}>
                         <div className={styles.cardContent}>
-                            <div className={styles.iconWrapper} style={{ '--color': '#f59e0b' } as any}>
-                                <CloudOff size={24} />
+                            <div className={styles.iconWrapper} style={{ '--color': '#8b5cf6' } as any}>
+                                <Users size={24} />
                             </div>
-                            <h3 className={styles.cardTitle}>Offline Mode</h3>
-                            <p className={styles.cardDesc}>
-                                Download resources once and study anywhere without data costs.
-                            </p>
+                            <h3 className={styles.cardTitle}>{t('features.8.title')}</h3>
+                            <p className={styles.cardDesc}>{t('features.8.desc')}</p>
                         </div>
                     </div>
 
-                    {/* Wide Card: Smart Notes */}
+                    {/* Wide Card: Smart Study Tools */}
                     <div className={`${styles.card} ${styles.colSpan2} glass`}>
                         <div className={styles.cardContent}>
                             <div className="flex items-start gap-6">
-                                <div className={styles.iconWrapper} style={{ '--color': '#8b5cf6' } as any}>
+                                <div className={styles.iconWrapper} style={{ '--color': '#f59e0b' } as any}>
                                     <Brain size={24} />
                                 </div>
                                 <div>
-                                    <h3 className={styles.cardTitle}>Smart Study Tools</h3>
+                                    <h3 className={styles.cardTitle}>{t('features.0.title')}</h3>
                                     <p className={styles.cardDesc}>
                                         Instantly transform PDFs and photos into interactive flashcards, concise summaries, and adaptive quizzes.
                                     </p>
@@ -81,16 +77,51 @@ export default function BentoFeatures() {
                             </div>
                         </div>
                     </div>
-                    
+
+                    {/* Small Card: Multiplayer Learning (NEW) */}
+                    <div className={`${styles.card} glass`}>
+                        <div className={styles.cardContent}>
+                            <div className={styles.iconWrapper} style={{ '--color': '#ec4899' } as any}>
+                                <Trophy size={24} />
+                            </div>
+                            <h3 className={styles.cardTitle}>{t('features.9.title')}</h3>
+                            <p className={styles.cardDesc}>{t('features.9.desc')}</p>
+                        </div>
+                    </div>
+
+                    {/* Feature Card: Study Vault (NEW) */}
+                    <div className={`${styles.card} glass`}>
+                        <div className={styles.cardContent}>
+                            <div className={styles.iconWrapper} style={{ '--color': '#6366f1' } as any}>
+                                <FolderOpen size={24} />
+                            </div>
+                            <h3 className={styles.cardTitle}>{t('features.10.title')}</h3>
+                            <p className={styles.cardDesc}>{t('features.10.desc')}</p>
+                        </div>
+                    </div>
+
                     {/* Feature Card: Adaptive */}
                     <div className={`${styles.card} glass`}>
                          <div className={styles.cardContent}>
-                            <div className={styles.iconWrapper} style={{ '--color': '#ec4899' } as any}>
+                            <div className={styles.iconWrapper} style={{ '--color': '#2dd4bf' } as any}>
                                 <Target size={24} />
                             </div>
                             <h3 className={styles.cardTitle}>Adaptive Learning</h3>
                             <p className={styles.cardDesc}>
                                 Personalized paths that adjust to your pace and proficiency.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Small Card: Offline */}
+                    <div className={`${styles.card} glass`}>
+                        <div className={styles.cardContent}>
+                            <div className={styles.iconWrapper} style={{ '--color': '#94a3b8' } as any}>
+                                <CloudOff size={24} />
+                            </div>
+                            <h3 className={styles.cardTitle}>Offline Mode</h3>
+                            <p className={styles.cardDesc}>
+                                Download resources once and study anywhere without data costs.
                             </p>
                         </div>
                     </div>

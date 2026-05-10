@@ -10,7 +10,7 @@ class CareerService {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/career/analyze');
     
     try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+      final headers = await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
       final response = await http.post(
         url,
         headers: headers,
@@ -34,7 +34,7 @@ class CareerService {
     final url = Uri.parse('${AppConfig.backendBaseUrl}/career/roadmap');
     
     try {
-      final headers = await AuthHeaders.getHeaders({'Content-Type': 'application/json'});
+      final headers = await AuthHeaders.getHeaders(existingHeaders: {'Content-Type': 'application/json'});
       final response = await http.post(
         url,
         headers: headers,

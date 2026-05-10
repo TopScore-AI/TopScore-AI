@@ -11,6 +11,7 @@ import '../../constants/colors.dart';
 import 'package:go_router/go_router.dart';
 import '../../widgets/interest_update_sheet.dart';
 import '../../data/career_database.dart';
+import '../../tutor_client/widgets/embedded_chat_sheet.dart';
 
 class CareerCompassScreen extends StatefulWidget {
   const CareerCompassScreen({super.key});
@@ -57,7 +58,7 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).userModel;
     final interests = user?.interests ?? [];
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     // Fallback if no interests are set
     if (interests.isEmpty) {
@@ -71,20 +72,21 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
           "Career Compass",
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: theme.colorScheme.onSurface,
             fontSize: 20,
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new,
+              color: theme.colorScheme.onSurface, size: 20),
           onPressed: () => context.pop(),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.tune_rounded, color: Colors.white),
+            icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
             onPressed: () => _showInterestSheet(context, user?.uid ?? ''),
           ),
         ],
@@ -92,16 +94,7 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : AppColors.primaryBlue,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark 
-              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-              : [AppColors.primaryBlue, const Color(0xFF1E40AF)],
-          ),
-        ),
+        color: theme.scaffoldBackgroundColor,
         child: SafeArea(
           child: Column(
             children: [
@@ -109,7 +102,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    await Provider.of<AuthProvider>(context, listen: false).reloadUser();
+                    await Provider.of<AuthProvider>(context, listen: false)
+                        .reloadUser();
                   },
                   color: Colors.white,
                   backgroundColor: AppColors.primaryBlue,
@@ -132,7 +126,7 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
                                 style: GoogleFonts.poppins(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 20),
@@ -142,7 +136,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
                                   painter: RadarChartPainter(
                                     interests: interests,
                                     allDomains: _domainMapping,
-                                    primaryColor: Colors.white,
+                                    primaryColor: theme.colorScheme.primary,
+                                    textColor: theme.colorScheme.onSurface,
                                   ),
                                   child: Container(),
                                 ),
@@ -164,7 +159,7 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
 
                         // CAREER LIST (Category-specific)
                         _buildCareerList(user),
-                        
+
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -185,14 +180,15 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new,
+              color: Theme.of(context).colorScheme.onSurface, size: 20),
           onPressed: () => context.pop(),
         ),
       ),
       body: Container(
         padding: const EdgeInsets.all(40),
         width: double.infinity,
-        decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -202,7 +198,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
                 color: Colors.white.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(CupertinoIcons.compass, size: 80, color: Colors.white),
+              child: Icon(CupertinoIcons.compass,
+                  size: 80, color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 40),
             Text(
@@ -210,7 +207,7 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
               style: GoogleFonts.poppins(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
               textAlign: TextAlign.center,
             ),
@@ -218,7 +215,10 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
             Text(
               "Select your interests to generate your personalized career compass and AI study roadmap.",
               style: GoogleFonts.nunito(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.8),
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -231,14 +231,16 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
               child: ElevatedButton(
                 onPressed: () => _showInterestSheet(context, uid),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primaryBlue,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                   elevation: 0,
                 ),
                 child: Text(
                   "Choose Interests",
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16),
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700, fontSize: 16),
                 ),
               ),
             ),
@@ -248,18 +250,23 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
     );
   }
 
-  Widget _buildMasterAiButton(BuildContext context, dynamic user, List<String> interests) {
+  Widget _buildMasterAiButton(
+      BuildContext context, dynamic user, List<String> interests) {
     return BounceWrapper(
       onTap: () {
-        final gradeInfo = user?.grade != null ? "Grade ${user?.grade}" : "my grade";
-        final curriculumInfo = user?.curriculum != null ? "the ${user?.curriculum} curriculum" : "my curriculum";
-        final prompt = "I'm a student in $gradeInfo following $curriculumInfo. My interests are ${interests.join(', ')}. Based on my learning context, what comprehensive career advice and study paths do you have for me?";
-        context.push('/ai-tutor', extra: {'initial_message': prompt});
+        final gradeInfo =
+            user?.grade != null ? "Grade ${user?.grade}" : "my grade";
+        final curriculumInfo = user?.curriculum != null
+            ? "the ${user?.curriculum} curriculum"
+            : "my curriculum";
+        final prompt =
+            "I'm a student in $gradeInfo following $curriculumInfo. My interests are ${interests.join(', ')}. Based on my learning context, what comprehensive career advice and study paths do you have for me?";
+        _openAiTutorOverlay(context, prompt);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -272,7 +279,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.sparkles, color: AppColors.primaryBlue, size: 24),
+            const Icon(CupertinoIcons.sparkles,
+                color: AppColors.primaryBlue, size: 24),
             const SizedBox(width: 12),
             Text(
               "Generate Full AI Roadmap",
@@ -300,17 +308,36 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 10),
             child: ChoiceChip(
-              label: Text(domain),
+              label: Text(
+                domain,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? AppColors.primaryBlue
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
               selected: isSelected,
               onSelected: (val) => setState(() => _selectedDomain = domain),
               selectedColor: Colors.white,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              labelStyle: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? AppColors.primaryBlue : Colors.white,
+              backgroundColor: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.1),
+              showCheckmark: false,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isSelected
+                      ? Colors.white
+                      : Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.2),
+                  width: 1,
+                ),
               ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               elevation: 0,
               pressElevation: 0,
             ),
@@ -340,7 +367,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
             child: Column(
               children: [
                 ListTile(
-                  onTap: () => setState(() => _expandedCareerTitle = isExpanded ? null : career.title),
+                  onTap: () => setState(() =>
+                      _expandedCareerTitle = isExpanded ? null : career.title),
                   contentPadding: const EdgeInsets.all(16),
                   leading: Container(
                     padding: const EdgeInsets.all(12),
@@ -355,13 +383,16 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   subtitle: Text(
                     career.description,
                     style: GoogleFonts.nunito(
-                      color: Colors.white70,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.7),
                       fontSize: 13,
                       height: 1.3,
                     ),
@@ -369,8 +400,13 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: Icon(
-                    isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: Colors.white54,
+                    isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.54),
                   ),
                 ),
                 if (isExpanded) _buildInlineAiDetail(career, user),
@@ -384,19 +420,20 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
 
   Widget _buildInlineAiDetail(CareerPath career, dynamic user) {
     final gradeLabel = user?.gradeLabel ?? "your level";
-    
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(color: Colors.white10),
+          Divider(color: Theme.of(context).dividerColor),
           const SizedBox(height: 12),
-          
+
           // AI INSIGHT HEADLINE
           Row(
             children: [
-              const Icon(CupertinoIcons.sparkles, color: Color(0xFFFBDB5C), size: 16),
+              const Icon(CupertinoIcons.sparkles,
+                  color: Color(0xFFFBDB5C), size: 16),
               const SizedBox(width: 8),
               Text(
                 "AI INSIGHT FOR $gradeLabel",
@@ -410,48 +447,56 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          
+
           // ADVICE TEXT
           Text(
             career.advice,
             style: GoogleFonts.nunito(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 14,
               fontWeight: FontWeight.w600,
               height: 1.5,
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // GRID OF DETAILS
           Row(
             children: [
-              _buildDetailItem("Key Skills", career.skills.join(", "), CupertinoIcons.layers_alt),
+              _buildDetailItem("Key Skills", career.skills.join(", "),
+                  CupertinoIcons.layers_alt),
               const SizedBox(width: 12),
-              _buildDetailItem("Subjects", career.subjects.join(", "), CupertinoIcons.book),
+              _buildDetailItem(
+                  "Subjects", career.subjects.join(", "), CupertinoIcons.book),
             ],
           ),
           const SizedBox(height: 12),
-          _buildDetailItem("Global Outlook", career.outlook, CupertinoIcons.graph_circle),
-          
+          _buildDetailItem(
+              "Global Outlook", career.outlook, CupertinoIcons.graph_circle),
+
           const SizedBox(height: 20),
-          
+
           // ACTION BUTTON
           SizedBox(
             width: double.infinity,
             child: TextButton(
               onPressed: () {
-                final prompt = "I'm interested in becoming a ${career.title}. What specific $gradeLabel topics in ${career.subjects.join('/')} should I prioritize to build a strong foundation?";
-                context.push('/ai-tutor', extra: {'initial_message': prompt});
+                final prompt =
+                    "I'm interested in becoming a ${career.title}. What specific $gradeLabel topics in ${career.subjects.join('/')} should I prioritize to build a strong foundation?";
+                _openAiTutorOverlay(context, prompt);
               },
               style: TextButton.styleFrom(
                 backgroundColor: Colors.white10,
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: Text(
                 "Deep Dive with AI Tutor",
-                style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                style: GoogleFonts.poppins(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13),
               ),
             ),
           ),
@@ -465,7 +510,8 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -473,24 +519,48 @@ class _CareerCompassScreenState extends State<CareerCompassScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 12, color: Colors.white60),
+                Icon(icon,
+                    size: 12,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6)),
                 const SizedBox(width: 6),
                 Text(
                   label.toUpperCase(),
-                  style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white54),
+                  style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.54)),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
               value,
-              style: GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2),
+              style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  height: 1.2),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _openAiTutorOverlay(BuildContext context, String prompt) {
+    EmbeddedChatSheet.show(
+      context,
+      title: 'Career AI Tutor',
+      initialMessage: prompt,
+      heightFactor: 0.9,
     );
   }
 
@@ -509,11 +579,13 @@ class RadarChartPainter extends CustomPainter {
   final List<String> interests;
   final Map<String, String> allDomains;
   final Color primaryColor;
+  final Color textColor;
 
   RadarChartPainter({
     required this.interests,
     required this.allDomains,
     required this.primaryColor,
+    required this.textColor,
   });
 
   @override
@@ -523,16 +595,16 @@ class RadarChartPainter extends CustomPainter {
     final radius = min(centerX, centerY) * 0.8;
 
     final paintLine = Paint()
-      ..color = Colors.white.withValues(alpha: 0.15)
+      ..color = textColor.withValues(alpha: 0.1)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
     final paintFill = Paint()
-      ..color = Colors.white.withValues(alpha: 0.1)
+      ..color = primaryColor.withValues(alpha: 0.2)
       ..style = PaintingStyle.fill;
 
     final paintBorder = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
+      ..color = primaryColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
@@ -556,7 +628,8 @@ class RadarChartPainter extends CustomPainter {
       // Draw Spoke
       final spokeX = centerX + radius * cos(angle);
       final spokeY = centerY + radius * sin(angle);
-      canvas.drawLine(Offset(centerX, centerY), Offset(spokeX, spokeY), paintLine);
+      canvas.drawLine(
+          Offset(centerX, centerY), Offset(spokeX, spokeY), paintLine);
 
       // Draw Label
       final labelRadius = radius * 1.25;
@@ -566,13 +639,16 @@ class RadarChartPainter extends CustomPainter {
       textPainter.text = TextSpan(
         text: shortLabel,
         style: GoogleFonts.poppins(
-          color: Colors.white.withValues(alpha: 0.6),
+          color: textColor.withValues(alpha: 0.6),
           fontSize: 9,
           fontWeight: FontWeight.w700,
         ),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(labelX - textPainter.width / 2, labelY - textPainter.height / 2));
+      textPainter.paint(
+          canvas,
+          Offset(
+              labelX - textPainter.width / 2, labelY - textPainter.height / 2));
 
       final hasInterest = interests.contains(fullInterest);
       final valueRadius = hasInterest ? radius * 0.95 : radius * 0.25;
@@ -593,13 +669,14 @@ class RadarChartPainter extends CustomPainter {
     canvas.drawPath(path, paintFill);
     canvas.drawPath(path, paintBorder);
 
-    final dotPaint = Paint()..color = Colors.white;
+    final dotPaint = Paint()..color = primaryColor;
     for (var point in points) {
       canvas.drawCircle(point, 3, dotPaint);
     }
   }
 
-  void _drawPolygon(Canvas canvas, double cx, double cy, double r, int sides, Paint paint) {
+  void _drawPolygon(
+      Canvas canvas, double cx, double cy, double r, int sides, Paint paint) {
     final path = Path();
     final angleStep = (2 * pi) / sides;
     for (int i = 0; i < sides; i++) {

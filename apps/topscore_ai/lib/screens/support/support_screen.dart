@@ -1,48 +1,29 @@
-﻿import 'package:flutter/material.dart';
+import '../../constants/colors.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart'; // Ensure this is in pubspec.yaml
+import 'package:url_launcher/url_launcher.dart'; 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
 
-  /// ðŸ“§ Helper to launch the default Mail App
   Future<void> _launchSupportEmail() async {
-    final Uri emailLaunchUri = Uri(
-      scheme: 'mailto',
-      path: 'support@topscoreapp.ai', // Replace with your actual support email
-      query: _encodeQueryParameters(<String, String>{
-        'subject': 'Support Request: TopScore AI',
-        'body': 'Describe your issue here...',
-      }),
-    );
+    final Uri emailLaunchUri = Uri.parse('mailto:support@topscoreapp.ai?subject=Support%20Request%3A%20TopScore%20AI&body=Describe%20your%20issue%20here...');
 
     try {
-      if (await canLaunchUrl(emailLaunchUri)) {
-        await launchUrl(emailLaunchUri);
-      } else {
-        if (kDebugMode) debugPrint("Could not launch email client");
+      if (!await launchUrl(emailLaunchUri, mode: LaunchMode.externalApplication)) {
+         throw 'Could not launch $emailLaunchUri';
       }
     } catch (e) {
       if (kDebugMode) debugPrint("Error launching email: $e");
     }
   }
 
-  String? _encodeQueryParameters(Map<String, String> params) {
-    return params.entries
-        .map(
-          (MapEntry<String, String> e) =>
-              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
-        )
-        .join('&');
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Unused variable isDark removed
-    // final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -64,20 +45,19 @@ class SupportScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER / ACTION SECTION ---
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6C63FF), Color(0xFF4834D4)],
+                  colors: [AppColors.aiAccent, Color(0xFF4834D4)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6C63FF).withValues(alpha: 0.3),
+                    color: AppColors.aiAccent.withValues(alpha: 0.3),
                     blurRadius: 15,
                     offset: const Offset(0, 8),
                   ),
@@ -108,18 +88,15 @@ class SupportScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // --- ðŸš€ NEW TICKET BUTTON (UPDATED) ---
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed:
-                          _launchSupportEmail, // Calls the mail launcher directly
+                      onPressed: _launchSupportEmail,
                       icon: const Icon(Icons.email_outlined),
                       label: const Text("Contact Support"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: const Color(0xFF6C63FF),
+                        foregroundColor: AppColors.aiAccent,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -138,7 +115,6 @@ class SupportScreen extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // --- FAQ SECTION ---
             Text(
               "Frequently Asked Questions",
               style: GoogleFonts.nunito(
@@ -208,4 +184,3 @@ class SupportScreen extends StatelessWidget {
     );
   }
 }
-

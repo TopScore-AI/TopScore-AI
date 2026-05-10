@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/app_notification.dart';
 import '../providers/notification_provider.dart';
+import '../constants/colors.dart';
 
 class NotificationCenterScreen extends StatelessWidget {
   const NotificationCenterScreen({super.key});
@@ -26,8 +27,9 @@ class NotificationCenterScreen extends StatelessWidget {
           if (notifications.isNotEmpty)
             TextButton(
               onPressed: () => provider.markAllAsRead(),
-              child: const Text("Mark all read",
-                  style: TextStyle(color: Color(0xFF6366F1))),
+              child: Text("Mark all read",
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.primary)),
             )
         ],
       ),
@@ -94,12 +96,15 @@ class _NotificationTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: notif.isRead
                 ? Colors.transparent
-                : (isDark ? const Color(0xFF16161E) : Colors.white),
+                : (isDark ? AppColors.surfaceVariantDark : Colors.white),
             border: Border(
               bottom: BorderSide(
                 color: isDark
                     ? Colors.white12
-                    : Colors.black.withValues(alpha: 0.05),
+                    : Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -126,7 +131,9 @@ class _NotificationTile extends StatelessWidget {
                                   ? FontWeight.w600
                                   : FontWeight.bold,
                               fontSize: 16,
-                              color: isDark ? Colors.white : Colors.black87,
+                              color: isDark
+                                  ? Colors.white
+                                  : Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ),

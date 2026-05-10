@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -5,8 +6,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lottie/lottie.dart';
 import '../../models/quiz_model.dart';
-
+import '../../widgets/gpt_markdown_wrapper.dart';
 
 class QuizStudyScreen extends StatefulWidget {
   final Quiz offlineQuiz;
@@ -150,7 +153,8 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
   void _resetQuiz() {
     _stopTimer();
     setState(() {
-      _order = List<int>.generate(widget.offlineQuiz.questions.length, (i) => i);
+      _order =
+          List<int>.generate(widget.offlineQuiz.questions.length, (i) => i);
       if (_shuffleEnabled) _order.shuffle(Random());
       _currentQuestionIndex = 0;
       _selectedAnswerIndex = null;
@@ -168,8 +172,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
     for (int i = 0; i < _order.length; i++) {
       final originalIndex = _order[i];
       final answer = _userAnswers[i];
-      final correct =
-          widget.offlineQuiz.questions[originalIndex].correctIndex;
+      final correct = widget.offlineQuiz.questions[originalIndex].correctIndex;
       if (answer == null || answer != correct) {
         wrong.add(originalIndex);
       }
@@ -233,14 +236,17 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Timer',
-                      style:
-                          GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+                      style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
                   subtitle: Text(
                       _timerEnabled
                           ? '$_secondsPerQuestion seconds per question'
                           : 'No time limit',
                       style: GoogleFonts.nunito(
-                          color: Colors.grey[600], fontSize: 13)),
+                          color: Theme.of(ctx)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                          fontSize: 13)),
                   value: _timerEnabled,
                   onChanged: (v) {
                     setSheetState(() {});
@@ -279,11 +285,14 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Shuffle questions',
-                      style:
-                          GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+                      style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
                   subtitle: Text('Applied on next restart',
                       style: GoogleFonts.nunito(
-                          color: Colors.grey[600], fontSize: 13)),
+                          color: Theme.of(ctx)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                          fontSize: 13)),
                   value: _shuffleEnabled,
                   onChanged: (v) {
                     setSheetState(() {});
@@ -349,14 +358,16 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
   Widget _buildQuizView(
       ThemeData theme, bool isDark, Quiz quiz, bool isLastQuestion) {
     final currentQuestion = _currentQuestion;
-    final timerColor = _secondsLeft > 10 ? const Color(0xFF6C63FF) : Colors.red;
+    final timerColor = _secondsLeft > 10 ? theme.primaryColor : Colors.red;
 
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           decoration: BoxDecoration(
-              color: isDark ? Colors.grey[900] : Colors.grey[100]),
+              color: isDark
+                  ? theme.colorScheme.surfaceContainerHighest
+                  : theme.colorScheme.surfaceContainerLow),
           child: Column(children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -406,7 +417,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
             Row(children: [
               Text('${_currentQuestionIndex + 1} / ${_order.length}',
                   style: GoogleFonts.nunito(
-                      color: Colors.grey[600],
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w600,
                       fontSize: 13)),
               const SizedBox(width: 12),
@@ -416,9 +427,9 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                   child: LinearProgressIndicator(
                     value: (_currentQuestionIndex + 1) / _order.length,
                     minHeight: 6,
-                    backgroundColor: Colors.grey[300],
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
                     valueColor:
-                        const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
+                        AlwaysStoppedAnimation<Color>(theme.primaryColor),
                   ),
                 ),
               ),
@@ -432,7 +443,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                   child: LinearProgressIndicator(
                     value: 1 - _progressAnim.value,
                     minHeight: 3,
-                    backgroundColor: Colors.grey[300],
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation<Color>(timerColor),
                   ),
                 ),
@@ -463,7 +474,8 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         height: 1.4,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color:
+                            isDark ? Colors.white : theme.colorScheme.onSurface,
                       )),
                 ),
                 const SizedBox(height: 20),
@@ -485,8 +497,8 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                       trailingIcon = Icons.cancel;
                     }
                   } else if (isSelected) {
-                    bgColor = const Color(0xFF6C63FF).withValues(alpha: 0.1);
-                    borderColor = const Color(0xFF6C63FF);
+                    bgColor = AppColors.aiAccent.withValues(alpha: 0.1);
+                    borderColor = AppColors.aiAccent;
                   }
 
                   return Padding(
@@ -516,8 +528,10 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                             height: 32,
                             decoration: BoxDecoration(
                               color: isSelected || (_showResult && isCorrect)
-                                  ? (borderColor ?? const Color(0xFF6C63FF))
-                                  : Colors.grey[300],
+                                  ? (borderColor ?? AppColors.aiAccent)
+                                  : (isDark
+                                      ? Colors.grey[700]
+                                      : Colors.grey[300]),
                               shape: BoxShape.circle,
                             ),
                             child: Center(
@@ -526,7 +540,9 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                               style: GoogleFonts.nunito(
                                 color: isSelected || (_showResult && isCorrect)
                                     ? Colors.white
-                                    : Colors.grey[600],
+                                    : (isDark
+                                        ? Colors.grey[300]
+                                        : Colors.grey[600]),
                                 fontWeight: FontWeight.bold,
                               ),
                             )),
@@ -563,10 +579,11 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                               color: Colors.blue, size: 18),
                           const SizedBox(width: 10),
                           Expanded(
-                              child: Text(currentQuestion.explanation,
+                              child: StyledGptMarkdown(
+                                  currentQuestion.explanation,
                                   style: GoogleFonts.nunito(
                                       fontSize: 14,
-                                      color: Colors.blue[900],
+                                      color: Colors.blue[isDark ? 200 : 900],
                                       height: 1.4))),
                         ]),
                   ),
@@ -607,7 +624,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                     ? (isLastQuestion ? null : _nextQuestion)
                     : _submitAnswer,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6C63FF),
+                  backgroundColor: AppColors.aiAccent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -663,6 +680,12 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
             borderRadius: BorderRadius.circular(20),
           ),
           child: Column(children: [
+            Lottie.asset(
+              'assets/lottie/mission_clear.json',
+              height: 140,
+              repeat: false,
+            ),
+            const SizedBox(height: 8),
             Icon(gradeIcon, color: Colors.white, size: 64),
             const SizedBox(height: 16),
             Text(gradeText,
@@ -758,7 +781,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
           Expanded(
               child: OutlinedButton(
             onPressed: () {
-              Navigator.pop(context); // Go back to library
+              context.go('/home'); // Return to home screen not flashcards
             },
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -773,7 +796,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
               child: ElevatedButton(
             onPressed: _resetQuiz,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C63FF),
+              backgroundColor: AppColors.aiAccent,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
@@ -837,21 +860,17 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                     itemCount: _order.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (_, i) {
-                      final q =
-                          widget.offlineQuiz.questions[_order[i]];
+                      final q = widget.offlineQuiz.questions[_order[i]];
                       final userIdx = _userAnswers[i];
                       final isCorrect =
                           userIdx != null && userIdx == q.correctIndex;
                       return Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color:
-                              isDark ? Colors.grey[850] : Colors.grey[50],
+                          color: isDark ? Colors.grey[850] : Colors.grey[50],
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: (isCorrect
-                                      ? Colors.green
-                                      : Colors.red)
+                              color: (isCorrect ? Colors.green : Colors.red)
                                   .withValues(alpha: 0.3)),
                         ),
                         child: Column(
@@ -859,18 +878,17 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                           children: [
                             Row(children: [
                               Icon(
-                                  isCorrect
-                                      ? Icons.check_circle
-                                      : Icons.cancel,
-                                  color: isCorrect
-                                      ? Colors.green
-                                      : Colors.red,
+                                  isCorrect ? Icons.check_circle : Icons.cancel,
+                                  color: isCorrect ? Colors.green : Colors.red,
                                   size: 18),
                               const SizedBox(width: 6),
                               Text('Q${i + 1}',
                                   style: GoogleFonts.nunito(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.grey[600],
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
                                       fontSize: 13)),
                             ]),
                             const SizedBox(height: 8),
@@ -905,8 +923,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                                       : null,
                                 ),
                                 child: Row(children: [
-                                  Text(
-                                      '${String.fromCharCode(65 + oi)}. ',
+                                  Text('${String.fromCharCode(65 + oi)}. ',
                                       style: GoogleFonts.nunito(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13)),
@@ -937,8 +954,7 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color:
-                                      Colors.blue.withValues(alpha: 0.08),
+                                  color: Colors.blue.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
@@ -949,10 +965,12 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
                                           color: Colors.blue, size: 16),
                                       const SizedBox(width: 8),
                                       Expanded(
-                                          child: Text(q.explanation,
+                                          child: StyledGptMarkdown(
+                                              q.explanation,
                                               style: GoogleFonts.nunito(
                                                   fontSize: 13,
-                                                  color: Colors.blue[900],
+                                                  color: Colors
+                                                      .blue[isDark ? 200 : 900],
                                                   height: 1.3))),
                                     ]),
                               ),
@@ -978,7 +996,12 @@ class _QuizStudyScreenState extends State<QuizStudyScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: GoogleFonts.nunito(color: Colors.grey[600], fontSize: 14)),
+              style: GoogleFonts.nunito(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.6),
+                  fontSize: 14)),
           Text(value,
               style: GoogleFonts.nunito(
                   fontWeight: FontWeight.bold, fontSize: 14)),

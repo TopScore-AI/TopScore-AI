@@ -15,7 +15,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           "Privacy Policy",
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : Colors.black,
+            color: isDark ? Colors.white : AppColors.text,
           ),
         ),
         backgroundColor: Colors.transparent,
@@ -23,7 +23,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios,
-            color: isDark ? Colors.white : Colors.black,
+            color: isDark ? Colors.white : AppColors.text,
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -131,7 +131,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               "• Right to Object (Section 26): Object to processing of your data\n"
               "• Right to Data Portability: Receive your data in a structured format\n"
               "• Right to Withdraw Consent: Withdraw consent at any time\n\n"
-              "To exercise any of these rights, contact us at privacy@topscore.ai or use the \"Delete Account\" option in your profile settings.\n\n"
+              "To exercise any of these rights, contact us at privacy@topscore.ai or visit our Account Deletion page at https://app.topscoreapp.ai/delete-account.\n\n"
               "You also have the right to lodge a complaint with the ODPC at https://www.odpc.go.ke.",
             ),
             _buildSection(

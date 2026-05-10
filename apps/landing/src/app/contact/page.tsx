@@ -9,7 +9,7 @@ import styles from './Contact.module.css';
 const contactMethods = [
     { icon: <MessageCircle />, key: 'contact.whatsapp', href: 'https://wa.me/254717273230', color: '#25D366' },
     { icon: <Phone />, key: 'contact.telephone', href: 'tel:0717273230', color: '#3b82f6' },
-    { icon: <Mail />, key: 'contact.email', href: 'mailto:support@topscoreapp.ai', color: '#ef4444' },
+    { icon: <Mail />, key: 'contact.email', href: 'mailto:admin@topscoreapp.ai', color: '#ef4444' },
     { icon: <Facebook />, key: 'contact.facebook', href: 'https://facebook.com/TopScoreAI', color: '#1877F2' },
     { icon: <Linkedin />, key: 'contact.linkedin', href: 'https://linkedin.com/company/topscore-ai', color: '#0A66C2' },
     { icon: <Twitter />, key: 'contact.twitter', href: 'https://twitter.com/TopScoreAI', color: '#1DA1F2' },
@@ -20,7 +20,7 @@ export default function Contact() {
     const { t } = useLocale();
 
     return (
-        <main className="min-h-screen bg-[#0A0A0F]">
+        <main className="min-h-screen bg-white">
             <Nav />
             <section className={styles.section}>
                 <div className="container mx-auto px-4 pt-32 pb-20">

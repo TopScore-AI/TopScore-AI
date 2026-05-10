@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/feedback_dialog.dart';
 import '../../utils/text_utils.dart';
+import '../../constants/colors.dart';
 
 class ChatHistorySidebar extends StatelessWidget {
   final bool isDark;
@@ -46,14 +47,15 @@ class ChatHistorySidebar extends StatelessWidget {
     final isSwahili = authProvider.userModel?.preferredLanguage == 'sw';
 
     final filteredThreads = threads.where((thread) {
-      final title = stripMarkdown(thread['title'] as String? ?? 'New Chat').toLowerCase();
+      final title =
+          stripMarkdown(thread['title'] as String? ?? 'New Chat').toLowerCase();
       final query = historySearchQuery.toLowerCase();
       return title.contains(query);
     }).toList();
 
     return Container(
       width: 320, // typical sidebar width — Grok-ish
-      color: isDark ? const Color(0xFF0A0A0B) : const Color(0xFFFAFAFC),
+      color: isDark ? AppColors.surfaceDark : AppColors.background,
       child: Column(
         children: [
           // Header area — minimal, logo optional or just New Chat
@@ -219,19 +221,23 @@ class ChatHistorySidebar extends StatelessWidget {
           // Footer — very minimal (Grok often just has collapse arrow or nothing)
           Divider(
               height: 1, color: isDark ? Colors.grey[900] : Colors.grey[300]),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  '« Collapse',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          InkWell(
+            onTap: onCloseSidebar,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    '« Collapse',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -335,8 +341,7 @@ class ChatHistorySidebar extends StatelessWidget {
         ),
         trailing: PopupMenuButton<String>(
           icon: Icon(CupertinoIcons.ellipsis,
-              size: 18,
-              color: theme.iconTheme.color?.withValues(alpha: 0.55)),
+              size: 18, color: theme.iconTheme.color?.withValues(alpha: 0.55)),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           position: PopupMenuPosition.over,

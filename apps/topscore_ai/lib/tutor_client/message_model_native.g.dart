@@ -28,152 +28,153 @@ const ChatMessageSchema = CollectionSchema(
       name: r'audioUrl',
       type: IsarType.string,
     ),
-    r'desmosDataJson': PropertySchema(
-      id: 2,
-      name: r'desmosDataJson',
-      type: IsarType.string,
-    ),
     r'feedback': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'feedback',
       type: IsarType.long,
     ),
     r'fileId': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'fileId',
       type: IsarType.string,
     ),
     r'fileName': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'fileName',
       type: IsarType.string,
     ),
     r'fileType': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'fileType',
       type: IsarType.string,
     ),
     r'flashcardDataJson': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'flashcardDataJson',
       type: IsarType.string,
     ),
-    r'graphDataJson': PropertySchema(
-      id: 8,
-      name: r'graphDataJson',
-      type: IsarType.string,
-    ),
     r'id': PropertySchema(
-      id: 9,
+      id: 7,
       name: r'id',
       type: IsarType.string,
     ),
     r'imageUrl': PropertySchema(
-      id: 10,
+      id: 8,
       name: r'imageUrl',
       type: IsarType.string,
     ),
     r'isBookmarked': PropertySchema(
-      id: 11,
+      id: 9,
       name: r'isBookmarked',
       type: IsarType.bool,
     ),
     r'isComplete': PropertySchema(
-      id: 12,
+      id: 10,
       name: r'isComplete',
       type: IsarType.bool,
     ),
     r'isKicdCertified': PropertySchema(
-      id: 13,
+      id: 11,
       name: r'isKicdCertified',
       type: IsarType.bool,
     ),
     r'isTemporary': PropertySchema(
-      id: 14,
+      id: 12,
       name: r'isTemporary',
       type: IsarType.bool,
     ),
     r'isThinking': PropertySchema(
-      id: 15,
+      id: 13,
       name: r'isThinking',
       type: IsarType.bool,
     ),
     r'isThought': PropertySchema(
-      id: 16,
+      id: 14,
       name: r'isThought',
       type: IsarType.bool,
     ),
     r'isUser': PropertySchema(
-      id: 17,
+      id: 15,
       name: r'isUser',
       type: IsarType.bool,
     ),
     r'mathAnswer': PropertySchema(
-      id: 18,
+      id: 16,
       name: r'mathAnswer',
       type: IsarType.string,
     ),
     r'mathSteps': PropertySchema(
-      id: 19,
+      id: 17,
       name: r'mathSteps',
       type: IsarType.stringList,
     ),
     r'mnemonicDataJson': PropertySchema(
-      id: 20,
+      id: 18,
       name: r'mnemonicDataJson',
       type: IsarType.string,
     ),
     r'punnettDataJson': PropertySchema(
-      id: 21,
+      id: 19,
       name: r'punnettDataJson',
       type: IsarType.string,
     ),
     r'quizDataJson': PropertySchema(
-      id: 22,
+      id: 20,
       name: r'quizDataJson',
       type: IsarType.string,
     ),
     r'reasoning': PropertySchema(
-      id: 23,
+      id: 21,
       name: r'reasoning',
       type: IsarType.string,
     ),
     r'replyToId': PropertySchema(
-      id: 24,
+      id: 22,
       name: r'replyToId',
       type: IsarType.string,
     ),
     r'replyToText': PropertySchema(
-      id: 25,
+      id: 23,
       name: r'replyToText',
       type: IsarType.string,
     ),
     r'sources': PropertySchema(
-      id: 26,
+      id: 24,
       name: r'sources',
       type: IsarType.objectList,
       target: r'SourceMetadata',
     ),
     r'status': PropertySchema(
-      id: 27,
+      id: 25,
       name: r'status',
       type: IsarType.byte,
       enumMap: _ChatMessagestatusEnumValueMap,
     ),
     r'text': PropertySchema(
-      id: 28,
+      id: 26,
       name: r'text',
       type: IsarType.string,
     ),
     r'threadId': PropertySchema(
-      id: 29,
+      id: 27,
       name: r'threadId',
       type: IsarType.string,
     ),
     r'timestamp': PropertySchema(
-      id: 30,
+      id: 28,
       name: r'timestamp',
       type: IsarType.dateTime,
+    ),
+    r'uiWidgets': PropertySchema(
+      id: 29,
+      name: r'uiWidgets',
+      type: IsarType.objectList,
+      target: r'UiWidgetData',
+    ),
+    r'uiWidgetsJson': PropertySchema(
+      id: 30,
+      name: r'uiWidgetsJson',
+      type: IsarType.stringList,
     ),
     r'videos': PropertySchema(
       id: 31,
@@ -206,7 +207,8 @@ const ChatMessageSchema = CollectionSchema(
   embeddedSchemas: {
     r'ChatAttachmentMetadata': ChatAttachmentMetadataSchema,
     r'SourceMetadata': SourceMetadataSchema,
-    r'VideoResult': VideoResultSchema
+    r'VideoResult': VideoResultSchema,
+    r'UiWidgetData': UiWidgetDataSchema
   },
   getId: _chatMessageGetId,
   getLinks: _chatMessageGetLinks,
@@ -241,12 +243,6 @@ int _chatMessageEstimateSize(
     }
   }
   {
-    final value = object.desmosDataJson;
-    if (value != null) {
-      bytesCount += 3 + value.length * 3;
-    }
-  }
-  {
     final value = object.fileId;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -266,12 +262,6 @@ int _chatMessageEstimateSize(
   }
   {
     final value = object.flashcardDataJson;
-    if (value != null) {
-      bytesCount += 3 + value.length * 3;
-    }
-  }
-  {
-    final value = object.graphDataJson;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -359,6 +349,32 @@ int _chatMessageEstimateSize(
     }
   }
   {
+    final list = object.uiWidgets;
+    if (list != null) {
+      bytesCount += 3 + list.length * 3;
+      {
+        final offsets = allOffsets[UiWidgetData]!;
+        for (var i = 0; i < list.length; i++) {
+          final value = list[i];
+          bytesCount +=
+              UiWidgetDataSchema.estimateSize(value, offsets, allOffsets);
+        }
+      }
+    }
+  }
+  {
+    final list = object.uiWidgetsJson;
+    if (list != null) {
+      bytesCount += 3 + list.length * 3;
+      {
+        for (var i = 0; i < list.length; i++) {
+          final value = list[i];
+          bytesCount += value.length * 3;
+        }
+      }
+    }
+  }
+  {
     final list = object.videos;
     if (list != null) {
       bytesCount += 3 + list.length * 3;
@@ -388,40 +404,45 @@ void _chatMessageSerialize(
     object.attachments,
   );
   writer.writeString(offsets[1], object.audioUrl);
-  writer.writeString(offsets[2], object.desmosDataJson);
-  writer.writeLong(offsets[3], object.feedback);
-  writer.writeString(offsets[4], object.fileId);
-  writer.writeString(offsets[5], object.fileName);
-  writer.writeString(offsets[6], object.fileType);
-  writer.writeString(offsets[7], object.flashcardDataJson);
-  writer.writeString(offsets[8], object.graphDataJson);
-  writer.writeString(offsets[9], object.id);
-  writer.writeString(offsets[10], object.imageUrl);
-  writer.writeBool(offsets[11], object.isBookmarked);
-  writer.writeBool(offsets[12], object.isComplete);
-  writer.writeBool(offsets[13], object.isKicdCertified);
-  writer.writeBool(offsets[14], object.isTemporary);
-  writer.writeBool(offsets[15], object.isThinking);
-  writer.writeBool(offsets[16], object.isThought);
-  writer.writeBool(offsets[17], object.isUser);
-  writer.writeString(offsets[18], object.mathAnswer);
-  writer.writeStringList(offsets[19], object.mathSteps);
-  writer.writeString(offsets[20], object.mnemonicDataJson);
-  writer.writeString(offsets[21], object.punnettDataJson);
-  writer.writeString(offsets[22], object.quizDataJson);
-  writer.writeString(offsets[23], object.reasoning);
-  writer.writeString(offsets[24], object.replyToId);
-  writer.writeString(offsets[25], object.replyToText);
+  writer.writeLong(offsets[2], object.feedback);
+  writer.writeString(offsets[3], object.fileId);
+  writer.writeString(offsets[4], object.fileName);
+  writer.writeString(offsets[5], object.fileType);
+  writer.writeString(offsets[6], object.flashcardDataJson);
+  writer.writeString(offsets[7], object.id);
+  writer.writeString(offsets[8], object.imageUrl);
+  writer.writeBool(offsets[9], object.isBookmarked);
+  writer.writeBool(offsets[10], object.isComplete);
+  writer.writeBool(offsets[11], object.isKicdCertified);
+  writer.writeBool(offsets[12], object.isTemporary);
+  writer.writeBool(offsets[13], object.isThinking);
+  writer.writeBool(offsets[14], object.isThought);
+  writer.writeBool(offsets[15], object.isUser);
+  writer.writeString(offsets[16], object.mathAnswer);
+  writer.writeStringList(offsets[17], object.mathSteps);
+  writer.writeString(offsets[18], object.mnemonicDataJson);
+  writer.writeString(offsets[19], object.punnettDataJson);
+  writer.writeString(offsets[20], object.quizDataJson);
+  writer.writeString(offsets[21], object.reasoning);
+  writer.writeString(offsets[22], object.replyToId);
+  writer.writeString(offsets[23], object.replyToText);
   writer.writeObjectList<SourceMetadata>(
-    offsets[26],
+    offsets[24],
     allOffsets,
     SourceMetadataSchema.serialize,
     object.sources,
   );
-  writer.writeByte(offsets[27], object.status.index);
-  writer.writeString(offsets[28], object.text);
-  writer.writeString(offsets[29], object.threadId);
-  writer.writeDateTime(offsets[30], object.timestamp);
+  writer.writeByte(offsets[25], object.status.index);
+  writer.writeString(offsets[26], object.text);
+  writer.writeString(offsets[27], object.threadId);
+  writer.writeDateTime(offsets[28], object.timestamp);
+  writer.writeObjectList<UiWidgetData>(
+    offsets[29],
+    allOffsets,
+    UiWidgetDataSchema.serialize,
+    object.uiWidgets,
+  );
+  writer.writeStringList(offsets[30], object.uiWidgetsJson);
   writer.writeObjectList<VideoResult>(
     offsets[31],
     allOffsets,
@@ -444,42 +465,47 @@ ChatMessage _chatMessageDeserialize(
       ChatAttachmentMetadata(),
     ),
     audioUrl: reader.readStringOrNull(offsets[1]),
-    desmosDataJson: reader.readStringOrNull(offsets[2]),
-    feedback: reader.readLongOrNull(offsets[3]),
-    fileId: reader.readStringOrNull(offsets[4]),
-    fileName: reader.readStringOrNull(offsets[5]),
-    fileType: reader.readStringOrNull(offsets[6]),
-    flashcardDataJson: reader.readStringOrNull(offsets[7]),
-    graphDataJson: reader.readStringOrNull(offsets[8]),
-    id: reader.readString(offsets[9]),
-    imageUrl: reader.readStringOrNull(offsets[10]),
-    isBookmarked: reader.readBoolOrNull(offsets[11]) ?? false,
-    isComplete: reader.readBoolOrNull(offsets[12]) ?? true,
-    isKicdCertified: reader.readBoolOrNull(offsets[13]) ?? false,
-    isTemporary: reader.readBoolOrNull(offsets[14]) ?? false,
-    isThinking: reader.readBoolOrNull(offsets[15]) ?? false,
-    isThought: reader.readBoolOrNull(offsets[16]) ?? false,
-    isUser: reader.readBool(offsets[17]),
-    mathAnswer: reader.readStringOrNull(offsets[18]),
-    mathSteps: reader.readStringList(offsets[19]),
-    mnemonicDataJson: reader.readStringOrNull(offsets[20]),
-    punnettDataJson: reader.readStringOrNull(offsets[21]),
-    quizDataJson: reader.readStringOrNull(offsets[22]),
-    reasoning: reader.readStringOrNull(offsets[23]),
-    replyToId: reader.readStringOrNull(offsets[24]),
-    replyToText: reader.readStringOrNull(offsets[25]),
+    feedback: reader.readLongOrNull(offsets[2]),
+    fileId: reader.readStringOrNull(offsets[3]),
+    fileName: reader.readStringOrNull(offsets[4]),
+    fileType: reader.readStringOrNull(offsets[5]),
+    flashcardDataJson: reader.readStringOrNull(offsets[6]),
+    id: reader.readString(offsets[7]),
+    imageUrl: reader.readStringOrNull(offsets[8]),
+    isBookmarked: reader.readBoolOrNull(offsets[9]) ?? false,
+    isComplete: reader.readBoolOrNull(offsets[10]) ?? true,
+    isKicdCertified: reader.readBoolOrNull(offsets[11]) ?? false,
+    isTemporary: reader.readBoolOrNull(offsets[12]) ?? false,
+    isThinking: reader.readBoolOrNull(offsets[13]) ?? false,
+    isThought: reader.readBoolOrNull(offsets[14]) ?? false,
+    isUser: reader.readBool(offsets[15]),
+    mathAnswer: reader.readStringOrNull(offsets[16]),
+    mathSteps: reader.readStringList(offsets[17]),
+    mnemonicDataJson: reader.readStringOrNull(offsets[18]),
+    punnettDataJson: reader.readStringOrNull(offsets[19]),
+    quizDataJson: reader.readStringOrNull(offsets[20]),
+    reasoning: reader.readStringOrNull(offsets[21]),
+    replyToId: reader.readStringOrNull(offsets[22]),
+    replyToText: reader.readStringOrNull(offsets[23]),
     sources: reader.readObjectList<SourceMetadata>(
-      offsets[26],
+      offsets[24],
       SourceMetadataSchema.deserialize,
       allOffsets,
       SourceMetadata(),
     ),
     status:
-        _ChatMessagestatusValueEnumMap[reader.readByteOrNull(offsets[27])] ??
+        _ChatMessagestatusValueEnumMap[reader.readByteOrNull(offsets[25])] ??
             MessageStatus.sent,
-    text: reader.readString(offsets[28]),
-    threadId: reader.readStringOrNull(offsets[29]),
-    timestamp: reader.readDateTime(offsets[30]),
+    text: reader.readString(offsets[26]),
+    threadId: reader.readStringOrNull(offsets[27]),
+    timestamp: reader.readDateTime(offsets[28]),
+    uiWidgets: reader.readObjectList<UiWidgetData>(
+      offsets[29],
+      UiWidgetDataSchema.deserialize,
+      allOffsets,
+      UiWidgetData(),
+    ),
+    uiWidgetsJson: reader.readStringList(offsets[30]),
     videos: reader.readObjectList<VideoResult>(
       offsets[31],
       VideoResultSchema.deserialize,
@@ -507,9 +533,9 @@ P _chatMessageDeserializeProp<P>(
     case 1:
       return (reader.readStringOrNull(offset)) as P;
     case 2:
-      return (reader.readStringOrNull(offset)) as P;
-    case 3:
       return (reader.readLongOrNull(offset)) as P;
+    case 3:
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
       return (reader.readStringOrNull(offset)) as P;
     case 5:
@@ -517,31 +543,31 @@ P _chatMessageDeserializeProp<P>(
     case 6:
       return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 8:
       return (reader.readStringOrNull(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
+      return (reader.readBoolOrNull(offset) ?? false) as P;
     case 10:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readBoolOrNull(offset) ?? true) as P;
     case 11:
       return (reader.readBoolOrNull(offset) ?? false) as P;
     case 12:
-      return (reader.readBoolOrNull(offset) ?? true) as P;
+      return (reader.readBoolOrNull(offset) ?? false) as P;
     case 13:
       return (reader.readBoolOrNull(offset) ?? false) as P;
     case 14:
       return (reader.readBoolOrNull(offset) ?? false) as P;
     case 15:
-      return (reader.readBoolOrNull(offset) ?? false) as P;
-    case 16:
-      return (reader.readBoolOrNull(offset) ?? false) as P;
-    case 17:
       return (reader.readBool(offset)) as P;
+    case 16:
+      return (reader.readStringOrNull(offset)) as P;
+    case 17:
+      return (reader.readStringList(offset)) as P;
     case 18:
       return (reader.readStringOrNull(offset)) as P;
     case 19:
-      return (reader.readStringList(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 20:
       return (reader.readStringOrNull(offset)) as P;
     case 21:
@@ -551,25 +577,30 @@ P _chatMessageDeserializeProp<P>(
     case 23:
       return (reader.readStringOrNull(offset)) as P;
     case 24:
-      return (reader.readStringOrNull(offset)) as P;
-    case 25:
-      return (reader.readStringOrNull(offset)) as P;
-    case 26:
       return (reader.readObjectList<SourceMetadata>(
         offset,
         SourceMetadataSchema.deserialize,
         allOffsets,
         SourceMetadata(),
       )) as P;
-    case 27:
+    case 25:
       return (_ChatMessagestatusValueEnumMap[reader.readByteOrNull(offset)] ??
           MessageStatus.sent) as P;
-    case 28:
+    case 26:
       return (reader.readString(offset)) as P;
-    case 29:
+    case 27:
       return (reader.readStringOrNull(offset)) as P;
-    case 30:
+    case 28:
       return (reader.readDateTime(offset)) as P;
+    case 29:
+      return (reader.readObjectList<UiWidgetData>(
+        offset,
+        UiWidgetDataSchema.deserialize,
+        allOffsets,
+        UiWidgetData(),
+      )) as P;
+    case 30:
+      return (reader.readStringList(offset)) as P;
     case 31:
       return (reader.readObjectList<VideoResult>(
         offset,
@@ -1008,160 +1039,6 @@ extension ChatMessageQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'audioUrl',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonIsNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'desmosDataJson',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonIsNotNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'desmosDataJson',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonLessThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonBetween(
-    String? lower,
-    String? upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'desmosDataJson',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'desmosDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'desmosDataJson',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'desmosDataJson',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      desmosDataJsonIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'desmosDataJson',
         value: '',
       ));
     });
@@ -1846,160 +1723,6 @@ extension ChatMessageQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'flashcardDataJson',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonIsNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'graphDataJson',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonIsNotNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'graphDataJson',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonLessThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonBetween(
-    String? lower,
-    String? upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'graphDataJson',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'graphDataJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'graphDataJson',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'graphDataJson',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
-      graphDataJsonIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'graphDataJson',
         value: '',
       ));
     });
@@ -4234,6 +3957,356 @@ extension ChatMessageQueryFilter
     });
   }
 
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'uiWidgets',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'uiWidgets',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgets',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'uiWidgetsJson',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'uiWidgetsJson',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'uiWidgetsJson',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'uiWidgetsJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'uiWidgetsJson',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'uiWidgetsJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'uiWidgetsJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsJsonLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'uiWidgetsJson',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
   QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition> videosIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -4357,6 +4430,13 @@ extension ChatMessageQueryObject
     });
   }
 
+  QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition>
+      uiWidgetsElement(FilterQuery<UiWidgetData> q) {
+    return QueryBuilder.apply(this, (query) {
+      return query.object(q, r'uiWidgets');
+    });
+  }
+
   QueryBuilder<ChatMessage, ChatMessage, QAfterFilterCondition> videosElement(
       FilterQuery<VideoResult> q) {
     return QueryBuilder.apply(this, (query) {
@@ -4379,19 +4459,6 @@ extension ChatMessageQuerySortBy
   QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> sortByAudioUrlDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'audioUrl', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> sortByDesmosDataJson() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'desmosDataJson', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy>
-      sortByDesmosDataJsonDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'desmosDataJson', Sort.desc);
     });
   }
 
@@ -4454,19 +4521,6 @@ extension ChatMessageQuerySortBy
       sortByFlashcardDataJsonDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'flashcardDataJson', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> sortByGraphDataJson() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'graphDataJson', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy>
-      sortByGraphDataJsonDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'graphDataJson', Sort.desc);
     });
   }
 
@@ -4731,19 +4785,6 @@ extension ChatMessageQuerySortThenBy
     });
   }
 
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> thenByDesmosDataJson() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'desmosDataJson', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy>
-      thenByDesmosDataJsonDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'desmosDataJson', Sort.desc);
-    });
-  }
-
   QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> thenByFeedback() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'feedback', Sort.asc);
@@ -4803,19 +4844,6 @@ extension ChatMessageQuerySortThenBy
       thenByFlashcardDataJsonDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'flashcardDataJson', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy> thenByGraphDataJson() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'graphDataJson', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QAfterSortBy>
-      thenByGraphDataJsonDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'graphDataJson', Sort.desc);
     });
   }
 
@@ -5087,14 +5115,6 @@ extension ChatMessageQueryWhereDistinct
     });
   }
 
-  QueryBuilder<ChatMessage, ChatMessage, QDistinct> distinctByDesmosDataJson(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'desmosDataJson',
-          caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<ChatMessage, ChatMessage, QDistinct> distinctByFeedback() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'feedback');
@@ -5126,14 +5146,6 @@ extension ChatMessageQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'flashcardDataJson',
-          caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<ChatMessage, ChatMessage, QDistinct> distinctByGraphDataJson(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'graphDataJson',
           caseSensitive: caseSensitive);
     });
   }
@@ -5277,6 +5289,12 @@ extension ChatMessageQueryWhereDistinct
       return query.addDistinctBy(r'timestamp');
     });
   }
+
+  QueryBuilder<ChatMessage, ChatMessage, QDistinct> distinctByUiWidgetsJson() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'uiWidgetsJson');
+    });
+  }
 }
 
 extension ChatMessageQueryProperty
@@ -5297,13 +5315,6 @@ extension ChatMessageQueryProperty
   QueryBuilder<ChatMessage, String?, QQueryOperations> audioUrlProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'audioUrl');
-    });
-  }
-
-  QueryBuilder<ChatMessage, String?, QQueryOperations>
-      desmosDataJsonProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'desmosDataJson');
     });
   }
 
@@ -5335,12 +5346,6 @@ extension ChatMessageQueryProperty
       flashcardDataJsonProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'flashcardDataJson');
-    });
-  }
-
-  QueryBuilder<ChatMessage, String?, QQueryOperations> graphDataJsonProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'graphDataJson');
     });
   }
 
@@ -5477,6 +5482,20 @@ extension ChatMessageQueryProperty
   QueryBuilder<ChatMessage, DateTime, QQueryOperations> timestampProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'timestamp');
+    });
+  }
+
+  QueryBuilder<ChatMessage, List<UiWidgetData>?, QQueryOperations>
+      uiWidgetsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'uiWidgets');
+    });
+  }
+
+  QueryBuilder<ChatMessage, List<String>?, QQueryOperations>
+      uiWidgetsJsonProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'uiWidgetsJson');
     });
   }
 
@@ -6925,6 +6944,731 @@ extension ChatAttachmentMetadataQueryFilter on QueryBuilder<
 
 extension ChatAttachmentMetadataQueryObject on QueryBuilder<
     ChatAttachmentMetadata, ChatAttachmentMetadata, QFilterCondition> {}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
+const UiWidgetDataSchema = Schema(
+  name: r'UiWidgetData',
+  id: 1238349048678403038,
+  properties: {
+    r'configJson': PropertySchema(
+      id: 0,
+      name: r'configJson',
+      type: IsarType.string,
+    ),
+    r'id': PropertySchema(
+      id: 1,
+      name: r'id',
+      type: IsarType.string,
+    ),
+    r'title': PropertySchema(
+      id: 2,
+      name: r'title',
+      type: IsarType.string,
+    ),
+    r'type': PropertySchema(
+      id: 3,
+      name: r'type',
+      type: IsarType.string,
+    )
+  },
+  estimateSize: _uiWidgetDataEstimateSize,
+  serialize: _uiWidgetDataSerialize,
+  deserialize: _uiWidgetDataDeserialize,
+  deserializeProp: _uiWidgetDataDeserializeProp,
+);
+
+int _uiWidgetDataEstimateSize(
+  UiWidgetData object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  {
+    final value = object.configJson;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.id;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.title;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.type;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  return bytesCount;
+}
+
+void _uiWidgetDataSerialize(
+  UiWidgetData object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeString(offsets[0], object.configJson);
+  writer.writeString(offsets[1], object.id);
+  writer.writeString(offsets[2], object.title);
+  writer.writeString(offsets[3], object.type);
+}
+
+UiWidgetData _uiWidgetDataDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = UiWidgetData(
+    configJson: reader.readStringOrNull(offsets[0]),
+    id: reader.readStringOrNull(offsets[1]),
+    title: reader.readStringOrNull(offsets[2]),
+    type: reader.readStringOrNull(offsets[3]),
+  );
+  return object;
+}
+
+P _uiWidgetDataDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readStringOrNull(offset)) as P;
+    case 1:
+      return (reader.readStringOrNull(offset)) as P;
+    case 2:
+      return (reader.readStringOrNull(offset)) as P;
+    case 3:
+      return (reader.readStringOrNull(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+extension UiWidgetDataQueryFilter
+    on QueryBuilder<UiWidgetData, UiWidgetData, QFilterCondition> {
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'configJson',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'configJson',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'configJson',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'configJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'configJson',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'configJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      configJsonIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'configJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'id',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      idIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'id',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'id',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'id',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> idIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      idIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'id',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'title',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'title',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'title',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'title',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> titleMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'title',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'title',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      titleIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'title',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'type',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      typeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'type',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      typeGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'type',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      typeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition> typeMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'type',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      typeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'type',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UiWidgetData, UiWidgetData, QAfterFilterCondition>
+      typeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'type',
+        value: '',
+      ));
+    });
+  }
+}
+
+extension UiWidgetDataQueryObject
+    on QueryBuilder<UiWidgetData, UiWidgetData, QFilterCondition> {}
 
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types

@@ -1,120 +1,114 @@
 'use client';
+import { motion } from 'framer-motion';
+import { Menu, X, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useLocale } from '@/i18n';
-import { Button } from '@/components/ui/button';
-import { Menu } from 'lucide-react';
-import {
-    Sheet,
-    SheetContent,
-    SheetTrigger,
-    SheetTitle,
-    SheetDescription,
-} from "@/components/ui/sheet";
-import styles from './Nav.module.css';
 
-import type { TranslationKey } from '@/i18n';
+export default function Nav() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const pathname = usePathname();
+  const { t } = useLocale();
 
-const linkKeys: { href: string; key: TranslationKey }[] = [
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [pathname]);
+
+  const navLinks = [
     { href: '/features', key: 'nav.features' },
     { href: '/how-it-works', key: 'nav.howItWorks' },
     { href: '/tools', key: 'nav.tools' },
     { href: '/pricing', key: 'nav.pricing' },
-    { href: '/reviews', key: 'testimonials.label' as any },
-    { href: '/contact', key: 'contact.label' as any },
-];
+    { href: '/contact', key: 'contact.label' },
+  ];
+
+  return (
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white/80 backdrop-blur-lg border-b border-slate-200/50 py-3 shadow-sm' : 'bg-transparent py-5'}`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-10 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-3">
+          <Image 
+            src="/logo.png" 
+            alt="TopScore AI" 
+            width={36} 
+            height={36} 
+            className="rounded-xl shadow-lg shadow-indigo-200"
+          />
+          <span className="text-xl font-display font-black tracking-tight text-slate-900">TopScore AI</span>
+        </Link>
 
 
-export default function Nav() {
-    const [scrolled, setScrolled] = useState(false);
-    const [open, setOpen] = useState(false);
-    const pathname = usePathname();
-    const { t } = useLocale();
-
-    useEffect(() => {
-        const onScroll = () => setScrolled(window.scrollY > 20);
-        window.addEventListener('scroll', onScroll);
-        return () => window.removeEventListener('scroll', onScroll);
-    }, []);
-
-    // Close menu on route change
-    useEffect(() => { setOpen(false); }, [pathname]);
-
-    return (
-        <>
-            <header
-                className={`${styles.nav} ${scrolled ? 'glass-dark' : ''}`}
+        <div className="hidden lg:flex items-center gap-10 text-[13px] font-bold text-slate-500 uppercase tracking-widest">
+          {navLinks.map(({ href, key }) => (
+            <Link 
+              key={href} 
+              href={href} 
+              className={`hover:text-brand-primary transition-colors py-1 relative group ${pathname === href ? 'text-brand-primary' : ''}`}
             >
-                <div className={styles.inner}>
-                    {/* Mobile menu on the Left */}
-                    <div className="md:hidden">
-                        <Sheet open={open} onOpenChange={setOpen}>
-                            <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon" className={styles.burger}>
-                                    <Menu className="h-6 w-6" />
-                                    <span className="sr-only">Toggle menu</span>
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent side="left" className={styles.drawer}>
-                                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-                                <SheetDescription className="sr-only">
-                                    Access all pages and features of TopScore AI.
-                                </SheetDescription>
-                                <nav className={styles.drawerLinks}>
-                                    {linkKeys.map(({ href, key }) => (
-                                        <Link
-                                            key={href}
-                                            href={href}
-                                            className={`${styles.drawerLink} ${pathname === href ? styles.drawerActive : ''}`}
-                                            onClick={() => setOpen(false)}
-                                        >
-                                            {t(key)}
-                                        </Link>
-                                    ))}
-                                    <Button asChild variant="outline" className={styles.drawerOpenApp}>
-                                        <a href="https://app.topscoreapp.ai" target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>
-                                            Open App
-                                        </a>
-                                    </Button>
-                                    <Button asChild className={styles.drawerCta}>
-                                        <Link href="/download" onClick={() => setOpen(false)}>
-                                            {t('nav.downloadMobile')}
-                                        </Link>
-                                    </Button>
-                                </nav>
-                            </SheetContent>
-                        </Sheet>
-                    </div>
+              {t(key as any)}
+              <span className={`absolute bottom-0 left-0 h-0.5 bg-brand-primary transition-all group-hover:w-full ${pathname === href ? 'w-full' : 'w-0'}`} />
+            </Link>
+          ))}
+        </div>
 
-                    <Link href="/" className={styles.logo}>
-                        <Image src="/logo.png" alt="TopScore AI" width={40} height={40} className={styles.logoImg} />
-                        TopScore AI
-                    </Link>
+        <div className="hidden sm:flex items-center gap-4">
+          <a 
+            href="https://app.topscoreapp.ai"
+            className="bg-slate-900 text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-brand-primary transition-all shadow-xl shadow-slate-200 hover:shadow-indigo-200"
+          >
+            Start Learning for Free
+          </a>
+        </div>
 
-                    {/* Desktop links */}
-                    <nav className={styles.links}>
-                        {linkKeys.map(({ href, key }) => (
-                            <Link key={href} href={href} className={pathname === href ? styles.active : ''}>
-                                {t(key)}
-                            </Link>
-                        ))}
-                        <div className="flex items-center gap-3 ml-4 border-l pl-4 border-border/50">
-                            <Button asChild variant="outline" className={styles.openApp}>
-                                <a href="https://app.topscoreapp.ai" target="_blank" rel="noopener noreferrer">
-                                    Open App
-                                </a>
-                            </Button>
-                            <Button asChild className={styles.cta}>
-                                <Link href="/download">
-                                    {t('nav.download')}
-                                </Link>
-                            </Button>
-                        </div>
-                    </nav>
-                </div>
-            </header>
-        </>
-    );
+        <button 
+          className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" 
+          onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
+          aria-label="Toggle Navigation Menu"
+        >
+          {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-full left-0 right-0 bg-white border-b border-slate-200 px-6 py-10 space-y-6 lg:hidden shadow-2xl"
+        >
+          <div className="flex flex-col gap-6">
+            {navLinks.map(({ href, key }) => (
+              <Link 
+                key={href} 
+                href={href} 
+                className={`text-xl font-display font-bold ${pathname === href ? 'text-brand-primary' : 'text-slate-800'}`}
+                onClick={() => setIsOpen(false)}
+              >
+                {t(key as any)}
+              </Link>
+            ))}
+          </div>
+          <div className="pt-6 border-t border-slate-100">
+            <a 
+              href="https://app.topscoreapp.ai"
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-center block shadow-lg shadow-slate-200"
+            >
+              {t('nav.download' as any)}
+            </a>
+          </div>
+        </motion.div>
+      )}
+    </nav>
+  );
 }
+

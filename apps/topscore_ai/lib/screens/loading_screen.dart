@@ -1,3 +1,4 @@
+import '../../constants/colors.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -41,13 +42,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 1. Check for recovery state (Background Kill lifeline)
       final recovery = await RecoveryService.getRecoveryState();
-      
-      // 2. Small delay to ensure frame is painted
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // 3. Keep the animation visible for at least 2.5 seconds for premium feel
-      await Future.delayed(const Duration(milliseconds: 2400));
-      
+
       if (mounted && recovery != null) {
         final path = recovery['path'];
         final threadId = recovery['threadId'];
@@ -158,7 +153,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
                     textAlign: TextAlign.center,
                     style: GoogleFonts.nunito(
                       fontSize: 13,
-                      color: isDark ? Colors.white70 : Colors.black54,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w500,
                       fontStyle: FontStyle.italic,
                     ),
@@ -187,7 +182,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
           style: GoogleFonts.poppins(
             fontSize: 28,
             fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : const Color(0xFF0F172A),
+            color: isDark ? Colors.white : AppColors.backgroundDark,
             letterSpacing: 0.5,
           ),
         )

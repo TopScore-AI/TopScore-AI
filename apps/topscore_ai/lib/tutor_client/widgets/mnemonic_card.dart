@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../constants/colors.dart';
+import '../../widgets/app_spinner.dart';
 
 class MnemonicCard extends StatefulWidget {
   final String mnemonicDataJson;
@@ -13,7 +16,8 @@ class MnemonicCard extends StatefulWidget {
   State<MnemonicCard> createState() => _MnemonicCardState();
 }
 
-class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderStateMixin {
+class _MnemonicCardState extends State<MnemonicCard>
+    with SingleTickerProviderStateMixin {
   late AudioPlayer _audioPlayer;
   bool _isPlaying = false;
   bool _isLoadingAudio = false;
@@ -65,7 +69,7 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
       try {
         await _audioPlayer.play(UrlSource(audioUrl));
       } catch (e) {
-        debugPrint('Error loading mnemonic audio: $e');
+        if (kDebugMode) debugPrint('Error loading mnemonic audio: $e');
       } finally {
         if (mounted) setState(() => _isLoadingAudio = false);
       }
@@ -76,11 +80,10 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    // Custom Kenyan-inspired palette (Safari Gold / Savannah Green)
-    final primaryColor = const Color(0xFFC69C6D); // Safari Gold
-    final accentColor = const Color(0xFF006400); // Kenyan Flag Green
-    
+
+    final primaryColor = AppColors.topscoreBlue;
+    final accentColor = AppColors.accentTeal;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
@@ -88,19 +91,19 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isDark 
-            ? [const Color(0xFF1A1A1A), const Color(0xFF0D0D0D)]
-            : [Colors.white, const Color(0xFFF5F5F5)],
+          colors: isDark
+              ? [const Color(0xFF1A1A1A), const Color(0xFF0D0D0D)]
+              : [Colors.white, const Color(0xFFF5F5F5)],
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
+            color: Colors.black.withAlpha(isDark ? 102 : 25),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
         ],
         border: Border.all(
-          color: primaryColor.withValues(alpha: 0.3),
+          color: primaryColor.withAlpha(75),
           width: 1.5,
         ),
       ),
@@ -117,7 +120,7 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                 child: Icon(Icons.psychology, size: 150, color: primaryColor),
               ),
             ),
-            
+
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -129,7 +132,8 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                     children: [
                       Expanded(
                         child: Text(
-                          _data['topic']?.toString().toUpperCase() ?? 'MEMORIZATION AID',
+                          _data['topic']?.toString().toUpperCase() ??
+                              'MEMORIZATION AID',
                           style: GoogleFonts.outfit(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -139,11 +143,13 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.1),
+                          color: accentColor.withAlpha(25),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+                          border: Border.all(
+                              color: accentColor.withAlpha(51)),
                         ),
                         child: Text(
                           _data['style'] ?? 'Local Context',
@@ -157,32 +163,27 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
-                  // The Mnemonic Phrase (Big and Bold)
-                  ShaderMask(
-                    shaderCallback: (bounds) => LinearGradient(
-                      colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
-                    ).createShader(bounds),
-                    child: Text(
-                      _data['mnemonic_phrase'] ?? '',
-                      style: GoogleFonts.outfit(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        height: 1.2,
-                        color: Colors.white,
-                      ),
+
+                  // The Mnemonic Phrase (Big and Bold) - Solid color for visibility
+                  Text(
+                    _data['mnemonic_phrase'] ?? '',
+                    style: GoogleFonts.outfit(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      height: 1.2,
+                      color: primaryColor, // Solid color instead of gradient
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Animated Audio Player Row
                   if (_data['audio_url'] != null)
                     _buildAudioRow(primaryColor, accentColor, isDark),
-                  
+
                   const SizedBox(height: 20),
                   const Divider(height: 1),
                   const SizedBox(height: 20),
-                  
+
                   // Explanation / Breakdown
                   Text(
                     'Memory Breakdown',
@@ -197,12 +198,12 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       height: 1.5,
-                      color: isDark ? Colors.white70 : Colors.black87,
+                      color: theme.colorScheme.onSurface, // Full visibility
                     ),
                   ),
-                  
+
                   const SizedBox(height: 20),
-                  
+
                   // Interactive Action
                   ElevatedButton.icon(
                     onPressed: () {
@@ -225,7 +226,7 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    icon: const Icon(Icons. bookmark_add_outlined),
+                    icon: const Icon(Icons.bookmark_add_outlined),
                     label: Text(
                       'Save to Flashcards',
                       style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
@@ -244,7 +245,7 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.05),
+        color: primary.withAlpha(13),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -261,15 +262,15 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                 color: primary,
                 shape: BoxShape.circle,
               ),
-              child: _isLoadingAudio 
-                ? const Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                  )
-                : Icon(
-                    _isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.white,
-                  ),
+              child: _isLoadingAudio
+                  ? const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: AppSpinner(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Icon(
+                      _isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                    ),
             ),
           ),
           const SizedBox(width: 16),
@@ -291,15 +292,17 @@ class _MnemonicCardState extends State<MnemonicCard> with SingleTickerProviderSt
                     return AnimatedBuilder(
                       animation: _pulseController,
                       builder: (context, child) {
-                        final h = _isPlaying 
-                          ? (10 + (index % 5) * 4 * _pulseController.value)
-                          : 4.0;
+                        final h = _isPlaying
+                            ? (10 + (index % 5) * 4 * _pulseController.value)
+                            : 4.0;
                         return Container(
                           width: 3,
                           height: h,
                           margin: const EdgeInsets.symmetric(horizontal: 1),
                           decoration: BoxDecoration(
-                            color: _isPlaying ? primary : primary.withValues(alpha: 0.3),
+                            color: _isPlaying
+                                ? primary
+                                : primary.withAlpha(75),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         );

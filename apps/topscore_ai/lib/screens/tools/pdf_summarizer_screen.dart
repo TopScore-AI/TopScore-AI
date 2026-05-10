@@ -1,20 +1,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:universal_io/io.dart';
 import 'package:flutter/material.dart';
 import '../../shared/services/media_picker_service.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as markdown;
 import 'package:provider/provider.dart';
 import '../../services/ai_service.dart';
+import '../../widgets/gpt_markdown_wrapper.dart';
 import '../../providers/auth_provider.dart';
-import '../../widgets/math_markdown.dart';
-import '../../utils/markdown/mermaid_builder.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../main.dart'; // To access studyDb
-import '../../utils/curriculum_utils.dart';
+import '../../main.dart';
 import '../../services/analytics_service.dart';
 import '../../services/recovery_service.dart';
+import '../../widgets/app_spinner.dart';
+import '../../services/feature_gate_service.dart';
+import '../../widgets/premium_feature_dialog.dart';
+import '../../constants/colors.dart';
 
 class PdfSummarizerScreen extends StatefulWidget {
   const PdfSummarizerScreen({super.key});
@@ -28,40 +29,25 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
   bool _isUploading = false;
   String _statusText = "Upload a PDF to generate notes.";
 
-  // Controls for the prompt
-  String _selectedCurriculum = 'CBC';
-  String _selectedGrade = 'Grade 7';
   String _summaryType = 'detailed_bullet_points';
-
-  final List<String> _curriculums = CurriculumData.getCurriculums();
-
-  List<String> get _availableGrades =>
-      CurriculumData.getGradesForCurriculum(_selectedCurriculum);
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.instance.logToolStarted('pdf_summarizer');
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().userModel;
-      if (user != null && user.curriculum != null) {
-        setState(() {
-          final cur = user.curriculum == '8-4-4' ? '844' : user.curriculum!;
-          if (_curriculums.contains(cur)) {
-            _selectedCurriculum = cur;
 
-            final userGradeLabel = user.gradeLabel.split(' ').last;
-            final normalizedGrade = CurriculumData.normalizeGrade(
-                userGradeLabel, _selectedCurriculum);
-
-            if (normalizedGrade != null &&
-                _availableGrades.contains(normalizedGrade)) {
-              _selectedGrade = normalizedGrade;
-            } else {
-              _selectedGrade = _availableGrades.first;
-            }
-          }
+      if (!FeatureGateService.canUsePdfSummarizer(user)) {
+        PremiumFeatureDialog.show(
+          context,
+          featureName: 'Document Summarizer',
+          icon: Icons.summarize,
+        ).then((_) {
+          if (mounted) Navigator.of(context).pop();
         });
+        return;
       }
     });
   }
@@ -75,7 +61,6 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
 
   Future<void> _pickAndUploadPdf() async {
     try {
-      // Save recovery state so Android relaunch returns here instead of /home
       await RecoveryService.saveNavigationState('/summarizer');
 
       final results = await MediaPickerService.instance.pickFiles(
@@ -84,7 +69,6 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
         withData: true,
       );
 
-      // Clear recovery state — we're back in the app with a result (or cancelled)
       await RecoveryService.clearRecoveryState();
 
       if (results.isEmpty) return;
@@ -92,8 +76,7 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
 
       setState(() {
         _isUploading = true;
-        _statusText =
-            "Analyzing ${picked.name}... this might take a minute depending on the PDF size.";
+        _statusText = "Analyzing ${picked.name}...";
         _summaryMarkdown = null;
       });
 
@@ -114,7 +97,7 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
       final summary = await aiService.summarizePdfVision(
         pdfBytes: fileBytes,
         filename: picked.name,
-        readingLevel: '$_selectedCurriculum $_selectedGrade',
+        readingLevel: 'general',
         summaryType: _summaryType,
       );
 
@@ -123,8 +106,8 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
       await studyDb.saveMaterial(
         type: 'summary',
         topic: picked.name.replaceAll('.pdf', ''),
-        curriculum: _selectedCurriculum,
-        grade: _selectedGrade,
+        curriculum: 'General',
+        grade: 'General',
         jsonData: rawJsonString,
       );
 
@@ -137,259 +120,261 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
       AnalyticsService.instance.logMaterialGenerated(
         type: 'pdf_summary',
         topic: picked.name.replaceAll('.pdf', ''),
-        curriculum: _selectedCurriculum,
-        grade: _selectedGrade,
-      );
-
-      // Auto-save for offline access
-      await studyDb.saveMaterial(
-        type: 'pdf_summary',
-        topic: picked.name.replaceAll('.pdf', ''),
-        curriculum: _selectedCurriculum,
-        grade: _selectedGrade,
-        jsonData: jsonEncode({'summary': summary}),
+        curriculum: 'General',
+        grade: 'General',
       );
     } catch (e) {
       await RecoveryService.clearRecoveryState();
       if (mounted) {
         setState(() {
-          _statusText =
-              "Upload failed. Please ensure the backend is running.\n\nError: $e";
+          _statusText = "Upload failed. Please try again.";
           _isUploading = false;
         });
       }
     }
   }
 
-  Widget _buildConfigSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text("Document Summarizer",
+            style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : AppColors.primary)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: isDark ? Colors.white : AppColors.primary),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Stack(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Curriculum",
-                        style: GoogleFonts.nunito(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedCurriculum,
-                          isExpanded: true,
-                          items: _curriculums
-                              .map((c) =>
-                                  DropdownMenuItem(value: c, child: Text(c)))
-                              .toList(),
-                          onChanged: _isUploading
-                              ? null
-                              : (v) {
-                                  setState(() {
-                                    _selectedCurriculum = v!;
-                                    _selectedGrade = _availableGrades.first;
-                                  });
-                                },
-                        ),
-                      ),
-                    ),
-                  ],
+          // Background Gradient
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: isDark
+                      ? [AppColors.backgroundDark, AppColors.surfaceElevatedDark]
+                      : [const Color(0xFFF8FAFC), Colors.white],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Grade/Level",
-                        style: GoogleFonts.nunito(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedGrade,
-                          isExpanded: true,
-                          items: _availableGrades
-                              .map((g) =>
-                                  DropdownMenuItem(value: g, child: Text(g)))
-                              .toList(),
-                          onChanged: _isUploading
-                              ? null
-                              : (v) => setState(() => _selectedGrade = v!),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text("Summary Format",
-              style: GoogleFonts.nunito(
-                  fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _summaryType,
-                isExpanded: true,
-                items: _formats
-                    .map((f) => DropdownMenuItem(
-                        value: f, child: Text(f.replaceAll('_', ' '))))
-                    .toList(),
-                onChanged: _isUploading
-                    ? null
-                    : (v) => setState(() => _summaryType = v!),
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          // The Upload Button
-          ElevatedButton.icon(
-            icon: _isUploading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.upload_file),
-            label:
-                Text(_isUploading ? "Summarizing..." : "Select PDF Document"),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Column(
+                children: [
+                  _buildGlassConfig(isDark),
+                  const SizedBox(height: 20),
+                  Expanded(child: _buildResultsArea(isDark)),
+                ],
+              ),
             ),
-            onPressed: _isUploading ? null : _pickAndUploadPdf,
           ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Document Summarizer",
-            style: GoogleFonts.nunito(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.pop(context),
+  Widget _buildGlassConfig(bool isDark) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: (isDark ? Colors.white : AppColors.primary)
+                .withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: (isDark ? Colors.white : AppColors.primary)
+                  .withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildFieldLabel("SUMMARY FORMAT", isDark),
+              const SizedBox(height: 8),
+              _buildGlassDropdown(
+                _summaryType,
+                _formats,
+                isDark,
+                (v) => setState(() => _summaryType = v!),
+                isFormat: true,
+              ),
+              const SizedBox(height: 24),
+              _buildActionButton(isDark),
+            ],
+          ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildConfigSection(),
-            const SizedBox(height: 16),
+    );
+  }
 
-            // The Results Area
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: Theme.of(context)
-                          .dividerColor
-                          .withValues(alpha: 0.1)),
-                ),
-                child: _summaryMarkdown != null
-                    ? SingleChildScrollView(
-                        child: MarkdownBody(
-                          data: _summaryMarkdown!,
-                          selectable: true,
-                          builders: {
-                            'latex': LatexElementBuilder(),
-                            'mermaid': MermaidElementBuilder(),
-                          },
-                          extensionSet: markdown.ExtensionSet(
-                            [
-                              ...markdown
-                                  .ExtensionSet.gitHubFlavored.blockSyntaxes,
-                              MermaidBlockSyntax()
-                            ],
-                            [
-                              markdown.EmojiSyntax(),
-                              LatexSyntax(),
-                              ...markdown
-                                  .ExtensionSet.gitHubFlavored.inlineSyntaxes,
-                            ],
-                          ),
-                          styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(fontSize: 16, height: 1.5),
-                            h1: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B)),
-                            h2: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF2563EB)),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.description_outlined,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              _statusText,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.grey.shade600, fontSize: 16),
-                            ),
-                          ],
-                        ),
+  Widget _buildFieldLabel(String label, bool isDark) {
+    return Text(
+      label,
+      style: GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 1.5,
+        color: (isDark ? Colors.white : AppColors.primary).withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _buildGlassDropdown(
+      String value, List<String> items, bool isDark, Function(String?) onChanged,
+      {bool isFormat = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : AppColors.primary).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: (isDark ? Colors.white : AppColors.primary)
+              .withValues(alpha: 0.1),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down_rounded,
+              color: isDark ? Colors.white60 : AppColors.primary),
+          dropdownColor: isDark ? AppColors.surfaceElevatedDark : Colors.white,
+          items: items
+              .map((i) => DropdownMenuItem(
+                    value: i,
+                    child: Text(
+                      isFormat ? i.replaceAll('_', ' ').toUpperCase() : i,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : AppColors.primary,
                       ),
+                    ),
+                  ))
+              .toList(),
+          onChanged: _isUploading ? null : onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(bool isDark) {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.8)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _isUploading ? null : _pickAndUploadPdf,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isUploading)
+              const AppSpinner(color: Colors.white, size: 20)
+            else
+              const Icon(Icons.cloud_upload_outlined, color: Colors.white),
+            const SizedBox(width: 12),
+            Text(
+              _isUploading ? "PROCESSOR ACTIVE..." : "SELECT PDF DOCUMENT",
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.5,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultsArea(bool isDark) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: (isDark ? Colors.white : AppColors.primary)
+                .withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: (isDark ? Colors.white : AppColors.primary)
+                  .withValues(alpha: 0.1),
+            ),
+          ),
+          child: _summaryMarkdown != null
+              ? SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: SelectionArea(
+                    child: StyledGptMarkdown(
+                      _summaryMarkdown!,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        height: 1.6,
+                        color: isDark ? Colors.white : AppColors.text,
+                      ),
+                    ),
+                  ),
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 64,
+                      color: (isDark ? Colors.white : AppColors.primary)
+                          .withValues(alpha: 0.2),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      _statusText,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: (isDark ? Colors.white : AppColors.primary)
+                            .withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );

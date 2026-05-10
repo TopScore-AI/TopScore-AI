@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/app_spinner.dart';
 import '../utils/cors_proxy_helper.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,7 +30,7 @@ class InteractiveMermaidViewer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     return GestureDetector(
       onTap: () => _showFullScreen(context),
       child: Container(
@@ -37,7 +38,10 @@ class InteractiveMermaidViewer extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.cardColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : theme.dividerColor.withValues(alpha: 0.1)),
+          border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : theme.dividerColor.withValues(alpha: 0.1)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
@@ -60,8 +64,8 @@ class InteractiveMermaidViewer extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.auto_awesome_mosaic_outlined, 
-                    size: 16, color: theme.primaryColor),
+                  Icon(Icons.auto_awesome_mosaic_outlined,
+                      size: 16, color: theme.primaryColor),
                   const SizedBox(width: 8),
                   Text(
                     'Interactive Diagram',
@@ -72,8 +76,9 @@ class InteractiveMermaidViewer extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Icon(Icons.zoom_in_rounded, 
-                    size: 14, color: theme.primaryColor.withValues(alpha: 0.5)),
+                  Icon(Icons.zoom_in_rounded,
+                      size: 14,
+                      color: theme.primaryColor.withValues(alpha: 0.5)),
                   const SizedBox(width: 4),
                   Text(
                     'Tap to zoom',
@@ -99,7 +104,7 @@ class InteractiveMermaidViewer extends StatelessWidget {
                   placeholder: (context, url) => Container(
                     height: 200,
                     alignment: Alignment.center,
-                    child: const CircularProgressIndicator(strokeWidth: 2),
+                    child: const AppSpinner(strokeWidth: 2),
                   ),
                   errorWidget: (context, url, error) => _ErrorPlaceholder(
                     source: diagramSource,
@@ -127,7 +132,6 @@ class _FullScreenViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -147,7 +151,9 @@ class _FullScreenViewer extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.code, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
+            icon: Icon(Icons.code,
+                color:
+                    theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
             onPressed: () => _showSource(context),
             tooltip: 'View Source',
           ),
@@ -168,7 +174,7 @@ class _FullScreenViewer extends StatelessWidget {
                       httpHeaders: CorsProxyHelper.standardHeaders,
                       fit: BoxFit.contain,
                       placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(),
+                        child: AppSpinner(),
                       ),
                     ),
                   ),
@@ -180,7 +186,8 @@ class _FullScreenViewer extends StatelessWidget {
               child: Text(
                 'Pinch to zoom • Drag to pan',
                 style: GoogleFonts.plusJakartaSans(
-                  color: isDark ? Colors.white54 : Colors.grey,
+                  color: theme.colorScheme.onSurface
+                      .withValues(alpha: 0.7), // Better visibility
                   fontSize: 12,
                 ),
               ),
@@ -209,7 +216,8 @@ class _FullScreenViewer extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.code_rounded, color: theme.textTheme.titleLarge?.color),
+                Icon(Icons.code_rounded,
+                    color: theme.textTheme.titleLarge?.color),
                 const SizedBox(width: 12),
                 Text(
                   'Mermaid Source',
@@ -226,7 +234,9 @@ class _FullScreenViewer extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SelectableText(
@@ -234,7 +244,7 @@ class _FullScreenViewer extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
-                  color: isDark ? Colors.white70 : Colors.black87,
+                  color: theme.colorScheme.onSurface, // Full visibility
                 ),
               ),
             ),

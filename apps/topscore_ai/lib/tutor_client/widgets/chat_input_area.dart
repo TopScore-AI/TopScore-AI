@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui';
+import 'package:provider/provider.dart';
+import '../../widgets/app_spinner.dart';
+import '../../constants/colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +20,7 @@ class ChatInputArea extends StatefulWidget {
   final bool isGenerating;
   final bool isRecording;
   final bool isOffline;
+  final bool isConnecting;
   final List<Map<String, String>> suggestions;
   final List<String> placeholderMessages;
   final VoidCallback onSendMessage;
@@ -34,6 +37,7 @@ class ChatInputArea extends StatefulWidget {
   final ChatMessage? replyingToMessage;
   final VoidCallback? onCancelReply;
   final Stream<wf.Amplitude>? amplitudeStream;
+  final bool isLocked;
 
   const ChatInputArea({
     super.key,
@@ -46,6 +50,7 @@ class ChatInputArea extends StatefulWidget {
     required this.isGenerating,
     required this.isRecording,
     this.isOffline = false,
+    this.isConnecting = false,
     required this.suggestions,
     required this.placeholderMessages,
     required this.onSendMessage,
@@ -63,6 +68,7 @@ class ChatInputArea extends StatefulWidget {
     this.onCancelReply,
     this.amplitudeStream,
     required this.onRemoveAttachment,
+    this.isLocked = false,
   });
 
   final List<PendingAttachment> pendingAttachments;
@@ -74,6 +80,7 @@ class ChatInputArea extends StatefulWidget {
 
 class _ChatInputAreaState extends State<ChatInputArea> {
   bool _hasTextContent = false;
+  final LayerLink _attachLink = LayerLink();
 
   @override
   void initState() {
@@ -98,8 +105,14 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   }
 
   String get _effectiveHint {
+    // Don't show limit message during connection states
     if (widget.isOffline) return "You're offline…";
+    if (widget.isConnecting) return "Connecting…";
     if (widget.isUploading) return 'Uploading...';
+
+    // Only show limit message when actually locked (not during normal connection)
+    // Removed: "Limit reached" hint as per user request to allow typing naturally.
+
     final base = widget.placeholderMessages.isNotEmpty
         ? widget.placeholderMessages[0]
         : "What's on your mind?";
@@ -111,13 +124,11 @@ class _ChatInputAreaState extends State<ChatInputArea> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final pillColor = isDark ? const Color(0xFF2A2A2E) : const Color(0xFFF4F4F5);
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.05);
+    final pillColor = isDark
+        ? theme.colorScheme.surface.withValues(alpha: 0.95)
+        : theme.colorScheme.surfaceContainerHighest;
 
-    // Consolidated upload state: checking both the general flag and granular attachment status
-    final isAnyAttachmentUploading = widget.isUploading || 
+    final isAnyAttachmentUploading = widget.isUploading ||
         widget.pendingAttachments.any((a) => !a.isUploaded);
 
     return CallbackShortcuts(
@@ -128,137 +139,169 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             widget.onPaste,
       },
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            decoration: BoxDecoration(
-              color: pillColor,
-              borderRadius: BorderRadius.circular(24),
-              border: widget.isRecording
-                  ? Border.all(color: Colors.redAccent, width: 2)
-                  : Border.all(color: borderColor, width: 1),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          decoration: BoxDecoration(
+            color: pillColor.withValues(alpha: isDark ? 0.85 : 0.8),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.5),
+              width: 1,
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            boxShadow: [
+              // Outer soft shadow
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.replyingToMessage != null)
+                  _ReplyPreviewWidget(
+                    replyingToMessage: widget.replyingToMessage!,
+                    onCancelReply: widget.onCancelReply,
+                    isDark: isDark,
+                  ),
+                if (widget.pendingAttachments.isNotEmpty)
+                  _MultiAttachmentPreviewWidget(
+                    attachments: widget.pendingAttachments,
+                    onRemoveAttachment: widget.onRemoveAttachment,
+                    theme: theme,
+                    isDark: isDark,
+                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (widget.replyingToMessage != null)
-                      _ReplyPreviewWidget(
-                        replyingToMessage: widget.replyingToMessage!,
-                        onCancelReply: widget.onCancelReply,
-                        isDark: isDark,
-                      ),
-                    if (widget.pendingAttachments.isNotEmpty)
-                      _MultiAttachmentPreviewWidget(
-                        attachments: widget.pendingAttachments,
-                        onRemoveAttachment: widget.onRemoveAttachment,
-                        theme: theme,
-                        isDark: isDark,
-                      ),
-
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6, bottom: 4),
-                          child: Semantics(
-                            label: 'Attach media or file',
-                            button: true,
+                    Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Semantics(
+                        label: 'Attach media or file',
+                        button: true,
+                        child: CompositedTransformTarget(
+                          link: _attachLink,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
                             child: IconButton(
                               key: widget.attachButtonKey,
                               icon: Transform.rotate(
                                 angle: -0.785,
-                                child: const Icon(CupertinoIcons.paperclip, size: 22),
+                                child: const Icon(CupertinoIcons.paperclip,
+                                    size: 20),
                               ),
                               color: theme.colorScheme.primary,
                               tooltip: 'Attach file',
                               onPressed: () {
-                                widget.onShowAttachmentMenu();
+                                final controller =
+                                    context.read<ChatController>();
+                                controller.showAttachmentMenu(
+                                    context, theme, isDark,
+                                    link: _attachLink);
                               },
                               visualDensity: VisualDensity.compact,
                             ),
                           ),
                         ),
-
-                        Expanded(
-                          child: widget.isRecording
-                              ? _LiveVoiceWaveform(
-                                  amplitudeStream: widget.amplitudeStream,
-                                  isDark: isDark,
-                                )
-                              : TextField(
-                                  controller: widget.textController,
-                                  focusNode: widget.messageFocusNode,
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    fontSize: 16,
-                                    fontFamily: GoogleFonts.nunito().fontFamily,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.textTheme.bodyLarge?.color,
-                                  ),
-                                  cursorColor: theme.colorScheme.primary,
-                                  cursorWidth: 2.0,
-                                  cursorRadius: const Radius.circular(1),
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: _hasTextContent
-                                      ? TextInputAction.send
-                                      : TextInputAction.newline,
-                                  onSubmitted: (_) {
-                                    if (_hasTextContent && !widget.isGenerating && !isAnyAttachmentUploading && !widget.isOffline) {
-                                      widget.onSendMessage();
-                                    }
-                                  },
-                                  minLines: 1,
-                                  maxLines: null,
-                                  decoration: InputDecoration(
-                                    hintText: widget.isRecording
-                                        ? "Listening…"
-                                        : _effectiveHint,
-                                    border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    filled: false,
-                                    hintStyle: GoogleFonts.nunito(
-                                      color: theme.hintColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                ),
-                        ),
-
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8, bottom: 6),
-                            child: _DynamicRightActions(
-                              hasContent: _hasTextContent || widget.pendingAttachments.isNotEmpty,
-                              isGenerating: widget.isGenerating,
-                              isUploading: isAnyAttachmentUploading,
-                              isRecording: widget.isRecording,
-                              isOffline: widget.isOffline,
+                      ),
+                    ),
+                    Expanded(
+                      child: widget.isRecording
+                          ? _LiveVoiceWaveform(
+                              amplitudeStream: widget.amplitudeStream,
                               isDark: isDark,
-                              theme: theme,
-                              onStopGeneration: widget.onStopGeneration,
-                              onSendMessage: widget.onSendMessage,
-                              onStopListeningAndSend: widget.onStopListeningAndSend,
-                              onDictation: widget.onDictation,
-                              onStartLiveVoiceMode: widget.onStartLiveVoiceMode,
-                              onStartFeynmanMode: widget.onStartFeynmanMode,
+                            )
+                          : TextField(
+                              controller: widget.textController,
+                              focusNode: widget.messageFocusNode,
+                              enabled: true,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontSize: 16,
+                                fontFamily: GoogleFonts.nunito().fontFamily,
+                                fontWeight: FontWeight.w600,
+                                color: theme.textTheme.bodyLarge?.color,
+                              ),
+                              cursorColor: theme.colorScheme.primary,
+                              cursorWidth: 2.0,
+                              cursorRadius: const Radius.circular(1),
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: _hasTextContent
+                                  ? TextInputAction.send
+                                  : TextInputAction.newline,
+                              onSubmitted: (_) {
+                                if (_hasTextContent &&
+                                    !widget.isGenerating &&
+                                    !isAnyAttachmentUploading &&
+                                    !widget.isOffline) {
+                                  widget.onSendMessage();
+                                }
+                              },
+                              minLines: 1,
+                              maxLines: null,
+                              decoration: InputDecoration(
+                                hintText: widget.isRecording
+                                    ? "Listening…"
+                                    : _effectiveHint,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                filled: false,
+                                hintStyle: GoogleFonts.nunito(
+                                  color: theme.hintColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 26,
+                                ),
+                              ),
                             ),
-                        ),
-                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: _DynamicRightActions(
+                        hasContent: _hasTextContent ||
+                            widget.pendingAttachments.isNotEmpty,
+                        isGenerating: widget.isGenerating,
+                        isUploading: isAnyAttachmentUploading,
+                        isRecording: widget.isRecording,
+                        isOffline: widget.isOffline,
+                        isConnecting: widget.isConnecting,
+                        isDark: isDark,
+                        theme: theme,
+                        onStopGeneration: widget.onStopGeneration,
+                        onSendMessage: widget.onSendMessage,
+                        onStopListeningAndSend: widget.onStopListeningAndSend,
+                        onDictation: widget.onDictation,
+                        onStartLiveVoiceMode: widget.onStartLiveVoiceMode,
+                        onStartFeynmanMode: widget.onStartFeynmanMode,
+                      ),
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -273,6 +316,7 @@ class _DynamicRightActions extends StatelessWidget {
   final bool isUploading;
   final bool isRecording;
   final bool isOffline;
+  final bool isConnecting;
   final bool isDark;
   final ThemeData theme;
   final VoidCallback onStopGeneration;
@@ -288,6 +332,7 @@ class _DynamicRightActions extends StatelessWidget {
     required this.isUploading,
     required this.isRecording,
     required this.isOffline,
+    required this.isConnecting,
     required this.isDark,
     required this.theme,
     required this.onStopGeneration,
@@ -305,7 +350,7 @@ class _DynamicRightActions extends StatelessWidget {
         label: 'Stop generating response',
         button: true,
         child: IconButton(
-          icon: const Icon(CupertinoIcons.stop_circle_fill, size: 32),
+          icon: const Icon(CupertinoIcons.stop_fill, size: 28),
           onPressed: onStopGeneration,
           color: isDark ? Colors.white : Colors.black,
           tooltip: 'Stop generation',
@@ -320,28 +365,46 @@ class _DynamicRightActions extends StatelessWidget {
         label: isOffline ? "You're offline" : 'Send message',
         button: true,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 2, right: 2),
+          margin: const EdgeInsets.only(right: 2),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
+            gradient: !disabled ? LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 0.8),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ) : null,
             color: disabled
                 ? theme.disabledColor.withValues(alpha: 0.1)
-                : theme.colorScheme.primary,
+                : null,
+            boxShadow: [
+              if (!disabled)
+                BoxShadow(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+            ],
           ),
           child: IconButton(
             icon: Icon(
               isOffline ? CupertinoIcons.wifi_slash : Icons.arrow_upward,
               size: 20,
             ),
-            color: disabled
-                ? theme.disabledColor
-                : theme.colorScheme.onPrimary,
+            color: disabled ? theme.disabledColor : theme.colorScheme.onPrimary,
             tooltip: isOffline
                 ? "You're offline"
-                : (isUploading ? 'Waiting for uploads…' : 'Send'),
-            onPressed: disabled ? null : () {
-              HapticFeedback.lightImpact();
-              onSendMessage();
-            },
+                : (isConnecting
+                    ? "Connecting…"
+                    : (isUploading ? 'Waiting for uploads…' : 'Send')),
+            onPressed: disabled
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    onSendMessage();
+                  },
             visualDensity: VisualDensity.compact,
           ),
         ),
@@ -354,18 +417,35 @@ class _DynamicRightActions extends StatelessWidget {
         Semantics(
           label: isRecording ? 'Stop dictation' : 'Start dictation',
           button: true,
-          child: IconButton(
-            icon: Icon(
-              isRecording ? CupertinoIcons.stop_circle : CupertinoIcons.mic,
-              size: 22,
+          child: Container(
+            decoration: BoxDecoration(
+              color: isRecording
+                  ? Colors.redAccent.withValues(alpha: 0.15)
+                  : (isDark
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.white),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            color: isRecording ? Colors.redAccent : theme.colorScheme.primary,
-            tooltip: isRecording ? 'Stop recording' : 'Dictate',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              isRecording ? onStopListeningAndSend() : onDictation();
-            },
-            visualDensity: VisualDensity.compact,
+            child: IconButton(
+              icon: Icon(
+                isRecording ? CupertinoIcons.stop_circle : CupertinoIcons.mic,
+                size: 20,
+              ),
+              color: isRecording ? Colors.redAccent : theme.colorScheme.primary,
+              tooltip: isRecording ? 'Stop recording' : 'Dictate',
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                isRecording ? onStopListeningAndSend() : onDictation();
+              },
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ),
         const SizedBox(width: 4),
@@ -373,7 +453,7 @@ class _DynamicRightActions extends StatelessWidget {
           label: 'Start live voice conversation',
           button: true,
           child: Container(
-            margin: const EdgeInsets.only(bottom: 2, right: 2),
+            margin: const EdgeInsets.only(right: 2),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: theme.colorScheme.primary,
@@ -394,7 +474,8 @@ class _DynamicRightActions extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(CupertinoIcons.waveform, size: 18, color: Colors.white),
+                  const Icon(CupertinoIcons.waveform,
+                      size: 18, color: Colors.white),
                   const SizedBox(width: 6),
                   Text(
                     'LIVE',
@@ -407,35 +488,6 @@ class _DynamicRightActions extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Semantics(
-          label: 'Test me on this topic (Feynman Mode)',
-          button: true,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 2, right: 2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.amber.shade700,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.amber.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(CupertinoIcons.checkmark_seal_fill, size: 20),
-              color: Colors.white,
-              tooltip: 'Test Me',
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                onStartFeynmanMode();
-              },
-              visualDensity: VisualDensity.compact,
             ),
           ),
         ),
@@ -529,8 +581,11 @@ class _AttachmentPreviewWidget extends StatelessWidget {
                     child: isImage && attachment.previewData != null
                         ? _AttachmentThumbnail(dataUri: attachment.previewData!)
                         : Container(
-                            color: isDark ? Colors.white12 : Colors.black12,
-                            child: const Icon(Icons.description_rounded, size: 20),
+                            color: isDark
+                                ? Colors.white12
+                                : AppColors.text.withValues(alpha: 0.12),
+                            child:
+                                const Icon(Icons.description_rounded, size: 20),
                           ),
                   ),
                 ),
@@ -623,7 +678,8 @@ class _ReplyPreviewWidget extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
               width: 3,
             ),
           ),
@@ -642,7 +698,10 @@ class _ReplyPreviewWidget extends StatelessWidget {
                         Icon(
                           CupertinoIcons.reply,
                           size: 12,
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.7),
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -652,7 +711,10 @@ class _ReplyPreviewWidget extends StatelessWidget {
                           style: GoogleFonts.poppins(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.8),
                           ),
                         ),
                       ],
@@ -666,7 +728,8 @@ class _ReplyPreviewWidget extends StatelessWidget {
                     style: GoogleFonts.nunito(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.5),
+                      color: (isDark ? Colors.white : Colors.black)
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -677,7 +740,9 @@ class _ReplyPreviewWidget extends StatelessWidget {
               button: true,
               child: IconButton(
                 icon: const Icon(CupertinoIcons.xmark_circle_fill, size: 18),
-                color: isDark ? Colors.white24 : Colors.black26,
+                color: isDark
+                    ? Colors.white24
+                    : AppColors.text.withValues(alpha: 0.26),
                 onPressed: onCancelReply,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -724,7 +789,12 @@ class _LiveVoiceWaveform extends StatelessWidget {
                     child: Text(
                       "Listening…",
                       style: TextStyle(
-                        color: isDark ? Colors.white54 : Colors.black54,
+                        color: isDark
+                            ? Colors.white54
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -742,7 +812,10 @@ class _LiveVoiceWaveform extends StatelessWidget {
                       width: 3,
                       height: barHeight,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     );
@@ -789,7 +862,7 @@ class _AttachmentThumbnailState extends State<_AttachmentThumbnail> {
       future: _bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CupertinoActivityIndicator());
+          return AppSpinner.center();
         }
         if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
           return const Center(child: Icon(Icons.broken_image, size: 20));

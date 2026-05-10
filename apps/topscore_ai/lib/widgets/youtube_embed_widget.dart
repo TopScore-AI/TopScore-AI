@@ -3,8 +3,6 @@ import '../utils/cors_proxy_helper.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 // Import removed to fix error - we will fallback to launching URL
@@ -26,21 +24,6 @@ class YouTubeVideoInfo {
   String get thumbnailUrl =>
       'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
   String get embedUrl => 'https://www.youtube.com/embed/$videoId';
-}
-
-/// Helper to parse video IDs
-String? _parseVideoId(String url) {
-  // Robust regex for all YouTube URL formats (mobile, short, standard)
-  final RegExp regex = RegExp(
-    r'^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*',
-    caseSensitive: false,
-  );
-
-  final match = regex.firstMatch(url);
-  if (match != null && match.group(1)!.length == 11) {
-    return match.group(1);
-  }
-  return null;
 }
 
 /// Reusable single YouTube video card for inline display
@@ -202,65 +185,6 @@ class SingleYouTubeCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Markdown builder that intercepts YouTube links
-class YouTubeLinkBuilder extends MarkdownElementBuilder {
-  final BuildContext context;
-  final bool isDark;
-  final bool isStreaming;
-
-  YouTubeLinkBuilder(this.context, this.isDark, {this.isStreaming = false});
-
-  @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    final href = element.attributes['href'];
-    if (href == null) return null;
-
-    final videoId = _parseVideoId(href);
-
-    // If it's a valid YouTube link
-    if (videoId != null) {
-      final textContent = element.textContent;
-
-      // While streaming, strictly show the text link to avoid UI jumping
-      if (isStreaming) {
-        return _buildTextLink(href, textContent, preferredStyle);
-      }
-
-      // After streaming, show link + video card
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildTextLink(href, textContent, preferredStyle),
-          SingleYouTubeCard(
-            videoId: videoId,
-            url: href,
-            title: textContent.isNotEmpty ? textContent : null,
-            isDark: isDark,
-          ),
-        ],
-      );
-    }
-
-    return null;
-  }
-
-  Widget _buildTextLink(String href, String textContent, TextStyle? style) {
-    return GestureDetector(
-      onTap: () =>
-          launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication),
-      child: Text(
-        textContent.isEmpty ? href : textContent,
-        style: style?.copyWith(
-          color: Colors.blueAccent,
-          decoration: TextDecoration.underline,
-          decorationColor: Colors.blueAccent.withValues(alpha: 0.5),
         ),
       ),
     );

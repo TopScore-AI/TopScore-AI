@@ -1,150 +1,89 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:markdown/markdown.dart' as md;
-
-/// 1. Custom Syntax Parser for LaTeX (supports $ and \(...\) / \[...\] delimiters)
-class LatexSyntax extends md.InlineSyntax {
-  // Updated Regex to support both $ and \( \) / \[ \] delimiters
-  // Matches: $$...$$ (block), $...$ (inline), \[...\] (block), \(...\) (inline)
-  LatexSyntax()
-      : super(
-            r'(\$\$[\s\S]*?\$\$)|(\\\[[\s\S]*?\\\])|(\$[^$\n]+\$)|(\\\([\s\S]*?\\\))');
-
-  @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    final matchText = match[0]!;
-
-    // Determine if block or inline based on delimiters
-    bool isBlock;
-    String content;
-
-    if (matchText.startsWith(r'$$') && matchText.endsWith(r'$$')) {
-      // Block: $$...$$
-      isBlock = true;
-      content = matchText.substring(2, matchText.length - 2);
-    } else if (matchText.startsWith(r'\[') && matchText.endsWith(r'\]')) {
-      // Block: \[...\]
-      isBlock = true;
-      content = matchText.substring(2, matchText.length - 2);
-    } else if (matchText.startsWith(r'\(') && matchText.endsWith(r'\)')) {
-      // Inline: \(...\)
-      isBlock = false;
-      content = matchText.substring(2, matchText.length - 2);
-    } else {
-      // Inline: $...$
-      isBlock = false;
-      content = matchText.substring(1, matchText.length - 1);
-    }
-
-    // Clean up content
-    final cleanContent = content.trim();
-
-    md.Element el = md.Element.text('latex', cleanContent);
-    el.attributes['type'] = isBlock ? 'block' : 'inline';
-    parser.addNode(el);
-    return true;
-  }
-}
-
-/// 2. Builder to render the LaTeX using flutter_math_fork
-class LatexElementBuilder extends MarkdownElementBuilder {
-  @override
-  Widget visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    final content = element.textContent;
-    final isBlock = element.attributes['type'] == 'block';
-
-    try {
-      if (isBlock) {
-        return Center(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Math.tex(
-              content,
-              textStyle: preferredStyle?.copyWith(
-                fontSize: (preferredStyle.fontSize ?? 14) + 2,
-              ),
-              mathStyle: MathStyle.display,
-            ),
-          ),
-        );
-      } else {
-        return Math.tex(
-          content,
-          textStyle: preferredStyle,
-          mathStyle: MathStyle.text,
-        );
-      }
-    } catch (e) {
-      return Text(content, style: preferredStyle); // Fallback if TeX error
-    }
-  }
-}
-
-/// 3. Pre-processor to handle HTML tags like <u>
-/// Flutter Markdown strips HTML by default. We map <u> to simple Bold or Italic.
+/// Pre-processor to clean and normalize markdown content before rendering.
 String cleanContent(String input) {
-  // 1. Remove technical placeholders
-  String cleaned = input
-      .replaceAll('[GRAPH_GENERATED]', '')
-      .replaceAll('[IMAGE_FOUND]', '')
-      .replaceAll('<u>', '')
-      .replaceAll('</u>', '')
-      .replaceAll(r'\n', '\n');
+  String cleaned = input;
 
-  // 2. Strip "Attached Document: <URL>" lines (file uploads shown via attachment card)
+  // 0. Normalize CRLF/CR to LF so line-anchored regexes work consistently.
+  // Windows-origin content and some streaming sources mix endings.
+  cleaned = cleaned.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+  // 1. Remove technical placeholders
+  cleaned = cleaned
+      .replaceAll('[GRAPH_GENERATED]', '')
+      .replaceAll('[IMAGE_FOUND]', '');
+
+  // Strip fallback parser data blocks (Quiz, Flashcards, Mnemonic, Punnett Square)
+  cleaned = cleaned
+      .replaceAll(RegExp(r'\[QUIZ_DATA\]\([\s\S]*?(\)|$)'), '')
+      .replaceAll(RegExp(r'\[FLASHCARDS_DATA\]\([\s\S]*?(\)|$)'), '')
+      .replaceAll(RegExp(r'\[MNEMONIC_DATA\]\([\s\S]*?(\)|$)'), '')
+      .replaceAll(RegExp(r'\[PUNNETT_SQUARE\]\([\s\S]*?(\)|$)'), '');
+
+  // Strip HTML underline tags (not supported by gpt_markdown)
+  cleaned = cleaned.replaceAll('<u>', '').replaceAll('</u>', '');
+
+  // Replace literal "\n" escape sequences with real newlines — but only when
+  // they appear as standalone escape sequences, NOT inside LaTeX commands
+  // (e.g. \nabla, \nu, \neg must not be touched).
+  // Strategy: only replace \n when preceded by a non-backslash non-letter char
+  // or at the start of the string.
+  cleaned = cleaned.replaceAllMapped(
+    RegExp(r'(?<![a-zA-Z])\\n'),
+    (_) => '\n',
+  );
+
+  // 2. Strip "Attached Document: <URL>" lines
   cleaned = cleaned.replaceAll(
     RegExp(r'\n\nAttached Document: https?://\S+'),
     '',
   );
 
-  // 3. Fix common AI markdown issues
-
-  // 3a. "***Text:**" at line start → "* **Text:**" (list item + bold, not bold-italic)
-  // Modified to be safer and not leave trailing stars for bold-italic scenarios
+  // 3a. Fix "***Text:**" at line start only (bold-italic list item confusion).
+  // Only fires when the pattern is at the very start of a line followed by
+  // a colon — avoids touching mid-sentence bold-italic like ***word***.
   cleaned = cleaned.replaceAllMapped(
-    RegExp(r'^(\s*)\*\*\*([^*:\n]+:)\*\*', multiLine: true),
+    RegExp(r'^(\s*)\*\*\*([^*\n]+:)\*\*\s*$', multiLine: true),
     (m) => '${m.group(1)}* **${m.group(2)}**',
   );
 
-  // 3b. Ensure blank line before headings (e.g. "some text### Heading" → "some text\n\n### Heading")
+  // 3b. Ensure ATX headings are surrounded by blank lines — gpt_markdown (and
+  // CommonMark) require a blank line before a heading, otherwise it renders
+  // as a literal "# Heading". The backend occasionally emits headings right
+  // after a prose line or a stripped widget block, so we reflow them here.
+  //
+  // A heading line = start-of-line, 1-6 # chars, a space, then content.
+  // We match each heading with optional leading/trailing single newline and
+  // re-emit it with blank lines on both sides. The lookbehind/ahead for
+  // `\n\n` prevents re-inserting blank lines that are already present.
   cleaned = cleaned.replaceAllMapped(
-    RegExp(r'([^\n])(#{1,6}\s)'),
-    (m) => '${m.group(1)}\n\n${m.group(2)}',
+    RegExp(r'(?<!\n)\n(#{1,6} [^\n]+)', multiLine: true),
+    (m) => '\n\n${m.group(1)}',
   );
-
-  // 3c. Ensure blank line after heading line (e.g. "### Heading\nText" → "### Heading\n\nText")
   cleaned = cleaned.replaceAllMapped(
-    RegExp(r'^(#{1,6}\s+.+)\n(?!\n|#|\s*$)', multiLine: true),
+    RegExp(r'^(#{1,6} [^\n]+)\n(?!\n)', multiLine: true),
     (m) => '${m.group(1)}\n\n',
   );
 
-  // 3d. Ensure blank line BEFORE tables, lists, and horizontal rules
-  // Many LLMs forget to add a blank line, causing flutter_markdown to fail block rendering.
+  // 3d. Ensure blank line before Markdown tables (pipe at line start).
+  // Deliberately NOT adding blank lines before list items here — that was
+  // too aggressive and broke inline dashes like "e.g. - something".
   cleaned = cleaned.replaceAllMapped(
-    RegExp(r'([^\n])\n(\s*(?:\||[\-\*]\s|\d+\.\s|---))', multiLine: true),
+    RegExp(r'([^\n])\n(\|)', multiLine: true),
     (m) => '${m.group(1)}\n\n${m.group(2)}',
   );
 
   // 4. Convert raw image/graph links to markdown images if missing '!'
-  //    Pattern matches [description](url) where url ends with common image extensions or contains 'plot.png'
-  //    Updated to be non-greedy and handle query tokens better.
-  final imageLinkRegex = RegExp(
-    r'(?<!\!)\[([^\]]*)\]\((https?://[^)]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^)]*)?|https?://[^)]+plot\.png[^)]*)\)',
-    caseSensitive: false,
+  cleaned = cleaned.replaceAllMapped(
+    RegExp(
+      r'(?<!\!)\[([^\]]*)\]\((https?://[^)]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^)]*)?|https?://[^)]+plot\.png[^)]*)\)',
+      caseSensitive: false,
+    ),
+    (match) => '![${match.group(1) ?? 'Image'}](${match.group(2)!})',
   );
-
-  cleaned = cleaned.replaceAllMapped(imageLinkRegex, (match) {
-    final description = match.group(1) ?? 'Image';
-    final url = match.group(2)!;
-    return '![$description]($url)';
-  });
 
   return cleaned.trim();
 }
 
 /// Extract the URL from an "Attached Document: ..." suffix in message text.
-/// Returns null if the pattern is not found.
 String? extractAttachedDocumentUrl(String text) {
   final match = RegExp(r'Attached Document: (https?://\S+)').firstMatch(text);
   return match?.group(1);

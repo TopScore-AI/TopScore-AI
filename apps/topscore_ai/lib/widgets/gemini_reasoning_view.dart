@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import '../widgets/gpt_markdown_wrapper.dart';
 
 class TopScoreReasoningView extends StatefulWidget {
   final String content;
@@ -66,21 +66,12 @@ class _TopScoreReasoningViewState extends State<TopScoreReasoningView>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  // Animated Sparkle Icon
+                  // Animated Sparkle Icon - Solid color for visibility
                   widget.isThinking
                       ? FadeTransition(
                           opacity: _pulseController,
-                          child: ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [
-                                Color(0xFF4285F4),
-                                Color(0xFF9B72CB),
-                                Color(0xFFD96570),
-                              ],
-                            ).createShader(bounds),
-                            child: const Icon(Icons.auto_awesome,
-                                size: 16, color: Colors.white),
-                          ),
+                          child: Icon(Icons.auto_awesome,
+                              size: 16, color: activeColor),
                         )
                       : Icon(Icons.check_circle_outline,
                           size: 16, color: idleColor),
@@ -125,16 +116,14 @@ class _TopScoreReasoningViewState extends State<TopScoreReasoningView>
                             height: 1,
                             color: theme.dividerColor.withValues(alpha: 0.1)),
                         const SizedBox(height: 12),
-                        MarkdownBody(
-                          data: widget.content,
-                          styleSheet: MarkdownStyleSheet(
-                            p: GoogleFonts.firaCode(
-                              // Monospace for code-like feel
-                              fontSize: 12,
-                              height: 1.5,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.7),
-                            ),
+                        StyledGptMarkdown(
+                          widget.content,
+                          style: GoogleFonts.firaCode(
+                            // Monospace for code-like feel
+                            fontSize: 12,
+                            height: 1.5,
+                            color: theme.colorScheme
+                                .onSurface, // Full opacity for readability
                           ),
                         ),
                         // Show blinking cursor if still thinking while expanded

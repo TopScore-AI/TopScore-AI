@@ -1,10 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 
 class RecoveryService {
   static const String _keyIsPickingFile = 'is_picking_file';
   static const String _keyActiveChatId = 'active_chat_id';
   static const String _keyRecoveryPath = 'recovery_path';
+
+  static XFile? recoveredFile;
 
   static Future<void> saveNavigationState(String path, {String? threadId}) async {
     try {
@@ -18,6 +23,41 @@ class RecoveryService {
     } catch (e) {
       developer.log('Error saving recovery state: $e', name: 'RecoveryService');
     }
+  }
+
+  static Future<bool> checkAndRouteRecovery(GoRouter router) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+
+    try {
+      final response = await ImagePicker().retrieveLostData();
+      if (!response.isEmpty && response.file != null) {
+        final state = await getRecoveryState();
+        await clearRecoveryState(); // Consume state
+        
+        if (state != null) {
+          recoveredFile = response.file;
+          final path = state['path'];
+          final threadId = state['threadId'];
+          
+          developer.log('Routing to recovered state: $path ($threadId)', name: 'RecoveryService');
+          
+          if (path != null) {
+             router.go(path);
+             return true;
+          } else if (threadId != null) {
+             if (threadId.startsWith('new')) {
+               router.go('/chat');
+             } else {
+               router.go('/chat/$threadId');
+             }
+             return true;
+          }
+        }
+      }
+    } catch (e) {
+      developer.log('Error checking lost data: $e', name: 'RecoveryService');
+    }
+    return false;
   }
 
   static Future<Map<String, String?>?> getRecoveryState() async {
