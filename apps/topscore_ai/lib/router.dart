@@ -48,6 +48,7 @@ import 'screens/support/support_screen.dart' deferred as support;
 import 'screens/notifications/notification_preferences_screen.dart'
     deferred as notif_prefs;
 import 'screens/student/achievements_screen.dart' deferred as achievements;
+import 'screens/student/referral_screen.dart' deferred as referral;
 
 // Deferred loading widget for consistent UX
 class PremiumSkeletonLoader extends StatelessWidget {
@@ -802,6 +803,20 @@ final GoRouter router = GoRouter(
           return const PremiumSkeletonLoader(message: 'Loading Support...');
         },
       ),
+    ),
+    GoRoute(
+      path: '/referral',
+      builder: (context, state) {
+        return FutureBuilder(
+          future: referral.loadLibrary(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return referral.ReferralScreen();
+            }
+            return const PremiumSkeletonLoader(message: 'Loading Rewards...');
+          },
+        );
+      },
     ),
     GoRoute(
       path: '/achievements',

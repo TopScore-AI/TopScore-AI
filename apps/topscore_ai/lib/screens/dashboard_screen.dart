@@ -303,6 +303,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
+            // Refer & Earn Card
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: EnhancedCard(
+                  onTap: () => context.push('/referral'),
+                  padding: const EdgeInsets.all(16),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFEC4899).withValues(alpha: 0.1),
+                      const Color(0xFF8B5CF6).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEC4899),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.card_giftcard_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Refer & Get Premium",
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFFEC4899),
+                              ),
+                            ),
+                            Text(
+                              "Gift Classmates free TopScore access",
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: subtextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.1, end: 0),
+              ),
+            ),
+
             // Study Tools Section
             SliverToBoxAdapter(
               child: Padding(

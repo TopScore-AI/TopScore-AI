@@ -781,6 +781,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       const SizedBox(height: 10),
       _tile(
+        icon: Icons.card_giftcard_rounded,
+        iconColor: Colors.pinkAccent,
+        title: 'Refer & Earn',
+        subtitle: 'Gift Premium to friends, get rewards',
+        onTap: () => context.push('/referral'),
+        theme: theme,
+        isDark: isDark,
+      ),
+      const SizedBox(height: 10),
+      _tile(
         icon: Icons.notifications_rounded,
         iconColor: AppColors.primary,
         title: 'Notifications & Reminders',

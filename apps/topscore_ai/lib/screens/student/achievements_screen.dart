@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../constants/colors.dart';
@@ -157,19 +158,27 @@ class AchievementsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              b.$1,
+            GestureDetector(
+              onTap: hasBadge ? () => _shareBadge(b.$1, b.$2) : null,
+              child: Text(
+                b.$1,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 color: hasBadge ? b.$4 : Colors.grey,
               ),
+              ),
             ),
           ],
         ).animate().fadeIn(delay: Duration(milliseconds: i * 100)).scale();
       },
     );
+  }
+
+  void _shareBadge(String name, String desc) {
+    final text = "I just earned the '$name' badge on TopScore AI! 🏆 $desc. Download and study with me: https://topscoreapp.ai/download";
+    SharePlus.instance.share(ShareParams(text: text));
   }
 
   Widget _buildRoadmap(int level, int xp) {
