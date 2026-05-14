@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/resources_provider.dart';
@@ -258,7 +259,8 @@ class HomeTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.15 : 0.2),
+                          color: theme.colorScheme.primary
+                              .withValues(alpha: isDark ? 0.15 : 0.2),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -272,7 +274,8 @@ class HomeTab extends StatelessWidget {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(CupertinoIcons.sparkles, color: theme.colorScheme.primary, size: 18),
+                          child: Icon(CupertinoIcons.sparkles,
+                              color: theme.colorScheme.primary, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -297,7 +300,7 @@ class HomeTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.1, end: 0),
               ),
             ),
 

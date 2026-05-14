@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:waveform_flutter/waveform_flutter.dart' as wf;
 import 'dart:ui';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../message_model.dart';
 import '../chat_controller.dart';
 
@@ -182,7 +183,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
                     onRemoveAttachment: widget.onRemoveAttachment,
                     theme: theme,
                     isDark: isDark,
-                  ),
+                  ).animate().fadeIn().slideY(begin: 0.1, end: 0),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [

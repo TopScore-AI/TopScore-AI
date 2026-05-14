@@ -1,6 +1,7 @@
 import '../../constants/colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'services/analytics_service.dart';
@@ -210,13 +211,22 @@ CustomTransitionPage<void> _buildCustomTransitionPage({
 }) {
   return CustomTransitionPage<void>(
     key: key,
-    transitionDuration: const Duration(milliseconds: 180),
-    reverseTransitionDuration: const Duration(milliseconds: 150),
+    transitionDuration: 400.ms,
+    reverseTransitionDuration: 300.ms,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
-        opacity: CurveTween(curve: Curves.easeOut).animate(animation),
-        child: child,
+        opacity: CurveTween(curve: Curves.easeInOutCubic).animate(animation),
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.03),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          )),
+          child: child,
+        ),
       );
     },
   );

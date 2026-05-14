@@ -541,22 +541,24 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                         ],
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(24),
                         child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? theme.colorScheme.surface.withValues(alpha: 0.4)
-                                  : Colors.white.withValues(alpha: 0.7),
+                                  ? theme.colorScheme.surface
+                                      .withValues(alpha: 0.5)
+                                  : Colors.white.withValues(alpha: 0.75),
                               border: Border.all(
                                 color: isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.white.withValues(alpha: 0.8),
+                                    ? Colors.white.withValues(alpha: 0.12)
+                                    : Colors.white.withValues(alpha: 0.85),
                                 width: 1.5,
                               ),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(24),
                             ),
                             child: widget.message.status == MessageStatus.error
                                 ? _buildAiErrorCard(theme, isDark)

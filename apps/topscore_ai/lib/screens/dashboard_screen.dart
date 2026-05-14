@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
 import '../services/permission_service.dart';
@@ -247,7 +248,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                child: RepaintBoundary(child: _buildHeroCard(context, isDark)),
+                child: RepaintBoundary(child: _buildHeroCard(context, isDark))
+                    .animate()
+                    .fadeIn(duration: 600.ms)
+                    .slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
               ),
             ),
 
