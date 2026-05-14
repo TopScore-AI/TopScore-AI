@@ -17,6 +17,7 @@ import 'widgets/chat_message_bubble.dart';
 import 'widgets/chat_input_area.dart';
 import 'widgets/chat_history_sidebar.dart';
 import 'widgets/empty_state_widget.dart';
+import 'widgets/language_suggestion_banner.dart';
 import '../widgets/glass_card.dart';
 import '../providers/tutor_connection_provider.dart';
 import '../widgets/trial_completed_overlay.dart';
@@ -441,6 +442,7 @@ class _ChatScreenView extends StatelessWidget {
               child: Column(
                 children: [
                   _buildConnectionBanner(context, controller, theme, isDark),
+                  LanguageSuggestionBanner(notifier: controller.languageSuggestion),
                   Expanded(
                     child: Stack(
                       children: [

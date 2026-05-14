@@ -692,9 +692,15 @@ class _SubjectChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: BounceWrapper(
-        onTap: () => context.push('/ai-tutor', extra: {
-          'initial_message': 'Help me study $label',
-        }),
+        onTap: () {
+          if (label == 'Kiswahili') {
+            context.push('/language-tree', extra: {'language': 'Swahili'});
+          } else {
+            context.push('/ai-tutor', extra: {
+              'initial_message': 'Help me study $label',
+            });
+          }
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(

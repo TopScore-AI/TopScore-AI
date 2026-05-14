@@ -18,8 +18,41 @@ class LanguageDetectService {
   static const int _maxCache = 64;
   Timer? _debounce;
 
+  static const Map<String, String> _languageKeywords = {
+    'french': 'French',
+    'spanish': 'Spanish',
+    'german': 'German',
+    'italian': 'Italian',
+    'portuguese': 'Portuguese',
+    'swahili': 'Swahili',
+    'kiswahili': 'Swahili',
+  };
+
+  static const List<String> _intentKeywords = [
+    'learn',
+    'teach',
+    'speak',
+    'study',
+    'practice',
+    'how to say',
+    'translate',
+  ];
+
   Future<DetectedLanguage?> detect(String text) async {
     final trimmed = text.trim();
+    final lower = trimmed.toLowerCase();
+
+    // Fast-path: Check for explicit learning intent in English
+    // e.g. "I want to learn French"
+    bool hasIntent = _intentKeywords.any((k) => lower.contains(k));
+    if (hasIntent) {
+      for (var entry in _languageKeywords.entries) {
+        if (lower.contains(entry.key)) {
+          return DetectedLanguage(language: entry.value, confidence: 1.0);
+        }
+      }
+    }
+
     if (trimmed.length < 12) return null;
 
     final key = trimmed.hashCode;
