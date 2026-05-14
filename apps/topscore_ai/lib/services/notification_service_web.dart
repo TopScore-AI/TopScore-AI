@@ -10,7 +10,7 @@ class NotificationService {
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool isBackground = false}) async {
     // Web-specific initialization
     if (kIsWeb) {
       try {
@@ -43,6 +43,10 @@ class NotificationService {
   }
 
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
+
+  Future<void> handleAppLaunchDetails() async {
+    // No-op on Web
+  }
 
   Future<void> requestPermissions() async {
     await _messaging.requestPermission(

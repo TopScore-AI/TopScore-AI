@@ -4,9 +4,10 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  Future<void> initialize() async {}
+  Future<void> initialize({bool isBackground = false}) async {}
   Future<String?> getToken() async => null;
   Stream<String> get onTokenRefresh => const Stream<String>.empty();
+  Future<void> handleAppLaunchDetails() async {}
   Future<void> requestPermissions() async {}
   Future<void> scheduleClassReminder({
     required int id,

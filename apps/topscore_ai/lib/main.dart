@@ -68,15 +68,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   // Data-only messages (no notification block) - we handle display
   // This is the primary path now that backend sends data-only messages
-  if (message.data.isNotEmpty) {
+  if (message.data.containsKey('title') || message.data.containsKey('body')) {
     try {
-      final title = message.data['title'] ?? 'TopScore AI Update';
-      final body = message.data['body'] ?? '';
+      String title = message.data['title'] ?? 'TopScore AI Update';
+      String body = message.data['body'] ?? '';
       final route = (message.data['route'] as String?)?.trim();
+
+      if (body.isEmpty && message.notification != null) {
+        body = message.notification!.body ?? "";
+      }
+      if (title == "TopScore AI Update" && message.notification != null) {
+        title = message.notification!.title ?? title;
+      }
 
       if (body.isNotEmpty) {
         final service = NotificationService();
-        await service.initialize();
+        await service.initialize(isBackground: true);
         await service.showNotification(
           id: message.messageId.hashCode, // Use messageId for deduplication
           title: title,
@@ -400,6 +407,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Initialize notifications for ALL platforms (Web, Android, iOS)
       NotificationService().initialize().then((_) {
         setupInteractedMessage();
+        NotificationService().handleAppLaunchDetails();
         // Re-sync FCM token now that the service is ready — handles the
         // case where auth resolved before initialize() completed.
         AuthProvider.instance.reSyncFCMToken();

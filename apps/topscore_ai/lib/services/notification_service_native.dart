@@ -28,7 +28,7 @@ class NotificationService {
 
   bool _isInitialized = false;
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool isBackground = false}) async {
     if (_isInitialized) return;
 
     try {
@@ -65,8 +65,9 @@ class NotificationService {
         ),
       );
 
-      // Request permissions (Android 13+ and iOS)
-      await requestPermissions();
+      // NOTE: We no longer call requestPermissions() automatically here.
+      // Permissions are now requested proactively in the UI (e.g. DashboardScreen)
+      // to provide better context to the user before the system prompt appears.
 
       _isInitialized = true;
       if (kDebugMode) debugPrint('[NotificationService] Initialized successfully');
@@ -94,6 +95,16 @@ class NotificationService {
   Future<String?> getToken() => _messaging.getToken();
 
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
+
+  /// Check if the app was launched by tapping a notification (while terminated)
+  Future<void> handleAppLaunchDetails() async {
+    final details = await _local.getNotificationAppLaunchDetails();
+    if (details != null &&
+        details.didNotificationLaunchApp &&
+        details.notificationResponse != null) {
+      _onNotificationTap(details.notificationResponse!);
+    }
+  }
 
   Future<void> requestPermissions() async {
     // Firebase permission (iOS/Web)
