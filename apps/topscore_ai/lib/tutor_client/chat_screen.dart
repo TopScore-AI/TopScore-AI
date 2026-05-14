@@ -1,5 +1,4 @@
 // Removed dart:io import to ensure Web compatibility
-import 'dart:ui';
 import 'package:flutter/cupertino.dart' hide ConnectionState;
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/foundation.dart';
@@ -666,38 +665,31 @@ class _ChatScreenView extends StatelessWidget {
               ),
             ),
 
-            // 2. Top Fading Blur Gradient Overlay (Nearly invisible top border, text dissolves on scroll)
+            // 2. Top Fading Gradient Overlay (Text dissolves on scroll)
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               height: MediaQuery.of(context).padding.top + 40,
               child: IgnorePointer(
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            theme.scaffoldBackgroundColor,
-                            theme.scaffoldBackgroundColor
-                                .withValues(alpha: 0.9),
-                            theme.scaffoldBackgroundColor
-                                .withValues(alpha: 0.0),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        theme.scaffoldBackgroundColor,
+                        theme.scaffoldBackgroundColor.withValues(alpha: 0.9),
+                        theme.scaffoldBackgroundColor.withValues(alpha: 0.0),
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
                     ),
                   ),
                 ),
               ),
             ),
 
-            // 3. Bottom Fading Blur Gradient Overlay (Nearly invisible bottom border, text dissolves on scroll)
+            // 3. Bottom Fading Gradient Overlay (Text dissolves on scroll)
             if (!controller.isVoiceMode)
               Positioned(
                 bottom: 0,
@@ -705,24 +697,17 @@ class _ChatScreenView extends StatelessWidget {
                 right: 0,
                 height: 120, // Extends slightly above ChatInputArea
                 child: IgnorePointer(
-                  child: ClipRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              theme.scaffoldBackgroundColor,
-                              theme.scaffoldBackgroundColor
-                                  .withValues(alpha: 0.95),
-                              theme.scaffoldBackgroundColor
-                                  .withValues(alpha: 0.0),
-                            ],
-                            stops: const [0.0, 0.4, 1.0],
-                          ),
-                        ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          theme.scaffoldBackgroundColor,
+                          theme.scaffoldBackgroundColor.withValues(alpha: 0.95),
+                          theme.scaffoldBackgroundColor.withValues(alpha: 0.0),
+                        ],
+                        stops: const [0.0, 0.4, 1.0],
                       ),
                     ),
                   ),
