@@ -203,7 +203,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildAvatar(user, theme, isDark),
             const SizedBox(height: 20),
             if (user != null) ...[
-              _buildXpCard(user, theme, isDark),
+            GestureDetector(
+              onTap: () => context.push('/achievements'),
+              child: _buildXpCard(user, theme, isDark),
+            ),
               const SizedBox(height: 20),
             ],
             if (_isEditing)

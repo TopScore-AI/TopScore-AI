@@ -1074,17 +1074,47 @@ class AuthProvider with ChangeNotifier {
       // Simple leveling logic: every 1000 XP is a level
       final newLevel = (newXp / 1000).floor() + 1;
 
+      Map<String, double> currentCompetencies =
+          Map.from(_userModel!.competencyScores ?? {});
+
+      // Initialize competencies if empty
+      if (currentCompetencies.isEmpty) {
+        currentCompetencies = {
+          'Communication': 0.1,
+          'Collaboration': 0.1,
+          'Critical Thinking': 0.1,
+          'Creativity': 0.1,
+          'Self-Efficacy': 0.1,
+          'Digital Literacy': 0.1,
+          'Citizenship': 0.1,
+        };
+      }
+
+      // Logic to increase competencies based on reason
+      if (reason.contains('Quiz')) {
+        currentCompetencies['Critical Thinking'] =
+            (currentCompetencies['Critical Thinking'] ?? 0.1) + 0.02;
+      } else if (reason.contains('Buddy')) {
+        currentCompetencies['Communication'] =
+            (currentCompetencies['Communication'] ?? 0.1) + 0.02;
+      }
+
+      // Cap at 1.0
+      currentCompetencies.updateAll((k, v) => v > 1.0 ? 1.0 : v);
+
       await _authService.firestore
           .collection('users')
           .doc(_userModel!.uid)
           .update({
         'xp': newXp,
         'level': newLevel,
+        'competency_scores': currentCompetencies,
       });
 
       _userModel = _userModel!.copyWith(
         xp: newXp,
         level: newLevel,
+        competencyScores: currentCompetencies,
       );
 
       notifyListeners();

@@ -134,11 +134,12 @@ class HomeTab extends StatelessWidget {
         isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     return Selector<AuthProvider,
-        ({String? name, String? photo, String? grade})>(
+        ({String? name, String? photo, String? grade, int? xp})>(
       selector: (_, auth) => (
         name: auth.userModel?.displayName,
         photo: auth.userModel?.photoURL,
         grade: auth.userModel?.gradeLabel,
+        xp: auth.userModel?.xp,
       ),
       builder: (context, data, _) {
         final firstName = data.name?.split(' ')[0] ?? 'Student';
@@ -158,7 +159,7 @@ class HomeTab extends StatelessWidget {
                       children: [
                         // Mini progress ring
                         _DailyProgressRing(
-                          progress: 0.6,
+                          progress: (data.xp ?? 0) % 50 / 50.0,
                           size: 48,
                           child: (data.photo != null && data.photo!.isNotEmpty)
                               ? CircleAvatar(

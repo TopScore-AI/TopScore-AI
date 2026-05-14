@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
 import '../services/permission_service.dart';
 import '../widgets/permission_dialog.dart';
+import '../widgets/enhanced_card.dart';
 import '../../widgets/session_history_carousel.dart';
 import '../../widgets/bounce_wrapper.dart';
 import '../../constants/colors.dart';
@@ -252,6 +253,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     .animate()
                     .fadeIn(duration: 600.ms)
                     .slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
+              ),
+            ),
+
+            // Achievements Summary
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: EnhancedCard(
+                  onTap: () => context.push('/achievements'),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.stars_rounded,
+                            color: Colors.amber, size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "View Achievements",
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              "Track your CBC competencies and badges",
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: subtextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
               ),
             ),
 
