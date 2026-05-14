@@ -46,7 +46,7 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
   StreamSubscription? _webMessageSubscription;
   
   // Syllabus & Level States
-  final int _currentSyllabusLevel = 1;
+  int _currentSyllabusLevel = 1;
   bool _levelMastered = false;
   
   // Custom tweakable variables parsed from the code
@@ -66,6 +66,7 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
         : _cleanInitialCode(widget.code);
         
     _codeController = TextEditingController(text: initialCode);
+    _codeController.addListener(_onCodeChanged);
     _initVisualBlocks();
     _parseTweakableVariables();
     _initWebListener();
@@ -75,6 +76,7 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
   void dispose() {
     _webMessageSubscription?.cancel();
     _unloadWebView();
+    _codeController.removeListener(_onCodeChanged);
     _codeController.dispose();
     _editorFocusNode.dispose();
     super.dispose();
@@ -277,6 +279,11 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
         ),
       ),
     );
+  }
+
+  void _onCodeChanged() {
+    _parseTweakableVariables();
+    if (_isActivated) _runModifiedCode();
   }
 
   void _resetCode() {
@@ -1127,18 +1134,33 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
   }
 
   String _compileBlocksToCode() {
-    // Mock compiler
-    return """
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-}
+    StringBuffer setupCode = StringBuffer();
+    StringBuffer drawCode = StringBuffer();
 
-function draw() {
-  background(240);
-  fill('#3b82f6');
-  ellipse(width/2, height/2, 100, 100);
-}
-""";
+    setupCode.writeln("function setup() {");
+    setupCode.writeln("  createCanvas(windowWidth, windowHeight);");
+
+    drawCode.writeln("function draw() {");
+
+    for (var block in _visualBlocks) {
+      final type = block['type'];
+      final fields = block['fields'] as Map<String, dynamic>;
+
+      if (type == 'canvas') {
+        // Already handled in setup
+      } else if (type == 'background') {
+        drawCode.writeln("  background('${fields['color']}');");
+      } else if (type == 'shape') {
+        drawCode.writeln("  fill('${fields['color']}');");
+        drawCode.writeln(
+            "  ellipse(${fields['x']}, ${fields['y']}, ${fields['radius']} * 2, ${fields['radius']} * 2);");
+      }
+    }
+
+    setupCode.writeln("}");
+    drawCode.writeln("}");
+
+    return "${setupCode.toString()}\n${drawCode.toString()}";
   }
 
   Widget _buildTabSelector(bool isDark) {
@@ -1191,10 +1213,77 @@ function draw() {
     );
   }
 
+  void _editBlock(int index) {
+    final block = _visualBlocks[index];
+    final fields = Map<String, dynamic>.from(block['fields']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit ${block['title']}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: fields.keys.map((key) {
+              final value = fields[key];
+              if (value is num) {
+                return TextField(
+                  decoration: InputDecoration(labelText: key),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => fields[key] = double.tryParse(v) ?? value,
+                  controller: TextEditingController(text: value.toString()),
+                );
+              } else if (value is String && value.startsWith('#')) {
+                return TextField(
+                  decoration: InputDecoration(labelText: key),
+                  onChanged: (v) => fields[key] = v,
+                  controller: TextEditingController(text: value),
+                );
+              }
+              return const SizedBox.shrink();
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _visualBlocks[index]['fields'] = fields;
+                _codeController.text = _compileBlocksToCode();
+              });
+              Navigator.pop(context);
+              if (_isActivated) _runModifiedCode();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addNewBlock() {
+    setState(() {
+      _visualBlocks.add({
+        'type': 'shape',
+        'title': 'New Circle',
+        'fields': {'x': 100, 'y': 100, 'radius': 30, 'color': '#ff0000'},
+      });
+      _codeController.text = _compileBlocksToCode();
+    });
+    if (_isActivated) _runModifiedCode();
+  }
+
   Widget _buildVisualBlocksList(bool isDark, ThemeData theme) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _visualBlocks.length,
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: _visualBlocks.length,
       itemBuilder: (context, index) {
         final block = _visualBlocks[index];
         return Container(
@@ -1205,38 +1294,67 @@ function draw() {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
           ),
-          child: Row(
-            children: [
-              const Icon(Icons.drag_indicator, size: 16, color: Colors.grey),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      block['title'],
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+          child: InkWell(
+            onTap: () => _editBlock(index),
+            child: Row(
+              children: [
+                const Icon(Icons.drag_indicator, size: 16, color: Colors.grey),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        block['title'],
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    Text(
-                      block['type'],
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.grey,
+                      Text(
+                        block['type'],
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.edit_rounded, size: 16, color: AppColors.topscoreBlue),
-            ],
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Colors.redAccent),
+                  onPressed: () {
+                    setState(() {
+                      _visualBlocks.removeAt(index);
+                      _codeController.text = _compileBlocksToCode();
+                    });
+                    if (_isActivated) _runModifiedCode();
+                  },
+                ),
+                const Icon(Icons.edit_rounded,
+                    size: 16, color: AppColors.topscoreBlue),
+              ],
+            ),
           ),
         );
       },
-    );
-  }
+    ),
+  ),
+  Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: TextButton.icon(
+      onPressed: _addNewBlock,
+      icon: const Icon(Icons.add_circle_outline, size: 20),
+      label: const Text('Add Shape'),
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.topscoreBlue,
+      ),
+    ),
+  ),
+],
+);
+}
 
   Widget _buildCelebrationCard(bool isDark, ThemeData theme) {
     return Container(
@@ -1256,7 +1374,7 @@ function draw() {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Level Mastered!",
+                  "Level $_currentSyllabusLevel Mastered!",
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w900,
                     fontSize: 14,
@@ -1270,6 +1388,31 @@ function draw() {
                     color: isDark ? Colors.white70 : Colors.black54,
                   ),
                 ),
+                if (_currentSyllabusLevel < SyllabusData.levels.length)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      color: AppColors.success,
+                      onPressed: () {
+                        setState(() {
+                          _currentSyllabusLevel++;
+                          _levelMastered = false;
+                          _codeController.text = _cleanInitialCode(
+                              SyllabusData.levels[_currentSyllabusLevel - 1]
+                                  .code);
+                          _activeTab = 1; // Switch to text code for levels
+                        });
+                        _runModifiedCode();
+                      },
+                      child: Text(
+                        "Next Level",
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
