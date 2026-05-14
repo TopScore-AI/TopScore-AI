@@ -58,13 +58,22 @@ class StyledGptMarkdown extends StatelessWidget {
     // that prevent GptMarkdown from recognizing them.
     String processedData = data;
 
+    // 0. Split concatenated table rows.
+    // Streaming often joins rows on one line: "...cell |  | **Col** | cell |"
+    // The "| |" or "||" boundary marks where one row ended and the next began.
+    // Split these back into separate lines BEFORE any other normalisation.
+    processedData = processedData.replaceAllMapped(
+      RegExp(r'\|\s*\|\s*(?=\*{0,2}[A-Za-z0-9])'),
+      (m) => '|\n| ',
+    );
+
     // 1. Ensure there's a double newline before and after a table if it follows/precedes text
     processedData = processedData.replaceAllMapped(
       RegExp(r'([^\n])\n\|'),
       (match) => '${match.group(1)}\n\n|',
     );
     processedData = processedData.replaceAllMapped(
-      RegExp(r'\|\n([^\n])'),
+      RegExp(r'\|\n([^\n|])'),
       (match) => '|\n\n${match.group(1)}',
     );
 
@@ -80,9 +89,6 @@ class StyledGptMarkdown extends StatelessWidget {
         if (!line.startsWith('|')) line = '| $line';
         if (!line.endsWith('|')) line = '$line |';
         
-        // Fix excessive internal pipes ||
-        line = line.replaceAll('||', '|');
-        
         lines[i] = line;
       } else if (inTable) {
         inTable = false;
@@ -95,7 +101,84 @@ class StyledGptMarkdown extends StatelessWidget {
       style: effectiveStyle,
       imageBuilder: imageBuilder,
       linkBuilder: linkBuilder,
-      codeBuilder: codeBuilder,
+      codeBuilder: (context, name, code, isInline) {
+        if (codeBuilder != null) return codeBuilder!(context, name, code, isInline);
+        
+        if (isInline) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              code,
+              style: GoogleFonts.firaCode(
+                fontSize: 14,
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark ? Colors.black.withValues(alpha: 0.3) : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (name.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        name.toUpperCase(),
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      Icon(Icons.copy_all_rounded, size: 14, color: theme.colorScheme.primary),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Text(
+                    code,
+                    style: GoogleFonts.firaCode(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: theme.brightness == Brightness.dark ? Colors.indigo.shade100 : Colors.indigo.shade900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
       latexBuilder: latexBuilder,
       highlightBuilder: highlightBuilder,
       onLinkTap: onLinkTap,

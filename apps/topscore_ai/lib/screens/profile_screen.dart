@@ -584,10 +584,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final lastDate = user?.freeMessagesLastAt as DateTime?;
     final limit = 6; // Free tier limit is 6 messages
 
-    // Calculate reset time (12-hour window)
-    String resetLabel = 'Resets in 12 hours';
+    // Calculate reset time (6-hour window)
+    String resetLabel = 'Resets in 6 hours';
     if (lastDate != null) {
-      final resetAt = lastDate.add(const Duration(hours: 12));
+      final resetAt = lastDate.add(const Duration(hours: 6));
       final now = DateTime.now();
       if (resetAt.isAfter(now)) {
         final diff = resetAt.difference(now);

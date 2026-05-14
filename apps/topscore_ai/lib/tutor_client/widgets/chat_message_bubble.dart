@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +21,7 @@ import '../../providers/auth_provider.dart';
 import '../../constants/colors.dart';
 import '../../services/clipboard_service.dart';
 import '../../services/haptics_service.dart';
+import '../../services/tts_service.dart';
 import '../../widgets/gemini_reasoning_view.dart';
 import '../../widgets/math_markdown.dart';
 import '../../widgets/youtube_embed_widget.dart';
@@ -33,6 +36,7 @@ import 'punnett_square_widget.dart';
 import '../../widgets/in_app_research_browser.dart';
 import '../../utils/cors_proxy_helper.dart';
 import 'ui_widget_factory.dart';
+
 
 class ChatMessageBubble extends StatefulWidget {
   final ChatMessage message;
@@ -65,6 +69,9 @@ class ChatMessageBubble extends StatefulWidget {
   final Function(ChatMessage) onReply;
   final VoidCallback onLongPress;
   final VoidCallback? onRetrySend;
+  // Only the most recent user message in a thread should be editable.
+  // Older user messages show a copy action only.
+  final bool isEditable;
 
   const ChatMessageBubble({
     super.key,
@@ -96,6 +103,7 @@ class ChatMessageBubble extends StatefulWidget {
     this.status,
     this.user,
     this.onRetrySend,
+    this.isEditable = true,
   });
 
   @override
@@ -161,9 +169,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       alignment: Alignment.centerRight,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
+          maxWidth: (MediaQuery.of(context).size.width * 0.78).clamp(0, 650),
         ),
-        margin: const EdgeInsets.symmetric(vertical: 6),
+        margin: const EdgeInsets.only(top: 6, bottom: 6, left: 12, right: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -180,12 +188,12 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                   gradient: LinearGradient(
                     colors: isDark
                         ? [
-                            theme.colorScheme.primary.withValues(alpha: 0.2),
-                            theme.colorScheme.primary.withValues(alpha: 0.1),
+                            theme.colorScheme.primary.withValues(alpha: 0.35),
+                            theme.colorScheme.primary.withValues(alpha: 0.15),
                           ]
                         : [
                             theme.colorScheme.primary,
-                            theme.colorScheme.primary.withValues(alpha: 0.85),
+                            theme.colorScheme.primary.withValues(alpha: 0.7),
                           ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -194,14 +202,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),
                     bottomLeft: Radius.circular(24),
-                    bottomRight: Radius.circular(6),
+                    bottomRight: Radius.circular(4),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: theme.colorScheme.primary
-                          .withValues(alpha: isDark ? 0.2 : 0.15),
-                      blurRadius: 15,
-                      offset: const Offset(0, 6),
+                      color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.3 : 0.25),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
@@ -516,63 +524,76 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           children: [
             Padding(
               padding: const EdgeInsets.only(
-                  top: 8.0, bottom: 24.0, left: 4.0, right: 4.0),
+                  top: 8.0, bottom: 24.0, left: 12.0, right: 12.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // A small, clean TopScore icon next to the AI text
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.black.withValues(alpha: 0.03),
-                    ),
-                    child: Center(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        width: 18,
-                        height: 18,
-                        fit: BoxFit.contain,
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                            blurRadius: 15,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? theme.colorScheme.surface.withValues(alpha: 0.4)
+                                  : Colors.white.withValues(alpha: 0.7),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : Colors.white.withValues(alpha: 0.8),
+                                width: 1.5,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: widget.message.status == MessageStatus.error
+                                ? _buildAiErrorCard(theme, isDark)
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if ((widget.isStreaming ||
+                                              widget.message.isThinking) &&
+                                          widget.message.text.isEmpty &&
+                                          (widget.message.reasoning == null ||
+                                              widget.message.reasoning!.isEmpty))
+                                        _ThinkingSkeleton(
+                                            isDark: isDark,
+                                            status: widget.status ??
+                                                (widget.message.isThinking
+                                                    ? "Thinking..."
+                                                    : null)),
+                                      if (widget.message.reasoning != null &&
+                                          widget.message.reasoning!.isNotEmpty)
+                                        TopScoreReasoningView(
+                                          content: widget.message.reasoning!,
+                                          isThinking: widget.message.text.isEmpty,
+                                        ),
+                                      if (widget.message.replyToText != null)
+                                        _buildReplyPreview(theme, false),
+                                      if (widget.message.text.isNotEmpty)
+                                        _buildMarkdown(
+                                            context, theme, isDark, settings),
+                                      if (widget.isStreaming &&
+                                          widget.message.text.isNotEmpty)
+                                        const _StreamingCursor(),
+                                    ],
+                                  ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: widget.message.status == MessageStatus.error
-                        ? _buildAiErrorCard(theme, isDark)
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if ((widget.isStreaming ||
-                                      widget.message.isThinking) &&
-                                  widget.message.text.isEmpty &&
-                                  (widget.message.reasoning == null ||
-                                      widget.message.reasoning!.isEmpty))
-                                _ThinkingSkeleton(
-                                    isDark: isDark,
-                                    status: widget.status ??
-                                        (widget.message.isThinking
-                                            ? "Thinking..."
-                                            : null)),
-                              if (widget.message.reasoning != null &&
-                                  widget.message.reasoning!.isNotEmpty)
-                                TopScoreReasoningView(
-                                  content: widget.message.reasoning!,
-                                  isThinking: widget.message.text.isEmpty,
-                                ),
-                              if (widget.message.replyToText != null)
-                                _buildReplyPreview(theme, false),
-                              if (widget.message.text.isNotEmpty)
-                                _buildMarkdown(
-                                    context, theme, isDark, settings),
-                              if (widget.isStreaming &&
-                                  widget.message.text.isNotEmpty)
-                                const _StreamingCursor(),
-                            ],
-                          ),
                   ),
                 ],
               ),
@@ -761,13 +782,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _TactileActionIcon(
-            icon: CupertinoIcons.pencil,
-            onTap: widget.onEdit,
-            theme: theme,
-            tooltip: 'Edit',
-            isSmall: true,
-          ),
+          if (widget.isEditable)
+            _TactileActionIcon(
+              icon: CupertinoIcons.pencil,
+              onTap: widget.onEdit,
+              theme: theme,
+              tooltip: 'Edit',
+              isSmall: true,
+            ),
           _TactileActionIcon(
             icon: CupertinoIcons.doc_on_clipboard,
             onTap: widget.onCopy,
@@ -797,6 +819,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
   Widget _buildYouTubeOrTextLink(
       BuildContext context, String text, String url) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    if (url.startsWith('speak:')) {
+      final parts = url.split(':');
+      final textToSpeak = parts.length > 1 ? parts[1] : text;
+      final langCode = parts.length > 2 ? parts[2] : 'en';
+      return _buildInlineSpeakButton(context, text, textToSpeak, langCode);
+    }
+
     if (url.toLowerCase().contains('youtube.com') ||
         url.toLowerCase().contains('youtu.be')) {
       final videoId = YoutubePlayerController.convertUrlToId(url);
@@ -851,6 +881,94 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     );
   }
 
+  Widget _buildInlineSpeakButton(
+      BuildContext context, String text, String textToSpeak, String langCode) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final decodedText = Uri.decodeComponent(textToSpeak);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            HapticsService.instance.lightImpact();
+            final tts = TtsService();
+            String bcp47 = 'en-US';
+            switch (langCode.toLowerCase().trim()) {
+              case 'fr':
+              case 'french':
+                bcp47 = 'fr-FR';
+                break;
+              case 'de':
+              case 'german':
+                bcp47 = 'de-DE';
+                break;
+              case 'es':
+              case 'spanish':
+                bcp47 = 'es-ES';
+                break;
+              case 'zh':
+              case 'chinese':
+              case 'mandarin':
+                bcp47 = 'zh-CN';
+                break;
+              case 'sw':
+              case 'swahili':
+              case 'kiswahili':
+                bcp47 = 'sw-KE';
+                break;
+              case 'ar':
+              case 'arabic':
+                bcp47 = 'ar-AE';
+                break;
+              case 'it':
+              case 'italian':
+                bcp47 = 'it-IT';
+                break;
+              default:
+                bcp47 = langCode;
+            }
+            await tts.setLanguage(bcp47);
+            await tts.speak(decodedText);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.2 : 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  text,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.volume_up_rounded,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMarkdown(BuildContext context, ThemeData theme, bool isDark,
       SettingsProvider settings) {
     final baseStyle = GoogleFonts.nunito(
@@ -865,7 +983,58 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final content = _cleanContent(widget.message.text);
     final widgetRegex = RegExp(r':::ui-widget\|([a-f0-9-]+):::');
 
-    final List<UiWidgetData> allWidgets = widget.message.uiWidgets ?? [];
+    final List<UiWidgetData> allWidgets = [];
+
+    // 1. Add any widgets already present in widget.message.uiWidgets
+    if (widget.message.uiWidgets != null) {
+      allWidgets.addAll(widget.message.uiWidgets!);
+    }
+
+    // 2. Add and parse any widgets from widget.message.uiWidgetsJson
+    if (widget.message.uiWidgetsJson != null) {
+      for (final jsonStr in widget.message.uiWidgetsJson!) {
+        try {
+          final decoded = jsonDecode(jsonStr);
+          if (decoded is Map<String, dynamic>) {
+            allWidgets.add(UiWidgetData.fromJson(decoded));
+          }
+        } catch (e) {
+          developer.log('Error parsing uiWidgetsJson item: $e', name: 'ChatMessageBubble');
+        }
+      }
+    }
+
+    // 3. Extract any legacy :::ui-widget\n{...}\n::: blocks directly from the text of the message
+    final rawText = widget.message.text;
+    final legacyRegex = RegExp(r':::ui-widget[\r\n]+(.*?)([\r\n]+:::|$)', dotAll: true);
+    final legacyMatches = legacyRegex.allMatches(rawText);
+    for (final match in legacyMatches) {
+      final jsonStr = match.group(1);
+      if (jsonStr != null && jsonStr.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(jsonStr.trim());
+          if (decoded is Map<String, dynamic>) {
+            allWidgets.add(UiWidgetData.fromJson(decoded));
+          }
+        } catch (e) {
+          developer.log('Error parsing legacy ui-widget block: $e', name: 'ChatMessageBubble');
+        }
+      }
+    }
+
+    // 4. Ensure every widget has a unique, non-null ID
+    for (int i = 0; i < allWidgets.length; i++) {
+      final w = allWidgets[i];
+      if (w.id == null || w.id!.isEmpty) {
+        allWidgets[i] = UiWidgetData(
+          id: 'synth_widget_${widget.message.id}_$i',
+          type: w.type,
+          title: w.title,
+          configJson: w.configJson,
+        );
+      }
+    }
+
     final Set<String> renderedWidgetIds = {};
 
     if (!content.contains(widgetRegex)) {
@@ -922,7 +1091,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                 ),
               ),
             if (i < matches.length) ...[
-              _buildSideChannelWidget(context, matches[i].group(1)!),
+              _buildSideChannelWidget(context, matches[i].group(1)!, allWidgets),
               () {
                 renderedWidgetIds.add(matches[i].group(1)!);
                 return const SizedBox.shrink();
@@ -947,23 +1116,19 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       padding: const EdgeInsets.only(top: 12),
       child: Column(
         children: remaining
-            .map((w) => _buildSideChannelWidget(context, w.id!))
+            .map((w) => _buildSideChannelWidget(context, w.id!, allWidgets))
             .toList(),
       ),
     );
   }
 
-  Widget _buildSideChannelWidget(BuildContext context, String widgetId) {
+  Widget _buildSideChannelWidget(BuildContext context, String widgetId, List<UiWidgetData> allWidgets) {
     // Look up the actual widget data by its unique ID
-    final widgets = widget.message.uiWidgets ?? [];
-
-    // We cast to dynamic to allow firstWhere to work smoothly across model variants
-    // Use try-catch instead of orElse to avoid type issues
     dynamic matchingWidget;
     try {
-      matchingWidget = widgets.isEmpty
+      matchingWidget = allWidgets.isEmpty
           ? null
-          : (widgets as List).firstWhere((w) => w.id == widgetId);
+          : allWidgets.firstWhere((w) => w.id == widgetId);
     } catch (e) {
       matchingWidget = null;
     }

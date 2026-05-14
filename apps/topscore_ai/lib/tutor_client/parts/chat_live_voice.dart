@@ -269,7 +269,8 @@ extension ChatControllerLiveVoice on ChatController {
       _liveAudioSubscription =
           (await _audioInput.startRecordingStream())?.listen(
         (data) {
-          if (!_isMicMuted && _isVoiceMode) {
+          final isAiSpeaking = _currentAiStatus == 'Speaking...' || _audioOutput.isPlaying;
+          if (!_isMicMuted && _isVoiceMode && !isAiSpeaking) {
             _geminiLiveService.sendAudio(data);
           }
         },
@@ -531,7 +532,7 @@ extension ChatControllerLiveVoice on ChatController {
 
   // --- Live Tool Call Handler (Function Calling → UI Sync) ---
   void _handleLiveToolCall(GeminiLiveEvent event) {
-    developer.log('🔧 Tool call received: ${event.toolName}');
+    developer.log('🔧 Tool call received: ${event.toolName} (id=${event.id})');
 
     switch (event.toolName) {
       case 'open_flashcard':
@@ -542,6 +543,7 @@ extension ChatControllerLiveVoice on ChatController {
         _geminiLiveService.sendText(jsonEncode({
           'type': 'tool_response',
           'name': event.toolName,
+          'id': event.id,
           'result': {'status': 'displayed', 'topic': topic}
         }));
         break;
@@ -552,6 +554,7 @@ extension ChatControllerLiveVoice on ChatController {
         _geminiLiveService.sendText(jsonEncode({
           'type': 'tool_response',
           'name': event.toolName,
+          'id': event.id,
           'result': {'status': 'displayed', 'equation': equation}
         }));
         break;
@@ -562,6 +565,7 @@ extension ChatControllerLiveVoice on ChatController {
         _geminiLiveService.sendText(jsonEncode({
           'type': 'tool_response',
           'name': event.toolName,
+          'id': event.id,
           'result': {'status': 'highlighted', 'concept': concept}
         }));
         break;

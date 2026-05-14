@@ -19,7 +19,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-import 'package:isar/isar.dart' hide Query;
+import 'package:isar_community/isar.dart' hide Query;
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -52,6 +52,8 @@ import '../config/app_config.dart';
 import '../constants/colors.dart';
 import 'message_model.dart';
 import 'enhanced_websocket_service.dart';
+import 'services/language_detect_service.dart';
+import 'widgets/language_suggestion_banner.dart';
 import 'connection_manager.dart' as cm;
 import 'utils/audio_input.dart';
 import 'utils/audio_output.dart';
@@ -139,6 +141,13 @@ class ChatController extends ChangeNotifier {
   /// Emits the error code when the server returns a message limit error.
   /// ChatScreen listens to this and calls AuthProvider.onServerLimitReached().
   final ValueNotifier<String?> limitReached = ValueNotifier(null);
+
+  /// Language Buddy suggestion banner: emits non-null when we detect the user
+  /// typed in a supported non-English language. ChatScreen renders the banner.
+  /// Once a language has been suggested in this session it won't fire again.
+  final ValueNotifier<LanguageSuggestion?> languageSuggestion =
+      ValueNotifier(null);
+  final Set<String> _suggestedThisSession = <String>{};
 
   // Voice & Audio state
   bool _isVoiceMode = false;
@@ -441,19 +450,19 @@ class ChatController extends ChangeNotifier {
     fetchThreadList(silent: true);
   }
 
-  void handleInitialResources({
+  Future<void> handleInitialResources({
     XFile? image,
     String? text,
     String? fileUrl,
     String? fileName,
     String? fileType,
     Uint8List? fileBytes,
-  }) {
+  }) async {
     if (text != null && text.isNotEmpty && _textController.text.isEmpty) {
       _textController.text = text;
     }
     if (image != null) {
-      _handleInitialImageExternal(image);
+      await _handleInitialImageExternal(image);
     }
     if (fileUrl != null || fileBytes != null) {
       final exists = _pendingAttachments
@@ -472,7 +481,7 @@ class ChatController extends ChangeNotifier {
     notify();
   }
 
-  void _handleInitialImageExternal(XFile xFile) async {
+  Future<void> _handleInitialImageExternal(XFile xFile) async {
     final bytes = await xFile.readAsBytes();
     final base64Image = base64Encode(bytes);
     final fileName = 'snap_${DateTime.now().millisecondsSinceEpoch}.png';

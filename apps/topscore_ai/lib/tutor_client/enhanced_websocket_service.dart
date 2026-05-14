@@ -29,10 +29,17 @@ class EnhancedWebSocketService {
   bool _isHandshakeSent = false;
   Timer? _reconnectTimer;
   Timer? _keepAliveTimer;
+  Timer? _pongTimeoutTimer;
+  Timer? _connectingGuardTimer;
+  Timer? _watchdogTimer;
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<ConnectionState>? _connectionStateSub;
   final Random _random = Random();
   Completer<void>? _authenticatedCompleter;
+
+  static const Duration _pongTimeout = Duration(seconds: 10);
+  static const Duration _connectingGuard = Duration(seconds: 15);
+  static const Duration _watchdogInterval = Duration(seconds: 60);
 
   // Connection manager for state tracking and retry logic
   final ConnectionStateManager _connectionManager = ConnectionStateManager();
@@ -76,9 +83,14 @@ class EnhancedWebSocketService {
       final regained = !_lastHasInternet && hasNet;
       _lastHasInternet = hasNet;
 
-      if (regained && !_isConnected && !_isConnecting) {
+      if (regained) {
+        // Always reset attempts when net comes back, even if we previously
+        // hit the max and gave up. This is the user's cue that the network
+        // changed and a retry might now succeed.
         _reconnectAttempts = 0;
-        connect();
+        if (!_isConnected && !_isConnecting) {
+          connect();
+        }
         return;
       }
       if (state == ConnectionState.reconnecting &&
@@ -160,6 +172,20 @@ class EnhancedWebSocketService {
     _authenticatedCompleter = Completer<void>();
     _isHandshakeSent = false;
 
+    // Safety net: if connect() hangs mid-flight (token fetch stalled, channel
+    // open never resolves), force-clear the guard so future connect() calls
+    // aren't permanently blocked. Independent of the OS-level connect timeout.
+    _connectingGuardTimer?.cancel();
+    _connectingGuardTimer = Timer(_connectingGuard, () {
+      if (_isConnecting && !_isConnected) {
+        if (kDebugMode) {
+          debugPrint('WebSocket: connecting guard fired — forcing reconnect');
+        }
+        _isConnecting = false;
+        _handleDisconnection();
+      }
+    });
+
     // Close any orphaned channel from a previous attempt before opening a new one.
     try {
       await _channel?.sink.close();
@@ -190,28 +216,9 @@ class EnhancedWebSocketService {
       final channel = WebSocketChannel.connect(uri);
       _channel = channel;
 
-      // Handle async connection errors from the ready future to prevent top-level crashes
-      channel.ready.catchError((error) {
-        if (kDebugMode) {
-          debugPrint('WebSocket: connection ready error: $error');
-        }
-        if (identical(_channel, channel)) {
-          _handleDisconnection();
-        }
-      });
-
-      if (idToken != null) {
-        if (kDebugMode) {
-          debugPrint('WebSocket: connect() found token, sending handshake...');
-        }
-      } else {
-        if (kDebugMode) {
-          debugPrint(
-              'WebSocket: connect() - no token, sending handshake with identity: $userId');
-        }
-      }
-      _sendHandshake(idToken);
-
+      // Attach stream listener FIRST so any async errors arriving before
+      // ready/handshake completes are captured by onError instead of escaping
+      // to the zone as a fatal WebSocketChannelException.
       channel.stream.listen(
         (message) {
           try {
@@ -232,11 +239,37 @@ class EnhancedWebSocketService {
             _handleDisconnection();
           }
         },
+        cancelOnError: true,
       );
+
+      // Handle async connection errors from the ready future to prevent top-level crashes
+      channel.ready.then((_) {
+        if (!identical(_channel, channel)) return;
+        if (idToken != null) {
+          if (kDebugMode) {
+            debugPrint('WebSocket: ready, sending handshake with token...');
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint(
+                'WebSocket: ready, sending handshake with identity: $userId');
+          }
+        }
+        _sendHandshake(idToken);
+      }).catchError((error) {
+        if (kDebugMode) {
+          debugPrint('WebSocket: connection ready error: $error');
+        }
+        if (identical(_channel, channel)) {
+          _handleDisconnection();
+        }
+      });
     } catch (e) {
       if (kDebugMode) debugPrint('WebSocket: Failed to connect: $e');
       _isConnected = false;
-      _isConnectedController.add(false);
+      if (!_isConnectedController.isClosed) {
+        _isConnectedController.add(false);
+      }
       _connectionManager.setDisconnected();
       _scheduleReconnect();
     } finally {
@@ -288,6 +321,8 @@ class EnhancedWebSocketService {
     if (_isConnected) return;
     _isConnected = true;
     _reconnectAttempts = 0;
+    _connectingGuardTimer?.cancel();
+    _watchdogTimer?.cancel();
     if (!_isDisposed && !_isConnectedController.isClosed) {
       _isConnectedController.add(true);
     }
@@ -299,6 +334,15 @@ class EnhancedWebSocketService {
   void _handleIncomingMessage(Map<String, dynamic> data) {
     if (_isDisposed || _messageController.isClosed) return;
     final type = data['type'];
+
+    // Any message from the server is a liveness signal — half-open TCP can't
+    // deliver bytes. Reset the pong watchdog regardless of message type.
+    _pongTimeoutTimer?.cancel();
+
+    if (type == 'pong') {
+      // Server-acknowledged keep-alive. Don't surface to UI.
+      return;
+    }
 
     switch (type) {
       case 'connected':
@@ -585,6 +629,18 @@ class EnhancedWebSocketService {
       if (_isConnected && _channel != null) {
         try {
           _channel!.sink.add(jsonEncode({'type': 'ping'}));
+          // Arm a pong-timeout — if the server doesn't reply (or any other
+          // message doesn't arrive) within _pongTimeout, treat the socket as
+          // half-open and reconnect. Resets on any incoming message.
+          _pongTimeoutTimer?.cancel();
+          _pongTimeoutTimer = Timer(_pongTimeout, () {
+            if (!_isConnected) return;
+            if (kDebugMode) {
+              debugPrint(
+                  'WebSocket: pong timeout — connection appears half-open');
+            }
+            _handleDisconnection();
+          });
         } catch (e) {
           if (kDebugMode) debugPrint('Keep-alive failed: $e');
           _handleDisconnection();
@@ -592,6 +648,29 @@ class EnhancedWebSocketService {
       } else {
         _keepAliveTimer?.cancel();
       }
+    });
+  }
+
+  /// Watchdog: when we've exhausted reconnect attempts, keep periodically
+  /// retrying at a slow cadence instead of giving up forever. Cancelled as
+  /// soon as we reconnect or net-regain triggers a fresh attempt.
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) {
+      if (_isDisposed || _isPaused) {
+        _watchdogTimer?.cancel();
+        return;
+      }
+      if (_isConnected || _isConnecting) {
+        _watchdogTimer?.cancel();
+        return;
+      }
+      if (!hasInternet) return;
+      if (kDebugMode) {
+        debugPrint('WebSocket: watchdog retry after max attempts');
+      }
+      _reconnectAttempts = 0;
+      connect();
     });
   }
 
@@ -616,11 +695,18 @@ class EnhancedWebSocketService {
       }
     } else {
       _connectionManager.setDisconnected();
+      // Don't give up forever. Start the slow-cadence watchdog so a future
+      // server recovery, OS network change, or proxy fix gets a retry.
+      _startWatchdog();
     }
   }
 
   void _handleDisconnection() {
     _isConnected = false;
+    _pongTimeoutTimer?.cancel();
+    _keepAliveTimer?.cancel();
+    _connectingGuardTimer?.cancel();
+    _isConnecting = false;
     if (!_isConnectedController.isClosed) {
       _isConnectedController.add(false);
     }
@@ -653,6 +739,9 @@ class EnhancedWebSocketService {
     _isPaused = true;
     _keepAliveTimer?.cancel();
     _reconnectTimer?.cancel();
+    _pongTimeoutTimer?.cancel();
+    _connectingGuardTimer?.cancel();
+    _watchdogTimer?.cancel();
     final channel = _channel;
     _channel = null;
     try {
@@ -669,6 +758,9 @@ class EnhancedWebSocketService {
     _isPaused = true;
     _reconnectTimer?.cancel();
     _keepAliveTimer?.cancel();
+    _pongTimeoutTimer?.cancel();
+    _connectingGuardTimer?.cancel();
+    _watchdogTimer?.cancel();
     await _authSubscription?.cancel();
     await _connectionStateSub?.cancel();
     try {

@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:waveform_flutter/waveform_flutter.dart' as wf;
+import 'dart:ui';
 import '../message_model.dart';
 import '../chat_controller.dart';
 
@@ -21,7 +22,6 @@ class ChatInputArea extends StatefulWidget {
   final bool isRecording;
   final bool isOffline;
   final bool isConnecting;
-  final List<Map<String, String>> suggestions;
   final List<String> placeholderMessages;
   final VoidCallback onSendMessage;
   final Function({String? text}) onSendMessageWithText;
@@ -51,7 +51,6 @@ class ChatInputArea extends StatefulWidget {
     required this.isRecording,
     this.isOffline = false,
     this.isConnecting = false,
-    required this.suggestions,
     required this.placeholderMessages,
     required this.onSendMessage,
     required this.onSendMessageWithText,
@@ -124,9 +123,6 @@ class _ChatInputAreaState extends State<ChatInputArea> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final pillColor = isDark
-        ? theme.colorScheme.surface.withValues(alpha: 0.95)
-        : theme.colorScheme.surfaceContainerHighest;
 
     final isAnyAttachmentUploading = widget.isUploading ||
         widget.pendingAttachments.any((a) => !a.isUploaded);
@@ -138,32 +134,39 @@ class _ChatInputAreaState extends State<ChatInputArea> {
         const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
             widget.onPaste,
       },
-      child: SafeArea(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
+      child: Container(
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
           decoration: BoxDecoration(
-            color: pillColor.withValues(alpha: isDark ? 0.85 : 0.8),
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.white.withValues(alpha: 0.5),
-              width: 1,
-            ),
             boxShadow: [
-              // Outer soft shadow
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+                color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.15 : 0.08),
                 blurRadius: 30,
                 offset: const Offset(0, 10),
+                spreadRadius: 2,
               ),
             ],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(32),
-            child: Column(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.65),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.white.withValues(alpha: 0.8),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -305,6 +308,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

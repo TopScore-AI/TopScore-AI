@@ -336,4 +336,39 @@ class AIService {
     }
     return {'curriculum': 'General', 'grade': level};
   }
+
+  /// POST /api/chat/socratic-hint
+  Future<Map<String, dynamic>> getSocraticHint({
+    required String code,
+    required String errorMessage,
+    required int lineNumber,
+    required int strikeLevel,
+    required String title,
+  }) async {
+    return _post('/api/chat/socratic-hint', {
+      'code': code,
+      'error_message': errorMessage,
+      'line_number': lineNumber,
+      'strike_level': strikeLevel,
+      'title': title,
+    });
+  }
+
+  /// POST /api/language/generate_duo_lesson
+  Future<Map<String, dynamic>> generateDuoLesson({
+    required String language,
+    required String topic,
+    required String gradeLevel,
+  }) async {
+    return _post('/api/language/generate_duo_lesson', {
+      'language': language,
+      'topic': topic,
+      'grade_level': gradeLevel,
+    });
+  }
+
+  /// POST /api/language/detect — lightweight, returns {language, confidence}
+  Future<Map<String, dynamic>> detectLanguage(String text) async {
+    return _post('/api/language/detect', {'text': text});
+  }
 }

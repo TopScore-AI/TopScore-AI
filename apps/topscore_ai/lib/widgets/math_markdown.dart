@@ -1,3 +1,5 @@
+import 'package:topscore_ai/utils/text_utils.dart';
+
 /// Pre-processor to clean and normalize markdown content before rendering.
 String cleanContent(String input) {
   String cleaned = input;
@@ -12,11 +14,10 @@ String cleanContent(String input) {
       .replaceAll('[IMAGE_FOUND]', '');
 
   // Strip fallback parser data blocks (Quiz, Flashcards, Mnemonic, Punnett Square)
-  cleaned = cleaned
-      .replaceAll(RegExp(r'\[QUIZ_DATA\]\([\s\S]*?(\)|$)'), '')
-      .replaceAll(RegExp(r'\[FLASHCARDS_DATA\]\([\s\S]*?(\)|$)'), '')
-      .replaceAll(RegExp(r'\[MNEMONIC_DATA\]\([\s\S]*?(\)|$)'), '')
-      .replaceAll(RegExp(r'\[PUNNETT_SQUARE\]\([\s\S]*?(\)|$)'), '');
+  cleaned = stripBalancedTag(cleaned, 'QUIZ_DATA');
+  cleaned = stripBalancedTag(cleaned, 'FLASHCARDS_DATA');
+  cleaned = stripBalancedTag(cleaned, 'MNEMONIC_DATA');
+  cleaned = stripBalancedTag(cleaned, 'PUNNETT_SQUARE');
 
   // Strip HTML underline tags (not supported by gpt_markdown)
   cleaned = cleaned.replaceAll('<u>', '').replaceAll('</u>', '');
@@ -63,7 +64,17 @@ String cleanContent(String input) {
     (m) => '${m.group(1)}\n\n',
   );
 
-  // 3d. Ensure blank line before Markdown tables (pipe at line start).
+  // 3d. Split concatenated table rows.
+  // Streaming chunks sometimes join rows on a single line:
+  //   "...cell || **Col** | cell |" or "...cell |  | **Col** | cell |"
+  // Split these back into separate lines so the markdown parser can
+  // recognize them as a proper table.
+  cleaned = cleaned.replaceAllMapped(
+    RegExp(r'\|\s*\|\s*(?=\*{0,2}[A-Za-z0-9])'),
+    (m) => '|\n| ',
+  );
+
+  // 3e. Ensure blank line before Markdown tables (pipe at line start).
   // Deliberately NOT adding blank lines before list items here — that was
   // too aggressive and broke inline dashes like "e.g. - something".
   cleaned = cleaned.replaceAllMapped(

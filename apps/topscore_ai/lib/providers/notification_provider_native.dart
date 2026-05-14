@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import '../models/app_notification_native.dart';
 import '../main.dart' show studyDb;
 

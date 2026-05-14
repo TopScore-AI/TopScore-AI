@@ -196,15 +196,15 @@ class AuthProvider with ChangeNotifier {
       return _userModel!.freeMessageCount < 6;
     }
 
-    // Check if 12 hours have passed since the tracking window started
+    // Check if 6 hours have passed since the tracking window started
     final now = DateTime.now();
     final elapsed = now.difference(_userModel!.freeMessagesLastAt!);
-    if (elapsed.inHours >= 12) {
+    if (elapsed.inHours >= 6) {
       // Window expired - allow sending (backend will reset count)
       return true;
     }
 
-    // Within the 12-hour window - check if under limit
+    // Within the 6-hour window - check if under limit
     return _userModel!.freeMessageCount < 6;
   }
 

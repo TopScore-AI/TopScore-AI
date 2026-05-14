@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import '../firestore_artifact_service.dart';
 import '../isar_service.dart';
 import '../offline_service.dart';

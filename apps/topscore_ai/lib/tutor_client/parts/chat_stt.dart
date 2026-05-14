@@ -39,7 +39,11 @@ extension ChatControllerSTT on ChatController {
     _isRecording = true;
     notify();
 
+    final localeId = _getSpeechLocaleId();
+    developer.log('Starting dictation with locale: $localeId (subject: ${subject ?? chatThread?['subject']})', name: 'ChatController');
+
     _stt.listen(
+      localeId: localeId,
       onResult: (result) {
         final words = result.recognizedWords;
         final updated = baseText.isEmpty ? words : '$baseText $words';
@@ -61,6 +65,18 @@ extension ChatControllerSTT on ChatController {
         listenMode: stt.ListenMode.dictation,
       ),
     );
+  }
+
+  String? _getSpeechLocaleId() {
+    final sub = (subject ?? chatThread?['subject'] ?? '').toString().toLowerCase();
+    if (sub.contains('french') || sub.contains('français')) return 'fr-FR';
+    if (sub.contains('german') || sub.contains('deutsch')) return 'de-DE';
+    if (sub.contains('spanish') || sub.contains('español')) return 'es-ES';
+    if (sub.contains('mandarin') || sub.contains('chinese') || sub.contains('普通话')) return 'zh-CN';
+    if (sub.contains('swahili') || sub.contains('kiswahili')) return 'sw-KE';
+    if (sub.contains('arabic')) return 'ar-AE';
+    if (sub.contains('italian')) return 'it-IT';
+    return null; // Fallback to default system language (English / Swahili)
   }
 
   Future<void> stopDictationAndSend(BuildContext context) async {

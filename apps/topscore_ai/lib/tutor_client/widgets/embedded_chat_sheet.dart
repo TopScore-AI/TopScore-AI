@@ -36,6 +36,7 @@ class EmbeddedChatSheet extends StatefulWidget {
   final String? fileType;
   final Uint8List? fileBytes;
   final bool startVoice;
+  final String? threadId;
 
   const EmbeddedChatSheet({
     super.key,
@@ -48,6 +49,7 @@ class EmbeddedChatSheet extends StatefulWidget {
     this.fileType,
     this.fileBytes,
     this.startVoice = false,
+    this.threadId,
   });
 
   // ---------------------------------------------------------------------------
@@ -65,6 +67,7 @@ class EmbeddedChatSheet extends StatefulWidget {
     String? fileType,
     Uint8List? fileBytes,
     bool startVoice = false,
+    String? threadId,
     double heightFactor = 0.88,
   }) {
     return showModalBottomSheet(
@@ -84,6 +87,7 @@ class EmbeddedChatSheet extends StatefulWidget {
           fileType: fileType,
           fileBytes: fileBytes,
           startVoice: startVoice,
+          threadId: threadId,
         ),
       ),
     );
@@ -136,7 +140,7 @@ class _EmbeddedChatSheetState extends State<EmbeddedChatSheet> {
 
     // Give this overlay its own thread ID — init() will apply it to the socket
     _controller
-        .setOwnThreadId('embedded_${DateTime.now().millisecondsSinceEpoch}');
+        .setOwnThreadId(widget.threadId ?? 'embedded_${DateTime.now().millisecondsSinceEpoch}');
 
     wsService.userName = authProvider.userModel?.preferredName ??
         authProvider.userModel?.displayName;
@@ -149,7 +153,7 @@ class _EmbeddedChatSheetState extends State<EmbeddedChatSheet> {
         widget.fileUrl != null ||
         widget.fileBytes != null ||
         widget.initialInputText != null) {
-      _controller.handleInitialResources(
+      await _controller.handleInitialResources(
         image: widget.initialImage,
         text: widget.initialInputText,
         fileUrl: widget.fileUrl,

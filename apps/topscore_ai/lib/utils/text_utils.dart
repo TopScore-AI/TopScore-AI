@@ -61,8 +61,6 @@ String postFormatAIResponse(String text) {
   return formatted.trim();
 }
 
-/// Robustly removes internal technical tags and their data payloads.
-/// Handles partial tags during streaming and ensures they are completely hidden.
 String _removeTechnicalMetadata(String text) {
   const tags = [
     'QUIZ_DATA',
@@ -79,17 +77,10 @@ String _removeTechnicalMetadata(String text) {
 
   String result = text;
   for (final tag in tags) {
-    // Matches the tag and an optional parenthesized block that might be incomplete or multi-line.
-    // Breakdown:
-    // 1.  \[TAG\]              - matches literal tag like [QUIZ_DATA]
-    // 2.  (?:\(.*?\))?         - optionally matches a non-greedy parenthesized block (data payload)
-    // 3.  (?:\([^)]*$)?        - OR matches an unclosed parenthetical block (for streaming UI)
-    final pattern = RegExp(
-      '\\[$tag\\](?:\\([^)]*\\)?)?',
-      multiLine: true,
-      dotAll: true,
-    );
-    result = result.replaceAll(pattern, '');
+    // 1. Robustly strip the balanced parenthesized payload
+    result = stripBalancedTag(result, tag);
+    // 2. Strip bare occurrences of [TAG] if left
+    result = result.replaceAll('[$tag]', '');
   }
 
   // Image tools (wikimedia_tool, image_search_tool, serpapi_image_search_tool)
@@ -108,4 +99,73 @@ String _removeTechnicalMetadata(String text) {
   );
 
   return result;
+}
+
+/// Helper function to strip parenthesized metadata payloads by correctly 
+/// tracking and matching balanced open and close parentheses. This prevents
+/// leakage when parenthesized mathematical equations or text exist inside JSON strings.
+String stripBalancedTag(String text, String tag) {
+  String result = text;
+  while (true) {
+    final startTag = '[$tag](';
+    final startIndex = result.indexOf(startTag);
+    if (startIndex == -1) break;
+
+    // Find the matching closing parenthesis
+    final openParenIndex = startIndex + startTag.length - 1; // index of the '('
+    int parenCount = 1;
+    int endIndex = -1;
+
+    for (int i = openParenIndex + 1; i < result.length; i++) {
+      if (result[i] == '(') {
+        parenCount++;
+      } else if (result[i] == ')') {
+        parenCount--;
+        if (parenCount == 0) {
+          endIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (endIndex != -1) {
+      result = result.replaceRange(startIndex, endIndex + 1, '');
+    } else {
+      // Incomplete block (still streaming): strip from startTag to the end of string
+      result = result.substring(0, startIndex);
+      break;
+    }
+  }
+  return result;
+}
+
+/// Extracts the contents inside the parentheses of a technical tag (e.g., [QUIZ_DATA](...))
+/// by tracking and matching balanced open and close parentheses.
+String? extractBalancedTagContent(String text, String tag) {
+  final startTag = '[$tag](';
+  final startIndex = text.indexOf(startTag);
+  if (startIndex == -1) return null;
+
+  final openParenIndex = startIndex + startTag.length - 1; // index of the '('
+  int parenCount = 1;
+  int endIndex = -1;
+
+  for (int i = openParenIndex + 1; i < text.length; i++) {
+    if (text[i] == '(') {
+      parenCount++;
+    } else if (text[i] == ')') {
+      parenCount--;
+      if (parenCount == 0) {
+        endIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (endIndex != -1) {
+    return text.substring(openParenIndex + 1, endIndex);
+  } else {
+    // Incomplete block (still streaming): return whatever we have inside so far
+    return text.substring(openParenIndex + 1);
+  }
 }

@@ -15,9 +15,10 @@ import 'package:flutter/foundation.dart';
 /// so re-running the migration is idempotent.
 class FirestoreArtifactService {
   FirestoreArtifactService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestoreOverride = firestore;
 
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestoreOverride;
+  FirebaseFirestore get _firestore => _firestoreOverride ?? FirebaseFirestore.instance;
 
   static const int _maxMessagePayloadBytes = 900 * 1000;
 

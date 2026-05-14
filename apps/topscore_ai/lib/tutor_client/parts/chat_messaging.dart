@@ -115,6 +115,8 @@ extension ChatControllerMessaging on ChatController {
       case 'image':
       case 'image_widget':
       case 'plotly':
+      case 'p5_playground':
+      case 'code_playground':
         return _handleUiWidgetEvent(data);
 
       case 'artifact':
@@ -122,9 +124,9 @@ extension ChatControllerMessaging on ChatController {
         final rawUrl = data['url']?.toString();
         final isValidUrl = rawUrl != null && rawUrl.startsWith('http');
 
-        if (artifactType == 'image' && isValidUrl) {
-          // Image tools (serpapi / wikimedia / fetch_educational_images) emit
-          // `{type:'artifact', artifact_type:'image', url, title, source}` WITHOUT
+        if ((artifactType == 'image' || artifactType == 'graph' || artifactType == 'diagram' || artifactType == 'image_widget') && isValidUrl) {
+          // Image/Graph/Diagram tools (serpapi / wikimedia / fetch_educational_images / graphing_tool / generate_educational_diagram) emit
+          // `{type:'artifact', artifact_type:'image'|'graph'|'diagram', url, title, source}` WITHOUT
           // an `id`. _handleUiWidgetEvent requires a non-null id to attach the
           // widget, so synthesize a stable one from the url if needed.
           final rawId = data['id'];
@@ -135,10 +137,10 @@ extension ChatControllerMessaging on ChatController {
           final normalizedWidget = {
             'id': synthId,
             'type': 'image_widget',
-            'title': data['title'] ?? 'Image Illustration',
+            'title': data['title'] ?? (artifactType == 'graph' ? 'Generated Graph' : 'Image Illustration'),
             'config': {
               'url': data['url'],
-              'title': data['title'],
+              'title': data['title'] ?? (artifactType == 'graph' ? 'Generated Graph' : 'Image Illustration'),
               'source': data['source'],
               'source_url': data['source_url'],
             }
@@ -146,7 +148,7 @@ extension ChatControllerMessaging on ChatController {
           return _handleUiWidgetEvent(normalizedWidget);
         }
 
-        // Handle Graphs / Plots / Charts
+        // Other unhandled artifacts
         return null;
 
       case 'tool_call':
@@ -282,59 +284,47 @@ extension ChatControllerMessaging on ChatController {
 
           // --- FALLBACK PARSER: Extract Quiz data from text stream ---
           if (chunkContent.contains('[QUIZ_DATA]')) {
-            final regex = RegExp(r'\[QUIZ_DATA\]\((.*?)\)');
-            final match = regex.firstMatch(chunkContent);
-            if (match != null) {
-              final configJson = match.group(1);
-              if (configJson != null) {
-                final idx = _messages.indexWhere((m) => m.id == targetId);
-                if (idx != -1 && _messages[idx].quizDataJson == null) {
-                  developer.log('Fallback parser found Quiz data for $targetId',
-                      name: 'ChatController');
-                  _messages[idx] =
-                      _messages[idx].copyWith(quizDataJson: configJson);
-                  notify();
-                }
+            final configJson = extractBalancedTagContent(chunkContent, 'QUIZ_DATA');
+            if (configJson != null) {
+              final idx = _messages.indexWhere((m) => m.id == targetId);
+              if (idx != -1 && _messages[idx].quizDataJson == null) {
+                developer.log('Fallback parser found Quiz data for $targetId',
+                    name: 'ChatController');
+                _messages[idx] =
+                    _messages[idx].copyWith(quizDataJson: configJson);
+                notify();
               }
             }
           }
 
           // --- FALLBACK PARSER: Extract Flashcards data from text stream ---
           if (chunkContent.contains('[FLASHCARDS_DATA]')) {
-            final regex = RegExp(r'\[FLASHCARDS_DATA\]\((.*?)\)');
-            final match = regex.firstMatch(chunkContent);
-            if (match != null) {
-              final configJson = match.group(1);
-              if (configJson != null) {
-                final idx = _messages.indexWhere((m) => m.id == targetId);
-                if (idx != -1 && _messages[idx].flashcardDataJson == null) {
-                  developer.log(
-                      'Fallback parser found Flashcards for $targetId',
-                      name: 'ChatController');
-                  _messages[idx] =
-                      _messages[idx].copyWith(flashcardDataJson: configJson);
-                  notify();
-                }
+            final configJson = extractBalancedTagContent(chunkContent, 'FLASHCARDS_DATA');
+            if (configJson != null) {
+              final idx = _messages.indexWhere((m) => m.id == targetId);
+              if (idx != -1 && _messages[idx].flashcardDataJson == null) {
+                developer.log(
+                    'Fallback parser found Flashcards for $targetId',
+                    name: 'ChatController');
+                _messages[idx] =
+                    _messages[idx].copyWith(flashcardDataJson: configJson);
+                notify();
               }
             }
           }
 
           // --- FALLBACK PARSER: Extract Mnemonic data from text stream ---
           if (chunkContent.contains('[MNEMONIC_DATA]')) {
-            final regex = RegExp(r'\[MNEMONIC_DATA\]\((.*?)\)');
-            final match = regex.firstMatch(chunkContent);
-            if (match != null) {
-              final configJson = match.group(1);
-              if (configJson != null) {
-                final idx = _messages.indexWhere((m) => m.id == targetId);
-                if (idx != -1 && _messages[idx].mnemonicDataJson == null) {
-                  developer.log(
-                      'Fallback parser found Mnemonic data for $targetId',
-                      name: 'ChatController');
-                  _messages[idx] =
-                      _messages[idx].copyWith(mnemonicDataJson: configJson);
-                  notify();
-                }
+            final configJson = extractBalancedTagContent(chunkContent, 'MNEMONIC_DATA');
+            if (configJson != null) {
+              final idx = _messages.indexWhere((m) => m.id == targetId);
+              if (idx != -1 && _messages[idx].mnemonicDataJson == null) {
+                developer.log(
+                    'Fallback parser found Mnemonic data for $targetId',
+                    name: 'ChatController');
+                _messages[idx] =
+                    _messages[idx].copyWith(mnemonicDataJson: configJson);
+                notify();
               }
             }
           }
@@ -1111,6 +1101,18 @@ extension ChatControllerMessaging on ChatController {
       return;
     }
 
+    // --- UPLOAD GUARD: Wait for pending attachment uploads to complete ---
+    if (_isUploading && attachments == null) {
+      developer.log('sendUserMessage: Upload in progress, waiting for completion...', name: 'ChatController');
+      for (int i = 0; i < 40; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!_isUploading) {
+          developer.log('sendUserMessage: Upload finished!', name: 'ChatController');
+          break;
+        }
+      }
+    }
+
     String messageText = text ?? _textController.text;
     final List<String> urlsToExtra = [];
     final List<ChatAttachmentMetadata> attachmentsMetadata = attachments ?? [];
@@ -1166,6 +1168,10 @@ extension ChatControllerMessaging on ChatController {
     } else {
       _messages.add(pendingMessage);
     }
+
+    // Buddy: fire-and-forget language detection. If user typed in a supported
+    // foreign language we haven't suggested this session, show the banner.
+    _maybeDetectLanguage(messageText);
 
     // --- OPTIMISTIC UI: Add Thinking AI Placeholder ---
     final thinkingAiId = 'ai-placeholder-${const Uuid().v4()}';
@@ -1571,21 +1577,26 @@ extension ChatControllerMessaging on ChatController {
 
       final type = item['type'] ?? item['artifact_type'];
 
-      if (type == 'image' || type == 'image_widget') {
+      if (type == 'image' || type == 'image_widget' || type == 'graph' || type == 'diagram') {
+        final rawId = item['id'];
+        final url = item['url'] ?? item['image_url'] ?? '';
+        final synthId = (rawId is String && rawId.isNotEmpty)
+            ? rawId
+            : 'img_${url.hashCode}';
         final normalized = {
-          'id': item['id'],
+          'id': synthId,
           'type': 'image_widget',
           'to_message_id': targetId,
-          'title': item['title'] ?? 'Image Illustration',
+          'title': item['title'] ?? (type == 'graph' ? 'Generated Graph' : 'Image Illustration'),
           'config': {
-            'url': item['url'] ?? item['image_url'],
-            'title': item['title'],
+            'url': url,
+            'title': item['title'] ?? (type == 'graph' ? 'Generated Graph' : 'Image Illustration'),
             'source': item['source'],
           }
         };
         _handleUiWidgetEvent(normalized);
       } else {
-        // Fallback for other widget types (graphs, tables, etc.)
+        // Fallback for other widget types (tables, etc.)
         final normalized = Map<String, dynamic>.from(item);
         if (!normalized.containsKey('to_message_id')) {
           normalized['to_message_id'] = targetId;
@@ -1623,6 +1634,7 @@ extension ChatControllerMessaging on ChatController {
         }
 
         _messages[idx] = _messages[idx].copyWith(uiWidgets: existing);
+        _isarService.saveMessage(_messages[idx]);
         notify();
       }
     }
@@ -1662,9 +1674,29 @@ extension ChatControllerMessaging on ChatController {
       isTemporary: false,
     );
     _messages.add(timeoutErrorMsg);
-    _isarService.saveMessage(timeoutErrorMsg);
+    // Note: We don't save the error bubble itself to Isar/Firestore so it doesn't
+    // clutter the persistent history or count toward usage limits.
 
     notify();
     scrollToBottom();
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Buddy: language detection on outbound text
+  // ───────────────────────────────────────────────────────────────────────────
+
+  Future<void> _maybeDetectLanguage(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.length < 12) return;
+    try {
+      final detected = await LanguageDetectService.instance.detect(trimmed);
+      if (detected == null) return;
+      if (_suggestedThisSession.contains(detected.language)) return;
+      // Add immediately to dedupe even if the user re-types before tap.
+      _suggestedThisSession.add(detected.language);
+      languageSuggestion.value = LanguageSuggestion(detected.language);
+    } catch (_) {
+      // Detection is best-effort; ignore errors silently.
+    }
   }
 }

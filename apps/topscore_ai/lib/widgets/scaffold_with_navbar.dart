@@ -29,6 +29,7 @@ class ScaffoldWithNavBar extends StatefulWidget {
 class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   bool _isCollapsed = false;
   bool _showAppPromo = false;
+  bool _isTutorNavBarVisible = false;
 
   @override
   void initState() {
@@ -110,6 +111,38 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
     if (prefs.containsKey('current_nav_index')) {
       await prefs.remove('current_nav_index');
     }
+
+    if (index == 1) {
+      setState(() {
+        _isTutorNavBarVisible = false;
+      });
+    }
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (widget.navigationShell.currentIndex != 1) {
+      return false;
+    }
+
+    if (notification is ScrollUpdateNotification) {
+      final scrollDelta = notification.scrollDelta ?? 0;
+      if (scrollDelta < -5) {
+        // Scroll Up (drag finger down) -> Show navigation bar
+        if (!_isTutorNavBarVisible) {
+          setState(() {
+            _isTutorNavBarVisible = true;
+          });
+        }
+      } else if (scrollDelta > 5) {
+        // Scroll Down (drag finger up) -> Hide navigation bar
+        if (_isTutorNavBarVisible) {
+          setState(() {
+            _isTutorNavBarVisible = false;
+          });
+        }
+      }
+    }
+    return false;
   }
 
   void _toggleSidebar() {
@@ -138,6 +171,9 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
   Widget _buildMobileLayout(bool isDark) {
     final theme = Theme.of(context);
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    // Hide navigation for AI Tutor (index 1) to create an immersive, Gemini-style experience.
+    final isAiTutor = widget.navigationShell.currentIndex == 1;
+    final showNavBar = !isKeyboardOpen && (!isAiTutor || _isTutorNavBarVisible);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -145,31 +181,33 @@ class _ScaffoldWithNavBarState extends State<ScaffoldWithNavBar> {
         children: [
           Padding(
             padding: EdgeInsets.only(
-                bottom: isKeyboardOpen ? 0 : 90), // Buffer for floating bar
-            child: widget.navigationShell,
+                bottom: (isKeyboardOpen || isAiTutor) ? 0 : 90), // Buffer for floating bar
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _handleScrollNotification,
+              child: widget.navigationShell,
+            ),
           ),
 
-
-
-          // Floating Pill Navigation - Hide when keyboard is open
-          if (!isKeyboardOpen)
-            Positioned(
-              bottom: 12, // Pushed a little lower
-              left: 24,
-              right: 24,
-              child: SafeArea(
-                child: RepaintBoundary(
-                  child: _FloatingPillNavBar(
-                    currentIndex: widget.navigationShell.currentIndex,
-                    onTap: _goBranch,
-                    isDark: isDark,
-                  ),
+          // Floating Pill Navigation - Slides up on scroll, slides down to hide
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            bottom: showNavBar ? 12 : -100, // Slides off-screen when hidden
+            left: 24,
+            right: 24,
+            child: SafeArea(
+              child: RepaintBoundary(
+                child: _FloatingPillNavBar(
+                  currentIndex: widget.navigationShell.currentIndex,
+                  onTap: _goBranch,
+                  isDark: isDark,
                 ),
               ),
             ),
+          ),
 
-          // Mobile App Promo Popup - Slide-up from bottom
-          _buildAppPromoBanner(context, isDark),
+          // Mobile App Promo Popup - Hide when in AI Tutor
+          if (!isAiTutor) _buildAppPromoBanner(context, isDark),
         ],
       ),
     );

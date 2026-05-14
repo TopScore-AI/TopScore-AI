@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 
 part 'message_model_native.g.dart';
 

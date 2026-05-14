@@ -2,7 +2,7 @@ name: topscore_ai  # Suggestion: Use snake_case for package names (Flutter stand
 description: "Kenya's #1 AI-powered learning app for CBC, 8-4-4 & Cambridge IGCSE students."
 publish_to: 'none' 
 
-version: 1.0.5+4
+version: 1.0.5+8
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -122,8 +122,8 @@ dependencies:
   timezone: ^0.10.1
   shimmer: ^3.0.0
   lottie: ^3.1.0
-  isar: ^3.1.0+1
-  isar_flutter_libs: ^3.1.0+1
+  isar_community: ^3.3.2
+  isar_community_flutter_libs: ^3.3.2
 
   # SEO and Optimizations
   # Temporarily commenting out seo due to intl version conflict
@@ -145,6 +145,7 @@ dependencies:
   animations: ^2.2.0
   carousel_slider: ^5.1.2
   confetti: ^0.8.0
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:
@@ -154,7 +155,7 @@ dev_dependencies:
   flutter_web_optimizer: ^1.5.1
   mocktail: ^1.0.4
   mockito: ^5.4.4
-  isar_generator: ^3.1.0+1
+  isar_community_generator: ^3.3.2
   build_runner: ^2.4.9
 
 
@@ -166,6 +167,7 @@ flutter:
     - assets/images/
     - assets/config/
     - assets/lottie/
+    - assets/js/
 
   # fonts:
   #   To use custom fonts, provide .ttf or .otf files (Flutter does not support .woff2).

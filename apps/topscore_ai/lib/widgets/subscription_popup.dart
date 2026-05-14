@@ -149,7 +149,7 @@ class _SubscriptionPopupState extends State<SubscriptionPopup> {
               ),
               const SizedBox(height: 8),
               Text(
-                "You've reached your free daily limit. Upgrade now for unlimited access to your AI Tutor and resources.",
+                "You've reached your free limit. Upgrade now for unlimited access to your AI Tutor and resources.",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 14,

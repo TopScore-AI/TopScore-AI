@@ -5,6 +5,8 @@ import 'interactive_table_widget.dart';
 import 'ai_image_widget.dart';
 import 'mnemonic_card.dart';
 import 'punnett_square_widget.dart';
+import 'interactive_sim_widget.dart';
+import 'p5_playground_widget.dart';
 
 /// A factory that dispatches dynamic UI widgets based on the configuration sent by the server.
 class UiWidgetFactory extends StatelessWidget {
@@ -65,6 +67,37 @@ class UiWidgetFactory extends StatelessWidget {
         case 'punnett_square':
           return PunnettSquareWidget(
             dataJson: jsonEncode(config),
+          );
+
+        case 'interactive_sim':
+          final url = config['url'] ?? '';
+          final simDescription = config['description'] ?? '';
+          return InteractiveSimWidget(
+            title: title,
+            url: url.toString(),
+            description: simDescription.toString(),
+            isMockExam: false,
+          );
+
+        case 'mock_exam':
+          final url = config['url'] ?? '';
+          final examDescription = config['description'] ?? '';
+          return InteractiveSimWidget(
+            title: title,
+            url: url.toString(),
+            description: examDescription.toString(),
+            isMockExam: true,
+          );
+
+        case 'p5_playground':
+        case 'code_playground':
+          final code = config['code'] ?? '';
+          final playgroundDescription = config['description'] ?? '';
+          return P5PlaygroundWidget(
+            title: title,
+            code: code.toString(),
+            description: playgroundDescription.toString(),
+            config: config,
           );
         
         default:

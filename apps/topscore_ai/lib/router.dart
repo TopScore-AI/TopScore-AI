@@ -34,6 +34,8 @@ import 'screens/student/career_compass_screen.dart' deferred as career;
 import 'screens/subscription/subscription_screen.dart' deferred as subscription;
 import 'screens/notification_center_screen.dart' deferred as notifications;
 import 'tutor_client/chat_screen.dart' deferred as chat;
+import 'tutor_client/screens/lesson_mode_screen.dart' deferred as lesson_mode;
+import 'screens/language_tree_screen.dart' deferred as language_tree;
 import 'screens/activity_history_screen.dart' deferred as activity;
 import 'screens/multiplayer/multiplayer_lobby_screen.dart'
     deferred as multiplayer_lobby;
@@ -638,6 +640,42 @@ final GoRouter router = GoRouter(
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
+          },
+        );
+      },
+    ),
+    GoRoute(
+      path: '/language-tree',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final language = extra['language'] as String? ?? 'French';
+        return FutureBuilder(
+          future: language_tree.loadLibrary(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return language_tree.LanguageTreeScreen(language: language);
+            }
+            return const PremiumSkeletonLoader(message: 'Loading Language Tree...');
+          },
+        );
+      },
+    ),
+    GoRoute(
+      path: '/lesson-mode',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final language = extra['language'] as String? ?? 'French';
+        final topic = extra['topic'] as String? ?? 'Greetings';
+        return FutureBuilder(
+          future: lesson_mode.loadLibrary(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return lesson_mode.LessonModeScreen(
+                language: language,
+                topic: topic,
+              );
+            }
+            return const PremiumSkeletonLoader(message: 'Generating Lesson Quest...');
           },
         );
       },

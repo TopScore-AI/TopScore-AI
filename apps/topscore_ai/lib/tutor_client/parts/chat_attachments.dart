@@ -61,6 +61,9 @@ extension ChatControllerAttachments on ChatController {
           });
         }
       }
+    } on FileSizeLimitException catch (e) {
+      await RecoveryService.clearRecoveryState();
+      _showFileTooLargeSnackBar(e);
     } catch (e) {
       await RecoveryService.clearRecoveryState();
       developer.log('File picker error: $e');
@@ -91,6 +94,9 @@ extension ChatControllerAttachments on ChatController {
       if (results.isNotEmpty) {
         await _processAndUploadMedia(results.first);
       }
+    } on FileSizeLimitException catch (e) {
+      await RecoveryService.clearRecoveryState();
+      _showFileTooLargeSnackBar(e);
     } catch (e) {
       await RecoveryService.clearRecoveryState();
       developer.log('Image picker error: $e');
@@ -340,12 +346,46 @@ extension ChatControllerAttachments on ChatController {
     }
   }
 
+  void _showFileTooLargeSnackBar(FileSizeLimitException e) {
+    final context = scaffoldKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.sd_storage_outlined, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Files too large (${e.humanReadableActual}). Max total is ${e.humanReadableLimit}.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
   Future<void> handlePaste(CustomPasteEvent event) async {
     if (_pendingAttachments.length >= 3) {
       _showLimitReachedSnackBar();
       return;
     }
     if (event.bytes != null) {
+      // Enforce 30 MB size limit on pasted content
+      if (event.bytes!.length > kMaxTotalUploadBytes) {
+        _showFileTooLargeSnackBar(
+            FileSizeLimitException(event.bytes!.length));
+        return;
+      }
+
       final id = generateRandomId();
       final name = 'pasted_image_${DateTime.now().millisecondsSinceEpoch}.png';
 

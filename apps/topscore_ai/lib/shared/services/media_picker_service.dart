@@ -7,6 +7,24 @@ import 'package:flutter/painting.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
+/// Maximum total file size allowed across all attachments (30 MB).
+const int kMaxTotalUploadBytes = 30 * 1024 * 1024;
+
+/// Thrown when the user's selected files exceed [kMaxTotalUploadBytes].
+class FileSizeLimitException implements Exception {
+  final int totalBytes;
+  FileSizeLimitException(this.totalBytes);
+
+  String get humanReadableLimit =>
+      '${(kMaxTotalUploadBytes / (1024 * 1024)).round()} MB';
+  String get humanReadableActual =>
+      '${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+  @override
+  String toString() =>
+      'Selected files total $humanReadableActual, which exceeds the $humanReadableLimit limit.';
+}
+
 /// Result from media picking operations
 class MediaPickResult {
   final Uint8List? bytes;
@@ -58,6 +76,14 @@ class MediaPickerService {
           final res = await _processXFile(file);
           if (res != null) results.add(res);
         }
+
+        // Enforce 30 MB total size limit across all selected images
+        final totalBytes = results.fold<int>(
+            0, (sum, r) => sum + (r.bytes?.length ?? 0));
+        if (totalBytes > kMaxTotalUploadBytes) {
+          throw FileSizeLimitException(totalBytes);
+        }
+
         return results;
       } else {
         final XFile? pickedFile = await _imagePicker.pickImage(
@@ -68,7 +94,13 @@ class MediaPickerService {
 
         if (pickedFile != null) {
           final res = await _processXFile(pickedFile);
-          return res != null ? [res] : [];
+          if (res != null) {
+            final size = res.bytes?.length ?? 0;
+            if (size > kMaxTotalUploadBytes) {
+              throw FileSizeLimitException(size);
+            }
+            return [res];
+          }
         }
       }
     } catch (e) {
@@ -113,6 +145,14 @@ class MediaPickerService {
             mimeType: mimeType,
           ));
         }
+
+        // Enforce 30 MB total size limit across all selected files
+        final totalBytes = results.fold<int>(
+            0, (sum, r) => sum + (r.bytes?.length ?? 0));
+        if (totalBytes > kMaxTotalUploadBytes) {
+          throw FileSizeLimitException(totalBytes);
+        }
+
         return results;
       }
     } catch (e) {

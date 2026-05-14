@@ -31,6 +31,8 @@ import '../services/ai_service.dart';
 import '../services/isar_service.dart';
 import '../services/tts_service.dart';
 import '../tutor_client/widgets/embedded_chat_sheet.dart';
+import '../tutor_client/chat_controller.dart';
+import '../providers/ai_tutor_history_provider.dart';
 import '../widgets/quick_explain_overlay.dart';
 import '../tutor_client/enhanced_websocket_service.dart';
 import '../models/download_model.dart';
@@ -138,6 +140,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
   // Single reading-session WebSocket service for instant explanation streaming
   EnhancedWebSocketService? _quickExplainWsService;
 
+  // Local ChatController for direct Live Voice overlay in PDF Viewer
+  ChatController? _voiceChatController;
+  // Thread ID of the main AI Tutor tab before voice chat overrides it
+  String? _originalVoiceThreadId;
+
+  void _onVoiceControllerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   // (Animations removed to keep toolbar persistent)
 
   @override
@@ -193,6 +206,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     _thumbnailScrollController.dispose();
     _pdfViewerController.dispose();
     TtsService().stop();
+    _voiceChatController?.removeListener(_onVoiceControllerChanged);
+    _voiceChatController?.dispose();
+
+    // Restore the main AI Tutor thread ID on the shared WebSocket
+    if (_originalVoiceThreadId != null) {
+      try {
+        final tutorConn =
+            Provider.of<TutorConnectionProvider>(context, listen: false);
+        tutorConn.wsService?.setThreadId(_originalVoiceThreadId!);
+      } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -1017,18 +1041,25 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       }
     }
 
+    final String docId = widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
+    final String sanitizedDocId = docId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    final String sanitizedUserId = (user?.uid ?? 'anon').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    final String safeDocId = sanitizedDocId.length > 40
+        ? sanitizedDocId.substring(sanitizedDocId.length - 40)
+        : sanitizedDocId;
+    final String threadId = 'pdf_${sanitizedUserId}_$safeDocId';
+
     // Open immediately — no await on URL resolution
     await EmbeddedChatSheet.show(
       context,
       title: sheetTitle,
       initialMessage: initialMessage,
       initialImage: initialImage,
-      fileUrl: initialImage == null ? (_cachedPdfUrl ?? widget.url) : null,
-      fileName: initialImage == null ? widget.title : null,
-      fileType: initialImage == null ? 'application/pdf' : null,
-      fileBytes: initialImage == null && (_cachedPdfUrl ?? widget.url) == null
-          ? _pdfBytes
-          : null,
+      fileUrl: _cachedPdfUrl ?? widget.url,
+      fileName: widget.title,
+      fileType: 'application/pdf',
+      fileBytes: (_cachedPdfUrl ?? widget.url) == null ? _pdfBytes : null,
+      threadId: threadId,
       startVoice: startVoice,
       heightFactor: 0.88,
     );
@@ -1480,26 +1511,137 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
           ),
 
         // Bottom toolbar (now includes AI Hub)
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: _buildBottomBar(theme, isDark),
-        ),
+        if (_voiceChatController == null || !_voiceChatController!.isVoiceMode)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildBottomBar(theme, isDark),
+          ),
+
+        // Live Voice Overlays
+        if (_voiceChatController != null && _voiceChatController!.isVoiceMode) ...[
+          // Top status badge (e.g. LAB LIVE / CO-PILOT LIVE)
+          if (_voiceChatController!.buildVoiceIndicatorBadge(context) != null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 10,
+              left: 20,
+              right: 20,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _voiceChatController!.buildVoiceIndicatorBadge(context)!
+                ],
+              ),
+            ),
+
+          // Floating camera preview
+          if (_voiceChatController!.buildCameraPreview(context) != null)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom +
+                  10 +
+                  ChatControllerLiveVoice.voiceControlBarHeight +
+                  10,
+              left: 20,
+              child: _voiceChatController!.buildCameraPreview(context)!,
+            ),
+
+          // Bottom voice control bar
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 10,
+            left: 12,
+            right: 12,
+            child: _voiceChatController!.buildVoiceControlBar(context, theme),
+          ),
+        ],
       ],
     );
   }
 
-  /// Opens the chat in an embedded overlay and auto-starts Live Voice,
-  /// passing the current PDF as context so the tutor is grounded in the file.
+  /// Starts an isolated Live Voice session directly on this screen
+  /// using a local ChatController, so we do not open the AI Tutor bottom sheet.
   Future<void> _openLiveVoiceWithPdf() async {
     if (!mounted) return;
     HapticFeedback.mediumImpact();
 
-    _openAiTutorBottomSheet(
-      initialMessage: 'Let\'s go through "${widget.title}" together via voice.',
-      startVoice: true,
-    );
+    // Check premium access for AI chat in PDF viewer
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (!FeatureGateService.canUsePdfAiChat(user)) {
+      await PremiumFeatureDialog.show(
+        context,
+        featureName: 'AI Chat in PDF Viewer',
+        icon: Icons.chat_bubble_outline,
+      );
+      return;
+    }
+
+    // Ensure the global AI Tutor WebSocket is active and connected immediately
+    try {
+      final tutorConn =
+          Provider.of<TutorConnectionProvider>(context, listen: false);
+      tutorConn.resume();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+            '[PDF_VIEWER] Failed to resume global WebSocket connection: $e');
+      }
+    }
+
+    if (_voiceChatController == null) {
+      _voiceChatController = ChatController(
+        initialFileUrl: _cachedPdfUrl ?? widget.url,
+        initialFileName: widget.title,
+        initialFileType: 'application/pdf',
+        initialFileBytes:
+            (_cachedPdfUrl ?? widget.url) == null ? _pdfBytes : null,
+        isEmbedded: true,
+      );
+      _voiceChatController!.addListener(_onVoiceControllerChanged);
+
+      final tutorConn =
+          Provider.of<TutorConnectionProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final historyProvider =
+          Provider.of<AiTutorHistoryProvider>(context, listen: false);
+
+      final wsService = tutorConn.wsService;
+      if (wsService != null) {
+        // Save the main AI Tutor thread ID so we can restore it when PDF viewer closes
+        _originalVoiceThreadId ??= wsService.threadId;
+
+        final String docId = widget.storagePath ?? widget.url ?? widget.assetPath ?? widget.title;
+        final String sanitizedDocId = docId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+        final String sanitizedUserId = (user?.uid ?? 'anon').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+        final String safeDocId = sanitizedDocId.length > 40
+            ? sanitizedDocId.substring(sanitizedDocId.length - 40)
+            : sanitizedDocId;
+        final String threadId = 'pdf_${sanitizedUserId}_$safeDocId';
+
+        _voiceChatController!.setOwnThreadId(threadId);
+
+        wsService.userName = authProvider.userModel?.preferredName ??
+            authProvider.userModel?.displayName;
+
+        _voiceChatController!.setHistoryProvider(historyProvider);
+        _voiceChatController!.init(wsService);
+
+        // Silent background context injection grounded in this PDF
+        await _voiceChatController!.handleInitialResources(
+          fileUrl: _cachedPdfUrl ?? widget.url,
+          fileName: widget.title,
+          fileType: 'application/pdf',
+          fileBytes: (_cachedPdfUrl ?? widget.url) == null ? _pdfBytes : null,
+        );
+      }
+    }
+
+    // Start Live Voice mode
+    if (!_voiceChatController!.isVoiceMode) {
+      await _voiceChatController!.preWarmAudio();
+      if (mounted) {
+        _voiceChatController!.startLiveVoiceMode(context);
+      }
+    }
   }
 
   Widget _aiHubButton({

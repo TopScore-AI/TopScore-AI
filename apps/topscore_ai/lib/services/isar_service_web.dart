@@ -55,6 +55,7 @@ class IsarService {
     if (m.isTemporary) return;
     if (!m.isComplete) return;
     if (m.isThinking) return;
+    if (m.status == MessageStatus.error) return;
     if (m.threadId == null || m.threadId!.isEmpty) return;
     mirror.mirrorMessage(m);
   }

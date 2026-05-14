@@ -38,7 +38,8 @@
     <application
         android:label="TopScore AI"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:resizeableActivity="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -77,29 +78,7 @@
                 <data android:scheme="topscore" android:host="app" />
             </intent-filter>
 
-            <!-- HTTPS deep links: topscoreapp.ai -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="topscoreapp.ai" />
-            </intent-filter>
 
-            <!-- HTTPS deep links: app.topscoreapp.ai -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="app.topscoreapp.ai" />
-            </intent-filter>
-
-            <!-- HTTPS deep links: www.topscoreapp.ai -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="www.topscoreapp.ai" />
-            </intent-filter>
             
             <!-- Sharing Intent Filter for Documents and Images -->
             <intent-filter>

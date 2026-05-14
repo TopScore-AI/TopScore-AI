@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
+import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../tutor_client/message_model.dart';
 import '../tutor_client/message_model_native.dart';
@@ -68,6 +68,7 @@ class IsarService {
     if (m.isTemporary) return;
     if (!m.isComplete) return;
     if (m.isThinking) return;
+    if (m.status == MessageStatus.error) return;
     if (m.threadId == null || m.threadId!.isEmpty) return;
     mirror.mirrorMessage(m);
   }

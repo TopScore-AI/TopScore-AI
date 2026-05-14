@@ -213,7 +213,7 @@ const ChatMessageSchema = CollectionSchema(
   getId: _chatMessageGetId,
   getLinks: _chatMessageGetLinks,
   attach: _chatMessageAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _chatMessageEstimateSize(

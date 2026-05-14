@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/feedback_dialog.dart';
@@ -54,7 +55,7 @@ class ChatHistorySidebar extends StatelessWidget {
     }).toList();
 
     return Container(
-      width: 320, // typical sidebar width — Grok-ish
+      width: (MediaQuery.of(context).size.width * 0.35).clamp(280, 360), // typical sidebar width — Grok-ish
       color: isDark ? AppColors.surfaceDark : AppColors.background,
       child: Column(
         children: [
@@ -77,22 +78,38 @@ class ChatHistorySidebar extends StatelessWidget {
           // New Chat button — Grok places this prominently at top
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: FilledButton.icon(
-              onPressed: () => onStartNewChat(closeDrawer: false),
-              icon: const Icon(CupertinoIcons.add, size: 20),
-              label: Text(
-                isSwahili ? "Mazungumzo Mapya" : "New Chat",
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor:
-                    theme.colorScheme.primary.withValues(alpha: 0.12),
-                foregroundColor: theme.colorScheme.primary,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999)),
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => onStartNewChat(closeDrawer: false),
+                    icon: const Icon(CupertinoIcons.add, size: 20),
+                    label: Text(
+                      isSwahili ? "Mazungumzo Mapya" : "New Chat",
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      foregroundColor: theme.colorScheme.primary,
+                      minimumSize: const Size(0, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Home button to navigate back to Dashboard since bottom nav is hidden
+                IconButton.filledTonal(
+                  onPressed: () {
+                    onCloseSidebar();
+                    context.go('/home');
+                  },
+                  icon: const Icon(CupertinoIcons.home),
+                  style: IconButton.styleFrom(
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    minimumSize: const Size(48, 48),
+                  ),
+                ),
+              ],
             ),
           ),
 

@@ -30,6 +30,7 @@ class GeminiLiveEvent {
   final String? text;
   final String? error;
   final String? toolName;
+  final String? id;
   final Map<String, dynamic>? toolArgs;
   final dynamic toolResult;
   final Map<String, dynamic>? raw;
@@ -39,6 +40,7 @@ class GeminiLiveEvent {
     this.text,
     this.error,
     this.toolName,
+    this.id,
     this.toolArgs,
     this.toolResult,
     this.raw,
@@ -62,6 +64,7 @@ class GeminiLiveEvent {
         return GeminiLiveEvent(
           type: GeminiLiveEventType.toolCall,
           toolName: json['name'],
+          id: json['id'],
           toolArgs: json['args'],
           toolResult: json['result'],
         );

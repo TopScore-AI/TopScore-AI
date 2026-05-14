@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:app_links/app_links.dart';
@@ -101,6 +102,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Enable Edge-to-Edge display for Android 15+ (SDK 35)
+  // This makes the status and navigation bars transparent and allows the app to draw behind them.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    statusBarColor: Colors.transparent,
+  ));
 
   // Set the background messaging handler early on, as a named top-level function
   if (!kIsWeb) {
@@ -392,15 +402,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Connect to WebSocket immediately using Device ID (Token-free flow)
       final deviceId = _authProvider.deviceId;
       if (deviceId.isNotEmpty) {
-        _tutorConnectionProvider.preconnect(deviceId);
+        _tutorConnectionProvider.preconnect(deviceId).catchError((e) {
+          if (kDebugMode) debugPrint('[TOPSCORE] preconnect error: $e');
+        });
       }
 
       _authProvider.init().then((_) {
         // Once Firebase resolves, if we have a real user, upgrade the connection
         final userId = _authProvider.userModel?.uid;
         if (userId != null) {
-          _tutorConnectionProvider.updateUserId(userId);
+          _tutorConnectionProvider.updateUserId(userId).catchError((e) {
+            if (kDebugMode) debugPrint('[TOPSCORE] updateUserId error: $e');
+          });
         }
+      }).catchError((e) {
+        if (kDebugMode) debugPrint('[TOPSCORE] auth init error: $e');
       });
       _downloadProvider.init();
       _resourcesProvider.loadRecentlyOpened();
@@ -461,10 +477,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // Re-open Isar (init is idempotent — returns existing instance if open).
         if (!kIsWeb) IsarService().init();
         // Reconnect WebSocket and flush any messages queued while offline.
-        final userId = _authProvider.userModel?.uid;
-        if (userId != null) {
-          _tutorConnectionProvider.updateUserId(userId);
-          _tutorConnectionProvider.reconnect();
+        // Fall back to deviceId for guest/preconnected users who have no uid.
+        final userId = _authProvider.userModel?.uid ?? _authProvider.deviceId;
+        if (userId.isNotEmpty) {
+          _tutorConnectionProvider.updateUserId(userId).catchError((e) {
+            if (kDebugMode) debugPrint('[TOPSCORE] resume updateUserId error: $e');
+          });
         }
         // Check if email verification was completed while app was in background
         _authProvider.checkEmailVerificationOnResume();

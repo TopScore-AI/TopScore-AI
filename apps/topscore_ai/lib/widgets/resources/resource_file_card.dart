@@ -172,14 +172,29 @@ class ResourceFileCard extends StatelessWidget {
   }
 
   Widget _buildIcon() {
-    if (file.thumbnailUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+    if (file.thumbnailUrl != null && file.thumbnailUrl!.isNotEmpty) {
+      return Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Image.network(
           file.thumbnailUrl!,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
+          cacheWidth: 96,
+          cacheHeight: 96,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) {
+              return child;
+            }
+            return _fileTypeIcon();
+          },
           errorBuilder: (_, __, ___) => _fileTypeIcon(),
         ),
       );

@@ -56,7 +56,20 @@
       "Bash(python -c \"from dotenv import load_dotenv; import os; load_dotenv\\(override=True\\); v=os.getenv\\('FIREBASE_CREDENTIALS_JSON'\\); print\\('FIREBASE_CREDENTIALS_JSON loaded:', bool\\(v\\), 'len:', len\\(v\\) if v else 0\\)\")",
       "Bash(awk '/auth_ok|\"connected\"/' C:/Users/Veldrine/Projects/TutorAgent/routers/chat.py)",
       "Bash(awk NR>=1263 && NR<=1280 *)",
-      "Bash(awk NR>=1170 && NR<=1260 *)"
+      "Bash(awk NR>=1170 && NR<=1260 *)",
+      "Bash(python -c \"import pydantic_ai, os; print\\(os.path.dirname\\(pydantic_ai.__file__\\)\\)\")",
+      "Bash(dart analyze *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:stitch.withgoogle.com)",
+      "WebFetch(domain:www.dsebastien.net)",
+      "WebFetch(domain:designmd.app)",
+      "Bash(python -c \"from managers import prompts; print\\('OK, prompts.py imports cleanly'\\)\")",
+      "Bash(wait bdl3d2sk8 *)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "gemini-api-docs-mcp"
+  ]
 }

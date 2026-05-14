@@ -292,11 +292,14 @@ class AiTutorHistoryProvider with ChangeNotifier {
         headers: headers,
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         _threads.removeWhere((t) => t['thread_id'] == threadId);
         await _isarService.clearHistory(threadId); // Clear Local Isar
         notifyListeners();
         return true;
+      }
+      if (kDebugMode) {
+        debugPrint('Delete thread failed (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error deleting thread: $e');
@@ -312,13 +315,16 @@ class AiTutorHistoryProvider with ChangeNotifier {
         headers: headers,
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         for (var t in _threads) {
           await _isarService.clearHistory(t['thread_id']);
         }
         _threads.clear();
         notifyListeners();
         return true;
+      }
+      if (kDebugMode) {
+        debugPrint('Delete all threads failed (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error deleting all threads: $e');

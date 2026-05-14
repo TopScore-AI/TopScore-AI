@@ -59,7 +59,7 @@ const PdfAnnotationRecordSchema = CollectionSchema(
   getId: _pdfAnnotationRecordGetId,
   getLinks: _pdfAnnotationRecordGetLinks,
   attach: _pdfAnnotationRecordAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _pdfAnnotationRecordEstimateSize(

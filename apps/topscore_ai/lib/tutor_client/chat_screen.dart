@@ -1,9 +1,10 @@
 // Removed dart:io import to ensure Web compatibility
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'package:flutter/cupertino.dart' hide ConnectionState;
+import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../constants/colors.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -60,13 +61,18 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final controller = Provider.of<ChatController>(context, listen: false);
       final historyProvider =
           Provider.of<AiTutorHistoryProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final tutorConn =
           Provider.of<TutorConnectionProvider>(context, listen: false);
+
+      // Ensure the shared WebSocket is active when the AI Tutor screen mounts.
+      // This recovers from paused, idle-disconnected, or max-reconnect-failed
+      // states that may have occurred while the user was on another screen.
+      tutorConn.resume();
 
       controller.setHistoryProvider(historyProvider);
 
@@ -127,7 +133,7 @@ class _ChatScreenState extends State<ChatScreen> {
           widget.initialInputText != null ||
           widget.initialFileUrl != null ||
           widget.initialFileBytes != null) {
-        controller.handleInitialResources(
+        await controller.handleInitialResources(
           image: widget.initialImage,
           text: widget.initialInputText ?? widget.initialMessage,
           fileUrl: widget.initialFileUrl,
@@ -139,18 +145,16 @@ class _ChatScreenState extends State<ChatScreen> {
         // AUTO-SEND: If an initial message is provided (e.g. from Summarize/Flashcards)
         // and it's not a voice-mode request, send it immediately for instant feedback.
         if (widget.initialMessage != null && !widget.startVoice) {
-          // Use a small delay to ensure the UI has registered the handleInitialResources notify()
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              controller.sendUserMessage(context);
-            }
-          });
+          if (mounted) {
+            controller.sendUserMessage(context);
+          }
         }
       }
 
       // THE LIFELINE: Check for recovered images from Background Kill routed from main.dart
       if (RecoveryService.recoveredFile != null) {
-        controller.handleInitialResources(image: RecoveryService.recoveredFile);
+        await controller.handleInitialResources(
+            image: RecoveryService.recoveredFile);
         RecoveryService.recoveredFile = null; // consume it
       }
 
@@ -235,33 +239,45 @@ class _ChatScreenState extends State<ChatScreen> {
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      centerTitle: true,
-      leading: context.canPop()
-          ? BackButton(color: theme.colorScheme.primary)
-          : IconButton(
-              icon: Icon(CupertinoIcons.line_horizontal_3,
-                  color: theme.colorScheme.primary),
-              onPressed: () => controller.toggleSidebar(),
-            ),
-
+      toolbarHeight: 30,
+      leading: IconButton(
+        icon: const Icon(
+          CupertinoIcons.line_horizontal_3,
+          size: 30,
+        ),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        onPressed: () => controller.toggleSidebar(),
+      ),
+      leadingWidth: 30,
       title: Text(
-        controller.stripMarkdown(controller.currentTitle),
+        controller.currentTitle,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: theme.colorScheme.onSurface,
+          letterSpacing: 0.3,
+        ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.poppins(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: theme.colorScheme.primary,
-        ),
       ),
+      centerTitle: true,
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.only(right: 12),
           child: IconButton(
-            icon: Icon(CupertinoIcons.square_pencil,
-                color: theme.colorScheme.primary),
-            onPressed: () => controller.startNewChat(closeDrawer: false),
+            icon: const Icon(
+              CupertinoIcons.plus_bubble,
+              size: 30,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            color: theme.colorScheme.primary,
             tooltip: 'New Chat',
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              controller.startNewChat(closeDrawer: false);
+            },
           ),
         ),
       ],
@@ -416,310 +432,349 @@ class _ChatScreenView extends StatelessWidget {
 
     final content = RepaintBoundary(
       key: controller.appRepaintBoundaryKey,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 850),
-        child: Column(
-          children: [
-            _buildConnectionBanner(context, controller, theme, isDark),
-            Expanded(
-              child: Stack(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: Stack(
+            children: [
+            // 1. Connection banner & Messages Stack (occupies full height of the stack!)
+            Positioned.fill(
+              child: Column(
                 children: [
-                  if (controller.isLoadingMessages)
-                    _buildLoadingSkeleton(isDark)
-                  else if (controller.messages.isEmpty)
-                    EmptyStateWidget(
-                      isDark: isDark,
-                      theme: theme,
-                      userName: authProvider.userModel?.displayName,
-                      suggestions: controller.dynamicSuggestions,
-                      onSuggestionTap: (prompt) =>
-                          controller.sendUserMessage(context, text: prompt),
-                    )
-                  else
-                    RefreshIndicator(
-                      onRefresh: () => controller.refreshChat(),
-                      color: theme.primaryColor,
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context)
-                            .copyWith(scrollbars: false),
-                        child: ListView.builder(
-                          controller: controller.scrollController,
-                          physics: const BouncingScrollPhysics(
-                              parent: AlwaysScrollableScrollPhysics()),
-                          padding: EdgeInsets.only(
-                            left: 20,
-                            right: 20,
-                            top: MediaQuery.of(context).padding.top +
-                                kToolbarHeight +
-                                16,
-                            bottom: controller.isVoiceMode ? 160 : 20,
-                          ),
-                          itemCount: controller.messages.length +
-                              (controller.isTyping &&
-                                      controller.currentStreamingMessageId ==
-                                          null
-                                  ? 1
-                                  : 0),
-                          itemBuilder: (context, index) {
-                            if (index == controller.messages.length) {
-                              return ChatMessageBubble(
-                                key: const ValueKey('thinking'),
-                                message: ChatMessage(
-                                  id: 'thinking',
-                                  text: '',
-                                  isUser: false,
-                                  isComplete: false,
-                                  isTemporary: true,
-                                  timestamp: DateTime.now(),
-                                  threadId:
-                                      controller.wsServiceOrNull?.threadId ??
-                                          '',
+                  _buildConnectionBanner(context, controller, theme, isDark),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        if (controller.isLoadingMessages)
+                          _buildLoadingSkeleton(isDark)
+                        else if (controller.messages.isEmpty)
+                          EmptyStateWidget(
+                            isDark: isDark,
+                            theme: theme,
+                            userName: authProvider.userModel?.preferredName ??
+                                authProvider.userModel?.displayName,
+                            suggestions: controller.dynamicSuggestions,
+                            onSuggestionTap: (prompt) => controller
+                                .sendUserMessage(context, text: prompt),
+                          )
+                        else
+                          RefreshIndicator(
+                            onRefresh: () => controller.refreshChat(),
+                            color: theme.primaryColor,
+                            child: ScrollConfiguration(
+                              behavior: ScrollConfiguration.of(context)
+                                  .copyWith(scrollbars: false),
+                              child: ListView.builder(
+                                controller: controller.scrollController,
+                                physics: const BouncingScrollPhysics(
+                                    parent: AlwaysScrollableScrollPhysics()),
+                                padding: EdgeInsets.only(
+                                  left: 0,
+                                  right: 0,
+                                  top: MediaQuery.of(context).padding.top +
+                                      12, // Saved top real estate!
+                                  bottom: controller.isVoiceMode
+                                      ? 160
+                                      : 100, // Messages scroll smoothly under the ChatInputArea
                                 ),
-                                isStreaming: true,
-                                status:
-                                    controller.currentAiStatus ?? 'Thinking...',
-                                onPlayVoice: () {},
-                                onPauseVoice: () {},
-                                onResumeVoice: () {},
-                                onSpeak: (_) {},
-                                onStopTts: () {},
-                                onPauseTts: () {},
-                                onResumeTts: () {},
-                                onCopy: () {},
-                                onToggleBookmark: () {},
-                                onShare: () {},
-                                onRegenerate: () {},
-                                onFeedback: (_) {},
-                                onEdit: () {},
-                                onDownloadImageUrl: (_) {},
-                                onReply: (_) {},
-                                onLongPress: () {},
-                                user: authProvider.userModel,
-                              );
-                            }
+                                itemCount: controller.messages.length +
+                                    (controller.isTyping &&
+                                            controller
+                                                    .currentStreamingMessageId ==
+                                                null
+                                        ? 1
+                                        : 0),
+                                itemBuilder: (context, index) {
+                                  if (index == controller.messages.length) {
+                                    return ChatMessageBubble(
+                                      key: const ValueKey('thinking'),
+                                      message: ChatMessage(
+                                        id: 'thinking',
+                                        text: '',
+                                        isUser: false,
+                                        isComplete: false,
+                                        isTemporary: true,
+                                        timestamp: DateTime.now(),
+                                        threadId: controller
+                                                .wsServiceOrNull?.threadId ??
+                                            '',
+                                      ),
+                                      isStreaming: true,
+                                      status: controller.currentAiStatus ??
+                                          'Thinking...',
+                                      onPlayVoice: () {},
+                                      onPauseVoice: () {},
+                                      onResumeVoice: () {},
+                                      onSpeak: (_) {},
+                                      onStopTts: () {},
+                                      onPauseTts: () {},
+                                      onResumeTts: () {},
+                                      onCopy: () {},
+                                      onToggleBookmark: () {},
+                                      onShare: () {},
+                                      onRegenerate: () {},
+                                      onFeedback: (_) {},
+                                      onEdit: () {},
+                                      onDownloadImageUrl: (_) {},
+                                      onReply: (_) {},
+                                      onLongPress: () {},
+                                      user: authProvider.userModel,
+                                    );
+                                  }
 
-                            final message = controller.messages[index];
-                            final isStreaming =
-                                controller.currentStreamingMessageId ==
-                                    message.id;
+                                  final message = controller.messages[index];
+                                  final isStreaming =
+                                      controller.currentStreamingMessageId ==
+                                          message.id;
+                                  final lastUserIndex = controller.messages
+                                      .lastIndexWhere((m) => m.isUser);
+                                  final isEditable =
+                                      message.isUser && index == lastUserIndex;
 
-                            return ChatMessageBubble(
-                              key: ValueKey(message.id),
-                              message: message,
-                              isStreaming: isStreaming,
-                              status: isStreaming
-                                  ? controller.currentAiStatus
-                                  : null,
-                              playingAudioMessageId:
-                                  controller.playingAudioMessageId,
-                              isPlayingAudio: controller.isPlayingAudio,
-                              audioDuration: controller.audioDuration,
-                              audioPosition: controller.audioPosition,
-                              speakingMessageId: controller.speakingMessageId,
-                              isTtsSpeaking: controller.isTtsSpeaking,
-                              isTtsPaused: controller.isTtsPaused,
-                              onPlayVoice: () {
-                                if (message.audioUrl != null) {
-                                  controller.playVoiceMessage(
-                                      message.id, message.audioUrl!);
-                                }
-                              },
-                              onPauseVoice: () =>
-                                  controller.pauseVoiceMessage(),
-                              onResumeVoice: () =>
-                                  controller.resumeVoiceMessage(),
-                              onSpeak: (text) =>
-                                  controller.speak(text, messageId: message.id),
-                              onStopTts: () => controller.stopTts(),
-                              onPauseTts: () => controller.pauseTts(),
-                              onResumeTts: () => controller.resumeTts(),
-                              onCopy: () => controller.copyToClipboard(
-                                  context, message.text),
-                              onToggleBookmark: () =>
-                                  controller.toggleBookmark(message),
-                              onShare: () =>
-                                  controller.shareMessage(message.text),
-                              onRegenerate: () => controller.regenerateResponse(
-                                  context, message),
-                              onFeedback: (feedback) =>
-                                  controller.provideFeedback(message, feedback),
-                              onEdit: () =>
-                                  controller.handleUserEdit(context, message),
-                              onDownloadImageUrl: (url) =>
-                                  controller.downloadImage(context, url),
-                              onReply: (m) => controller.replyTo = m,
-                              onLongPress: () => controller.copyToClipboard(
-                                  context, message.text),
-                              onRetrySend: () => controller.retryFailedMessage(
-                                  context, message),
-                              user: authProvider.userModel,
-                            );
-                          },
+                                  return ChatMessageBubble(
+                                    key: ValueKey(message.id),
+                                    message: message,
+                                    isStreaming: isStreaming,
+                                    isEditable: isEditable,
+                                    status: isStreaming
+                                        ? controller.currentAiStatus
+                                        : null,
+                                    playingAudioMessageId:
+                                        controller.playingAudioMessageId,
+                                    isPlayingAudio: controller.isPlayingAudio,
+                                    audioDuration: controller.audioDuration,
+                                    audioPosition: controller.audioPosition,
+                                    speakingMessageId:
+                                        controller.speakingMessageId,
+                                    isTtsSpeaking: controller.isTtsSpeaking,
+                                    isTtsPaused: controller.isTtsPaused,
+                                    onPlayVoice: () {
+                                      if (message.audioUrl != null) {
+                                        controller.playVoiceMessage(
+                                            message.id, message.audioUrl!);
+                                      }
+                                    },
+                                    onPauseVoice: () =>
+                                        controller.pauseVoiceMessage(),
+                                    onResumeVoice: () =>
+                                        controller.resumeVoiceMessage(),
+                                    onSpeak: (text) => controller.speak(text,
+                                        messageId: message.id),
+                                    onStopTts: () => controller.stopTts(),
+                                    onPauseTts: () => controller.pauseTts(),
+                                    onResumeTts: () => controller.resumeTts(),
+                                    onCopy: () => controller.copyToClipboard(
+                                        context, message.text),
+                                    onToggleBookmark: () =>
+                                        controller.toggleBookmark(message),
+                                    onShare: () =>
+                                        controller.shareMessage(message.text),
+                                    onRegenerate: () => controller
+                                        .regenerateResponse(context, message),
+                                    onFeedback: (feedback) => controller
+                                        .provideFeedback(message, feedback),
+                                    onEdit: () => controller.handleUserEdit(
+                                        context, message),
+                                    onDownloadImageUrl: (url) =>
+                                        controller.downloadImage(context, url),
+                                    onReply: (m) => controller.replyTo = m,
+                                    onLongPress: () => controller
+                                        .copyToClipboard(context, message.text),
+                                    onRetrySend: () => controller
+                                        .retryFailedMessage(context, message),
+                                    user: authProvider.userModel,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        if (controller.showScrollDownButton)
+                          Positioned(
+                            bottom: 16,
+                            right: 20,
+                            child: FloatingActionButton.small(
+                              backgroundColor: theme.primaryColor,
+                              onPressed: () => controller.scrollToBottom(),
+                              elevation: 4,
+                              child: const Icon(Icons.arrow_downward,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        if (controller.isVoiceMode) ...[
+                          // Top indicator badge (LAB LIVE / CO-PILOT LIVE)
+                          if (controller.buildVoiceIndicatorBadge(context) !=
+                              null)
+                            Positioned(
+                              top: MediaQuery.of(context).padding.top + 10,
+                              left: 20,
+                              right: 20,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  controller.buildVoiceIndicatorBadge(context)!
+                                ],
+                              ),
+                            ),
+                          // Floating camera preview
+                          if (controller.buildCameraPreview(context) != null)
+                            Positioned(
+                              bottom: MediaQuery.of(context).padding.bottom +
+                                  10 +
+                                  ChatControllerLiveVoice
+                                      .voiceControlBarHeight +
+                                  10,
+                              left: 20,
+                              child: controller.buildCameraPreview(context)!,
+                            ),
+                          // Bottom voice control bar
+                          Positioned(
+                            bottom: MediaQuery.of(context).padding.bottom + 10,
+                            left: 12,
+                            right: 12,
+                            child:
+                                controller.buildVoiceControlBar(context, theme),
+                          ),
+                          // Live Visual Peek Overlay (NEW)
+                          if (controller.isVoiceMode &&
+                              controller.lastVisualMessage != null)
+                            Positioned(
+                              top: MediaQuery.of(context).padding.top + 70,
+                              right: 20,
+                              child: _LiveVisualPeek(
+                                message: controller.lastVisualMessage!,
+                                onDismiss: () =>
+                                    controller.clearVisualMessage(),
+                                onView: () {
+                                  controller.scrollToBottom();
+                                },
+                              ),
+                            ),
+                        ],
+                        ...controller.xpAwards.map((award) => Positioned(
+                              top: 100,
+                              left: 20,
+                              right: 20,
+                              child: _XpAwardCelebration(
+                                amount: award['amount'] as int,
+                                reason: award['reason'] as String,
+                              ),
+                            )),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 2. Top Fading Blur Gradient Overlay (Nearly invisible top border, text dissolves on scroll)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: MediaQuery.of(context).padding.top + 40,
+              child: IgnorePointer(
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            theme.scaffoldBackgroundColor,
+                            theme.scaffoldBackgroundColor
+                                .withValues(alpha: 0.9),
+                            theme.scaffoldBackgroundColor
+                                .withValues(alpha: 0.0),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
                       ),
                     ),
+                  ),
+                ),
+              ),
+            ),
 
-                  // Top Gradient Overlay (Invisible Border)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: MediaQuery.of(context).padding.top +
-                        kToolbarHeight +
-                        16,
-                    child: IgnorePointer(
+            // 3. Bottom Fading Blur Gradient Overlay (Nearly invisible bottom border, text dissolves on scroll)
+            if (!controller.isVoiceMode)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 120, // Extends slightly above ChatInputArea
+                child: IgnorePointer(
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
                             colors: [
                               theme.scaffoldBackgroundColor,
-                              theme.scaffoldBackgroundColor.withValues(alpha: 0.9),
-                              theme.scaffoldBackgroundColor.withValues(alpha: 0.0),
+                              theme.scaffoldBackgroundColor
+                                  .withValues(alpha: 0.95),
+                              theme.scaffoldBackgroundColor
+                                  .withValues(alpha: 0.0),
                             ],
-                            stops: const [0.0, 0.7, 1.0],
+                            stops: const [0.0, 0.4, 1.0],
                           ),
                         ),
                       ),
                     ),
                   ),
-
-                  if (controller.showScrollDownButton)
-                    Positioned(
-                      bottom: 16,
-                      right: 20,
-                      child: FloatingActionButton.small(
-                        backgroundColor: theme.primaryColor,
-                        onPressed: () => controller.scrollToBottom(),
-                        elevation: 4,
-                        child: const Icon(Icons.arrow_downward,
-                            color: Colors.white),
-                      ),
-                    ),
-
-                  if (controller.isVoiceMode) ...[
-                    // Top indicator badge (LAB LIVE / CO-PILOT LIVE)
-                    if (controller.buildVoiceIndicatorBadge(context) != null)
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 10,
-                        left: 20,
-                        right: 20,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            controller.buildVoiceIndicatorBadge(context)!
-                          ],
-                        ),
-                      ),
-                    // Floating camera preview
-                    if (controller.buildCameraPreview(context) != null)
-                      Positioned(
-                        bottom: MediaQuery.of(context).padding.bottom +
-                            10 +
-                            ChatControllerLiveVoice.voiceControlBarHeight +
-                            10,
-                        left: 20,
-                        child: controller.buildCameraPreview(context)!,
-                      ),
-                    // Bottom voice control bar
-                    Positioned(
-                      bottom: MediaQuery.of(context).padding.bottom + 10,
-                      left: 12,
-                      right: 12,
-                      child: controller.buildVoiceControlBar(context, theme),
-                    ),
-                    // Live Visual Peek Overlay (NEW)
-                    if (controller.isVoiceMode &&
-                        controller.lastVisualMessage != null)
-                      Positioned(
-                        top: MediaQuery.of(context).padding.top + 70,
-                        right: 20,
-                        child: _LiveVisualPeek(
-                          message: controller.lastVisualMessage!,
-                          onDismiss: () => controller.clearVisualMessage(),
-                          onView: () {
-                            controller.scrollToBottom();
-                          },
-                        ),
-                      ),
-                  ],
-
-                  ...controller.xpAwards.map((award) => Positioned(
-                        top: 100,
-                        left: 20,
-                        right: 20,
-                        child: _XpAwardCelebration(
-                          amount: award['amount'] as int,
-                          reason: award['reason'] as String,
-                        ),
-                      )),
-                ],
-              ),
-            ),
-            if (!controller.isVoiceMode)
-              Container(
-                decoration: const BoxDecoration(
-                  color: Colors.transparent,
                 ),
-                child: Column(
-                  children: [
-                    ChatInputArea(
-                      textController: controller.textController,
-                      messageFocusNode: controller.messageFocusNode,
-                      attachButtonKey: controller.attachButtonKey,
-                      pendingAttachments: controller.pendingAttachments,
-                      onRemoveAttachment: (id) =>
-                          controller.removeAttachment(id),
-                      isUploading: controller.isUploading,
-                      isTyping: controller.isTyping,
-                      isGenerating: controller.isTyping ||
-                          controller.currentStreamingMessageId != null,
-                      isRecording: controller.isRecording,
-                      isLocked: !authProvider.canSendMessage,
-                      isOffline: controller.isOffline,
-                      isConnecting: controller.isConnecting,
-                      suggestions: controller.dynamicSuggestions,
-                      placeholderMessages: controller.placeholderMessages,
-                      onSendMessage: () =>
-                          controller.sendUserMessage(context),
-                      onSendMessageWithText: ({String? text}) =>
-                          controller.sendUserMessage(context, text: text),
-                      onShowAttachmentMenu: () =>
-                          controller.showAttachmentMenu(context, theme, isDark),
-                      onPaste: () => controller.handleGenericPaste(),
-                      onStopGeneration: () => controller.stopGeneration(),
-                      onStopListeningAndSend: () =>
-                          controller.stopDictationAndSend(context),
-                      onStartLiveVoiceMode: () =>
-                          controller.startLiveVoiceMode(context),
-                      onStartFeynmanMode: () =>
-                          controller.startLiveVoiceMode(context, feynmanMode: true),
-                      onClearPendingAttachment: () =>
-                          controller.clearPendingAttachment(),
-                      onShuffleQuestions: () {},
-                      onDictation: () => controller.startDictation(context),
-                      replyingToMessage: controller.replyTo,
-                      onCancelReply: () => controller.cancelReply(),
-                      amplitudeStream: controller.aiAmplitudeStream,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12, top: 4),
-                      child: Text(
-                        'TopScore AI can make mistakes, please verify important information.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
+              ),
+
+            // 4. Floating ChatInputArea (Positions beautifully at the bottom, overlays stack!)
+            if (!controller.isVoiceMode)
+              Positioned(
+                bottom: MediaQuery.of(context).padding.bottom,
+                left: 0,
+                right: 0,
+                child: ChatInputArea(
+                  textController: controller.textController,
+                  messageFocusNode: controller.messageFocusNode,
+                  attachButtonKey: controller.attachButtonKey,
+                  pendingAttachments: controller.pendingAttachments,
+                  onRemoveAttachment: (id) => controller.removeAttachment(id),
+                  isUploading: controller.isUploading,
+                  isTyping: controller.isTyping,
+                  isGenerating: controller.isTyping ||
+                      controller.currentStreamingMessageId != null,
+                  isRecording: controller.isRecording,
+                  isLocked: !authProvider.canSendMessage,
+                  isOffline: controller.isOffline,
+                  isConnecting: controller.isConnecting,
+                  placeholderMessages: controller.placeholderMessages,
+                  onSendMessage: () => controller.sendUserMessage(context),
+                  onSendMessageWithText: ({String? text}) =>
+                      controller.sendUserMessage(context, text: text),
+                  onShowAttachmentMenu: () =>
+                      controller.showAttachmentMenu(context, theme, isDark),
+                  onPaste: () => controller.handleGenericPaste(),
+                  onStopGeneration: () => controller.stopGeneration(),
+                  onStopListeningAndSend: () =>
+                      controller.stopDictationAndSend(context),
+                  onStartLiveVoiceMode: () =>
+                      controller.startLiveVoiceMode(context),
+                  onStartFeynmanMode: () =>
+                      controller.startLiveVoiceMode(context, feynmanMode: true),
+                  onClearPendingAttachment: () =>
+                      controller.clearPendingAttachment(),
+                  onShuffleQuestions: () {},
+                  onDictation: () => controller.startDictation(context),
+                  replyingToMessage: controller.replyTo,
+                  onCancelReply: () => controller.cancelReply(),
+                  amplitudeStream: controller.aiAmplitudeStream,
                 ),
               ),
           ],
         ),
+      ),
       ),
     );
 

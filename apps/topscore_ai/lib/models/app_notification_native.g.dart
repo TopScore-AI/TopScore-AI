@@ -86,7 +86,7 @@ const AppNotificationSchema = CollectionSchema(
   getId: _appNotificationGetId,
   getLinks: _appNotificationGetLinks,
   attach: _appNotificationAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _appNotificationEstimateSize(

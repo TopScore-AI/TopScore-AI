@@ -87,7 +87,7 @@ const SavedStudyMaterialSchema = CollectionSchema(
   getId: _savedStudyMaterialGetId,
   getLinks: _savedStudyMaterialGetLinks,
   attach: _savedStudyMaterialAttach,
-  version: '3.1.0+1',
+  version: '3.3.2',
 );
 
 int _savedStudyMaterialEstimateSize(
