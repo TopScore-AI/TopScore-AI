@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../main.dart' show studyDb;
 import '../models/app_notification_native.dart';
 import '../router.dart' as app_router;
@@ -50,15 +51,19 @@ class NotificationService {
       // Create Android notification channel
       final androidPlugin = _local.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin
-          ?.createNotificationChannel(const AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: _channelDesc,
-        importance: Importance.max,
-        playSound: true,
-        enableVibration: true,
-      ));
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: _channelDesc,
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+          showBadge: true,
+          enableLights: true,
+          ledColor: Color(0xFF6366F1),
+        ),
+      );
 
       // Request permissions (Android 13+ and iOS)
       await requestPermissions();
@@ -131,6 +136,8 @@ class NotificationService {
           priority: Priority.high,
           icon: 'ic_launcher',
           largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(body),
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -230,6 +237,7 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           icon: 'ic_launcher',
+          category: AndroidNotificationCategory.reminder,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -309,6 +317,7 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           icon: 'ic_launcher',
+          category: AndroidNotificationCategory.reminder,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,

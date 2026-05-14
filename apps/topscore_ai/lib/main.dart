@@ -265,8 +265,16 @@ Future<void> setupInteractedMessage() async {
     }
 
     // Data-only messages (primary path with new backend)
-    if (message.data.containsKey('title') && message.data.containsKey('body')) {
+    if (message.data.containsKey('title') || message.data.containsKey('body')) {
+      String title = message.data['title'] ?? "TopScore AI Update";
       String body = message.data['body'] ?? "";
+
+      if (body.isEmpty && message.notification != null) {
+        body = message.notification!.body ?? "";
+      }
+      if (title == "TopScore AI Update" && message.notification != null) {
+        title = message.notification!.title ?? title;
+      }
 
       // Personalize with user's first name
       try {
@@ -280,7 +288,7 @@ Future<void> setupInteractedMessage() async {
       final route = (message.data['route'] as String?)?.trim();
       await NotificationService().showNotification(
         id: messageId?.hashCode ?? message.data.hashCode,
-        title: message.data['title'] ?? "TopScore AI Update",
+        title: title,
         body: body,
         payload: (route != null && route.startsWith('/')) ? route : null,
         type: (message.data['nudge_type'] as String?) ?? 'system',

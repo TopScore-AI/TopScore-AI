@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
+import '../services/permission_service.dart';
+import '../widgets/permission_dialog.dart';
 import '../../widgets/session_history_carousel.dart';
 import '../../widgets/bounce_wrapper.dart';
 import '../../constants/colors.dart';
@@ -19,6 +22,36 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkNotificationPermission();
+    });
+  }
+
+  Future<void> _checkNotificationPermission() async {
+    final permissionService = PermissionService();
+    final hasPermission = await permissionService.hasNotificationPermission();
+
+    if (!hasPermission && mounted) {
+      // Show custom dialog explaining why we need notifications
+      final granted = await PermissionDialog.show(
+        context,
+        permission: Permission.notification,
+        title: 'Stay on Track!',
+        customMessage:
+            'TopScore AI works best when it can send you study reminders and important updates. Allow notifications to stay ahead!',
+      );
+
+      if (granted == true) {
+        // If they allowed in our dialog, the actual OS prompt was triggered.
+        // We can optionally refresh the UI or sync FCM token here.
+        AuthProvider.instance.forceSyncFCMToken();
+      }
+    }
+  }
+
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
