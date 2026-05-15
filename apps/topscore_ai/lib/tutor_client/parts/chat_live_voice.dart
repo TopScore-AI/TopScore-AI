@@ -249,6 +249,7 @@ extension ChatControllerLiveVoice on ChatController {
 
       developer.log('🎙️ [STEP 4] Connected successfully',
           name: 'ChatController');
+      HapticFeedback.mediumImpact();
       _currentAiStatus = 'Listening...';
       notify();
 
@@ -269,8 +270,8 @@ extension ChatControllerLiveVoice on ChatController {
       _liveAudioSubscription =
           (await _audioInput.startRecordingStream())?.listen(
         (data) {
-          final isAiSpeaking = _currentAiStatus == 'Speaking...' || _audioOutput.isPlaying;
-          if (!_isMicMuted && _isVoiceMode && !isAiSpeaking) {
+
+          if (!_isMicMuted && _isVoiceMode) {
             _geminiLiveService.sendAudio(data);
           }
         },
@@ -288,7 +289,24 @@ extension ChatControllerLiveVoice on ChatController {
             _audioOutput.addDataToAudioStream(data);
             _resetSilenceTimer(); // AI is speaking → reset silence
 
+            // Visualizer: Calculate RMS amplitude of PCM16 data
+            try {
+              if (data.length >= 2) {
+                final int16List = data.buffer.asInt16List(data.offsetInBytes, data.length ~/ 2);
+                double sumSq = 0;
+                for (var val in int16List) {
+                  sumSq += val * val;
+                }
+                final rms = sqrt(sumSq / int16List.length);
+                final normalized = (rms / 32768.0).clamp(0.0, 1.0);
+                _aiAmplitudeController.add(wf.Amplitude(current: normalized, max: 1.0));
+              }
+            } catch (e) {
+              developer.log('Error calculating AI amplitude: $e');
+            }
+
             if (_currentAiStatus != 'Speaking...') {
+              HapticFeedback.lightImpact();
               _currentAiStatus = 'Speaking...';
               notify();
             }
@@ -758,6 +776,43 @@ extension ChatControllerLiveVoice on ChatController {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Suggested Turn Starters
+          if (_voiceSuggestions.isNotEmpty && !_isShowingInactivityWarning && !_isLoading)
+            Container(
+              height: 44,
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _voiceSuggestions.length,
+                itemBuilder: (context, i) {
+                  final s = _voiceSuggestions[i];
+                  final label = s['label'] ?? '';
+                  final prompt = s['prompt'] ?? label;
+                  if (label.isEmpty) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      label: Text(label, style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: theme.primaryColor,
+                      )),
+                      backgroundColor: theme.primaryColor.withValues(alpha: 0.08),
+                      side: BorderSide(color: theme.primaryColor.withValues(alpha: 0.2)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _geminiLiveService.sendText(prompt);
+                        _voiceSuggestions = []; // Clear after use
+                        notify();
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
           // Inactivity Warning
           if (_isShowingInactivityWarning)
             Container(
@@ -915,7 +970,7 @@ extension ChatControllerLiveVoice on ChatController {
                                 height: height,
                                 decoration: BoxDecoration(
                                   color:
-                                      Colors.blueAccent.withValues(alpha: 0.8),
+                                      theme.primaryColor.withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               );
