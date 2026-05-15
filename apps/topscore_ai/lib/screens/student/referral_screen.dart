@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/referral_service.dart';
+import '../../services/analytics_service.dart';
 import '../../config/app_theme.dart';
 
 class ReferralScreen extends StatefulWidget {
@@ -38,6 +39,8 @@ class _ReferralScreenState extends State<ReferralScreen> {
     final success = await _referralService.redeemCode(code);
     setState(() => _isRedeeming = false);
 
+    AnalyticsService.instance.logReferralRedeemed(code, success);
+
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -60,8 +63,10 @@ class _ReferralScreenState extends State<ReferralScreen> {
 
   void _shareReferral(String? code) {
     if (code == null || code.isEmpty) return;
-    final text = "Join me on TopScore AI! Use my code $code to unlock a 3-day Premium trial and 500 bonus XP. Download here: https://topscoreapp.ai/download";
+    final text =
+        "Join me on TopScore AI! Use my code $code to unlock a 3-day Premium trial and 500 bonus XP. Download here: https://topscoreapp.ai/download";
     SharePlus.instance.share(ShareParams(text: text));
+    AnalyticsService.instance.logReferralShared(code);
   }
 
   void _copyCode(String? code) {

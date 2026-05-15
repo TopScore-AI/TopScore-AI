@@ -145,7 +145,24 @@ class AnalyticsService {
     );
   }
 
+  // ── Referral Events ───────────────────────────────────────────────────────
 
+  Future<void> logReferralShared(String? code) async {
+    await _analytics.logEvent(
+      name: 'referral_shared',
+      parameters: {'referral_code': code ?? 'unknown'},
+    );
+  }
+
+  Future<void> logReferralRedeemed(String code, bool success) async {
+    await _analytics.logEvent(
+      name: 'referral_redeemed',
+      parameters: {
+        'referral_code': code,
+        'success': success ? 1 : 0,
+      },
+    );
+  }
 
   // ── Generic Event ─────────────────────────────────────────────────────────
 
