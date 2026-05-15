@@ -11,21 +11,10 @@ class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   Future<void> initialize({bool isBackground = false}) async {
-    // Web-specific initialization
-    if (kIsWeb) {
-      try {
-        // In package:web, requestPermission() might return a JSPromise or similar.
-        // We use toDart to convert it to a Future if it's a promise, or check the return type.
-        web_pkg.Notification.requestPermission();
-        if (kDebugMode) {
-          debugPrint('[NotificationService] Web permission requested');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint(
-              '[NotificationService] Failed to request web permission: $e');
-        }
-      }
+    // We only request permissions upon explicit user interaction to respect
+    // modern browser policies (especially Safari on MacOS/iOS).
+    if (kDebugMode) {
+      debugPrint('[NotificationService] Web initialized');
     }
   }
 
