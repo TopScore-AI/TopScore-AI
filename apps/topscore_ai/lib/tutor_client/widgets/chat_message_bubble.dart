@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -169,9 +168,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       alignment: Alignment.centerRight,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: (MediaQuery.of(context).size.width * 0.78).clamp(0, 650),
+          maxWidth: (MediaQuery.of(context).size.width * 0.85).clamp(0, 700),
         ),
-        margin: const EdgeInsets.only(top: 6, bottom: 6, left: 12, right: 12),
+        margin: const EdgeInsets.only(top: 8, bottom: 8, left: 24, right: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -183,35 +182,12 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                     widget.message.text == '🎤 Audio Message'))
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark
-                        ? [
-                            theme.colorScheme.primary.withValues(alpha: 0.35),
-                            theme.colorScheme.primary.withValues(alpha: 0.15),
-                          ]
-                        : [
-                            theme.colorScheme.primary,
-                            theme.colorScheme.primary.withValues(alpha: 0.7),
-                          ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                    bottomLeft: Radius.circular(24),
-                    bottomRight: Radius.circular(4),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.3 : 0.25),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                      spreadRadius: 1,
-                    ),
-                  ],
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFF0F4F9),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Builder(
                   builder: (context) {
@@ -230,10 +206,6 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
                                 widget.message.text == '🎤 Audio Message') &&
                             cleanedText.isNotEmpty)
                           _buildMarkdown(context, theme, isDark, settings),
-                        // Note: UI widgets are rendered inline by _buildMarkdown via
-                        // the :::ui-widget|id::: placeholder, and unmatched widgets
-                        // fall through to _buildWidgetFallbackArea. Rendering them
-                        // here again would duplicate every widget.
                       ],
                     );
                   },
@@ -518,87 +490,69 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       alignment: Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 850),
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(
-                  top: 8.0, bottom: 24.0, left: 12.0, right: 12.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                            blurRadius: 15,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? theme.colorScheme.surface
-                                      .withValues(alpha: 0.5)
-                                  : Colors.white.withValues(alpha: 0.75),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.12)
-                                    : Colors.white.withValues(alpha: 0.85),
-                                width: 1.5,
-                              ),
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            child: widget.message.status == MessageStatus.error
-                                ? _buildAiErrorCard(theme, isDark)
-                                : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if ((widget.isStreaming ||
-                                              widget.message.isThinking) &&
-                                          widget.message.text.isEmpty &&
-                                          (widget.message.reasoning == null ||
-                                              widget.message.reasoning!.isEmpty))
-                                        _ThinkingSkeleton(
-                                            isDark: isDark,
-                                            status: widget.status ??
-                                                (widget.message.isThinking
-                                                    ? "Thinking..."
-                                                    : null)),
-                                      if (widget.message.reasoning != null &&
-                                          widget.message.reasoning!.isNotEmpty)
-                                        TopScoreReasoningView(
-                                          content: widget.message.reasoning!,
-                                          isThinking: widget.message.text.isEmpty,
-                                        ),
-                                      if (widget.message.replyToText != null)
-                                        _buildReplyPreview(theme, false),
-                                      if (widget.message.text.isNotEmpty)
-                                        _buildMarkdown(
-                                            context, theme, isDark, settings),
-                                      if (widget.isStreaming &&
-                                          widget.message.text.isNotEmpty)
-                                        const _StreamingCursor(),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // AI Logo/Avatar on the left
+                Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(top: 4, right: 12),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : Colors.black12,
+                      width: 1,
                     ),
                   ),
-                ],
-              ),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    color: isDark ? Colors.white : theme.colorScheme.onSurface,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) =>
+                        Icon(CupertinoIcons.sparkles, size: 16, color: theme.primaryColor),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.message.status == MessageStatus.error)
+                        _buildAiErrorCard(theme, isDark)
+                      else ...[
+                        if ((widget.isStreaming || widget.message.isThinking) &&
+                            widget.message.text.isEmpty &&
+                            (widget.message.reasoning == null ||
+                                widget.message.reasoning!.isEmpty))
+                          _ThinkingSkeleton(
+                              isDark: isDark,
+                              status: widget.status ??
+                                  (widget.message.isThinking
+                                      ? "Thinking..."
+                                      : null)),
+                        if (widget.message.reasoning != null &&
+                            widget.message.reasoning!.isNotEmpty)
+                          TopScoreReasoningView(
+                            content: widget.message.reasoning!,
+                            isThinking: widget.message.text.isEmpty,
+                          ),
+                        if (widget.message.replyToText != null)
+                          _buildReplyPreview(theme, false),
+                        if (widget.message.text.isNotEmpty)
+                          _buildMarkdown(context, theme, isDark, settings),
+                        if (widget.isStreaming && widget.message.text.isNotEmpty)
+                          const _StreamingCursor(),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
 
             if (widget.message.quizDataJson != null)
@@ -975,10 +929,10 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       SettingsProvider settings) {
     final baseStyle = GoogleFonts.nunito(
       fontSize: settings.fontSize + 2,
-      fontWeight: FontWeight.w500,
+      fontWeight: widget.message.isUser ? FontWeight.w500 : FontWeight.w400,
       height: widget.message.isUser ? settings.lineHeight : 1.6,
       color: widget.message.isUser
-          ? Colors.white
+          ? (isDark ? Colors.white : const Color(0xFF1F1F1F))
           : theme.colorScheme.onSurface.withValues(alpha: 0.9),
     );
 
@@ -1227,7 +1181,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 8, left: 44), // Align with text under logo
       child: Row(
         children: [
           if (widget.speakingMessageId == widget.message.id &&
@@ -1514,17 +1468,17 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
   Widget _buildReplyPreview(ThemeData theme, bool isUser) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isUser
-            ? Colors.white.withValues(alpha: 0.1)
+            ? Colors.black.withValues(alpha: 0.05)
             : theme.primaryColor.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border(
           left: BorderSide(
-            color: isUser ? Colors.white70 : theme.primaryColor,
-            width: 3,
+            color: isUser ? Colors.black26 : theme.primaryColor,
+            width: 4,
           ),
         ),
       ),
@@ -1536,7 +1490,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
           fontSize: 12,
           fontStyle: FontStyle.italic,
           color: isUser
-              ? Colors.white.withValues(alpha: 0.8)
+              ? (theme.brightness == Brightness.dark ? Colors.white70 : Colors.black54)
               : theme.colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       ),

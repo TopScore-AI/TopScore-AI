@@ -81,30 +81,30 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget>
     final emoji = s['emoji'] ?? '✨';
     final featureColor = _getFeatureColor(title);
     
-    // On desktop, the first two are wide (horizontal), the next three are narrow (vertical)
-    final bool isVerticalCard = !isCompact && (index >= 2);
-    final double cardWidth = isCompact ? double.infinity : (isVerticalCard ? 206 : 315);
+    // Cards are now more uniform and Gemini-like
+    final double cardWidth = isCompact ? double.infinity : 315;
     
     final cardBg = isDark 
-        ? Colors.white.withValues(alpha: 0.03) 
-        : Colors.black.withValues(alpha: 0.02);
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.white;
         
     final cardBorder = isDark
-        ? featureColor.withValues(alpha: 0.2)
-        : featureColor.withValues(alpha: 0.15);
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.08);
 
     return Container(
       width: cardWidth,
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorder, width: 1.5),
+        border: Border.all(color: cardBorder, width: 1.0),
         boxShadow: [
-          BoxShadow(
-            color: featureColor.withValues(alpha: isDark ? 0.02 : 0.01),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
         ],
       ),
       child: Material(
@@ -112,107 +112,59 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget>
         child: InkWell(
           onTap: () => _handleSuggestionTap(s),
           borderRadius: BorderRadius.circular(16),
-          splashColor: featureColor.withValues(alpha: 0.1),
-          highlightColor: featureColor.withValues(alpha: 0.05),
+          splashColor: featureColor.withValues(alpha: 0.05),
+          highlightColor: featureColor.withValues(alpha: 0.02),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: isVerticalCard 
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: featureColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                        shape: BoxShape.circle,
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 22),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.5)
+                              : const Color(0xFF64748B),
+                          height: 1.4,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      title,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.5) 
-                            : const Color(0xFF64748B),
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: featureColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 22),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            title,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: isDark 
-                                  ? Colors.white.withValues(alpha: 0.5) 
-                                  : const Color(0xFF64748B),
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                      color: isDark 
-                          ? Colors.white.withValues(alpha: 0.2) 
-                          : Colors.black.withValues(alpha: 0.2),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    emoji,
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -249,20 +201,29 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget>
                 child: Column(
                   children: [
                     const SizedBox(height: 24),
-                    Text(
-                      widget.userName != null && widget.userName!.isNotEmpty
-                          ? 'Hello, ${widget.userName}'
-                          : 'Hello there!',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: isCompact ? 36 : 48,
-                        fontWeight: FontWeight.w800,
-                        color: widget.isDark
-                            ? Colors.white
-                            : widget.theme.colorScheme.onSurface,
-                        letterSpacing: -1,
-                        height: 1.1,
+                    ShaderMask(
+                      shaderCallback: (bounds) => LinearGradient(
+                        colors: [
+                          widget.theme.primaryColor,
+                          const Color(0xFF8B5CF6),
+                          const Color(0xFFEC4899),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: Text(
+                        widget.userName != null && widget.userName!.isNotEmpty
+                            ? 'Hello, ${widget.userName}'
+                            : 'Hello there!',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: isCompact ? 40 : 56,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -1.5,
+                          height: 1.1,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -286,27 +247,11 @@ class _EmptyStateWidgetState extends State<EmptyStateWidget>
               // App Features Suggestions Title
               FadeTransition(
                 opacity: _fadeAnimation,
-                child: Column(
-                  children: [
-                    Text(
-                      'WHAT WOULD YOU LIKE TO LEARN TODAY?',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                        color: widget.isDark
-                            ? Colors.white.withValues(alpha: 0.35)
-                            : Colors.black.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.center,
-                      children: displaySuggestions.asMap().entries.map((e) => _buildSuggestionCard(e.value, widget.isDark, isCompact, e.key)).toList(),
-                    ),
-                  ],
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  alignment: WrapAlignment.center,
+                  children: displaySuggestions.asMap().entries.map((e) => _buildSuggestionCard(e.value, widget.isDark, isCompact, e.key)).toList(),
                 ),
               ),
 
