@@ -224,9 +224,16 @@ class _MultiplayerLobbyScreenState extends State<MultiplayerLobbyScreen> {
                       onTap: _copyRoomCode,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 40, vertical: 24),
+                            horizontal: 48, vertical: 28),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.15),
+                              Colors.white.withValues(alpha: 0.05),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           borderRadius: BorderRadius.circular(32),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.2),
@@ -235,23 +242,28 @@ class _MultiplayerLobbyScreenState extends State<MultiplayerLobbyScreen> {
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
+                              blurRadius: 40,
+                              offset: const Offset(0, 12),
                             ),
                           ],
                         ),
                         child: Text(
                           widget.roomCode,
-                          style: GoogleFonts.outfit(
-                            fontSize: 56,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 64,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 10,
+                            letterSpacing: 12,
                             color: Colors.white,
                           ),
                         ),
                       )
                           .animate(onPlay: (c) => c.repeat(reverse: true))
-                          .shimmer(duration: 2500.ms, color: Colors.white24),
+                          .shimmer(duration: 2500.ms, color: Colors.white24)
+                          .scale(
+                              begin: const Offset(1, 1),
+                              end: const Offset(1.02, 1.02),
+                              duration: 2000.ms,
+                              curve: Curves.easeInOut),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -313,8 +325,8 @@ class _MultiplayerLobbyScreenState extends State<MultiplayerLobbyScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
-                                      width: 64,
-                                      height: 64,
+                                      width: 72,
+                                      height: 72,
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: [
@@ -329,12 +341,12 @@ class _MultiplayerLobbyScreenState extends State<MultiplayerLobbyScreen> {
                                           BoxShadow(
                                               color:
                                                   color.withValues(alpha: 0.4),
-                                              blurRadius: 15,
-                                              offset: const Offset(0, 5))
+                                              blurRadius: 20,
+                                              offset: const Offset(0, 6))
                                         ],
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.2),
-                                          width: 2,
+                                          color: Colors.white.withValues(alpha: 0.25),
+                                          width: 2.5,
                                         ),
                                       ),
                                       child: Center(
@@ -344,9 +356,9 @@ class _MultiplayerLobbyScreenState extends State<MultiplayerLobbyScreen> {
                                                   .substring(0, 1)
                                                   .toUpperCase(),
                                           style: const TextStyle(
-                                              fontSize: 28,
+                                              fontSize: 32,
                                               color: Colors.white,
-                                              fontWeight: FontWeight.bold),
+                                              fontWeight: FontWeight.w900),
                                         ),
                                       ),
                                     ),
