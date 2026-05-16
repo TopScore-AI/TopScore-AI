@@ -33,6 +33,13 @@ class DeepLinkService {
         }
         break;
 
+      case 'invite':
+        if (segments.length > 1) {
+          final code = segments[1];
+          _handleInviteCode(code);
+        }
+        break;
+
       default:
         // Fallback for standard routes
         Future.delayed(const Duration(milliseconds: 100), () {
@@ -84,5 +91,11 @@ class DeepLinkService {
   static void _handleMultiplayerJoin(String roomCode) {
     // Navigate to multiplayer join screen with the PIN pre-filled
     app_router.router.go('/play/$roomCode');
+  }
+
+  static void _handleInviteCode(String code) {
+    // Navigate to referral screen with the code pre-filled
+    // Implementation TBD: either pre-fill textfield or automatically redeem
+    app_router.router.go('/referral?code=$code');
   }
 }

@@ -1687,7 +1687,7 @@ extension ChatControllerMessaging on ChatController {
 
   Future<void> _maybeDetectLanguage(String text) async {
     final trimmed = text.trim();
-    if (trimmed.length < 12) return;
+    if (trimmed.isEmpty) return;
     try {
       final detected = await LanguageDetectService.instance.detect(trimmed);
       if (detected == null) return;

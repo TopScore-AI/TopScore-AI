@@ -68,7 +68,7 @@ export default function Features() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-16">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((f, i) => (
             <motion.div
               key={i}
@@ -76,17 +76,17 @@ export default function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: i * 0.1 }}
               viewport={{ once: true }}
-              className="group relative"
+              className="p-8 rounded-3xl border border-slate-100 bg-white hover:shadow-2xl hover:shadow-indigo-50 transition-all duration-500 group relative"
             >
-              <div className="mb-8 inline-flex p-4 bg-slate-50 rounded-2xl group-hover:bg-brand-primary group-hover:text-white transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 shadow-sm group-hover:shadow-indigo-200">
+              <div className="mb-6 inline-flex p-4 bg-slate-50 text-slate-900 rounded-2xl group-hover:bg-brand-primary group-hover:text-white transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 shadow-sm group-hover:shadow-indigo-200">
                 {f.icon}
               </div>
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <h4 className="text-2xl font-display font-bold text-slate-900 tracking-tight group-hover:text-brand-primary transition-colors">{f.title}</h4>
-                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded-full">
+                <div className="flex flex-col gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-brand-primary/10 text-brand-primary rounded-full w-fit">
                     {f.tag}
                   </span>
+                  <h4 className="text-2xl font-display font-bold text-slate-900 tracking-tight group-hover:text-brand-primary transition-colors">{f.title}</h4>
                 </div>
                 <p className="text-slate-600 leading-relaxed text-base font-medium">
                   {f.desc}

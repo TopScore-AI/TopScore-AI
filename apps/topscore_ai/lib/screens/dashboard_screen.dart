@@ -4,7 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
+import '../services/permission_service.dart';
+import '../widgets/permission_dialog.dart';
+import '../widgets/enhanced_card.dart';
 import '../../widgets/session_history_carousel.dart';
 import '../../widgets/bounce_wrapper.dart';
 import '../../constants/colors.dart';
@@ -19,6 +24,36 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkNotificationPermission();
+    });
+  }
+
+  Future<void> _checkNotificationPermission() async {
+    final permissionService = PermissionService();
+    final hasPermission = await permissionService.hasNotificationPermission();
+
+    if (!hasPermission && mounted) {
+      // Show custom dialog explaining why we need notifications
+      final granted = await PermissionDialog.show(
+        context,
+        permission: Permission.notification,
+        title: 'Stay on Track!',
+        customMessage:
+            'TopScore AI works best when it can send you study reminders and important updates. Allow notifications to stay ahead!',
+      );
+
+      if (granted == true) {
+        // If they allowed in our dialog, the actual OS prompt was triggered.
+        // We can optionally refresh the UI or sync FCM token here.
+        AuthProvider.instance.forceSyncFCMToken();
+      }
+    }
+  }
+
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -214,7 +249,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                child: RepaintBoundary(child: _buildHeroCard(context, isDark)),
+                child: RepaintBoundary(child: _buildHeroCard(context, isDark))
+                    .animate()
+                    .fadeIn(duration: 600.ms)
+                    .slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
+              ),
+            ),
+
+            // Achievements Summary
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: EnhancedCard(
+                  onTap: () => context.push('/achievements'),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.stars_rounded,
+                            color: Colors.amber, size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "View Achievements",
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              "Track your CBC competencies and badges",
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: subtextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
+              ),
+            ),
+
+            // Refer & Earn Card
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: EnhancedCard(
+                  onTap: () => context.push('/referral'),
+                  padding: const EdgeInsets.all(16),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFEC4899).withValues(alpha: 0.1),
+                      const Color(0xFF8B5CF6).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEC4899),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.card_giftcard_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Refer & Get Premium",
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFFEC4899),
+                              ),
+                            ),
+                            Text(
+                              "Gift Classmates free TopScore access",
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: subtextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.1, end: 0),
               ),
             ),
 

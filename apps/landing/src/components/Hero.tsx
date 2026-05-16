@@ -15,23 +15,21 @@ export default function Hero() {
       <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
         <motion.div 
           animate={{ 
-            scale: [1, 1.15, 1],
-            opacity: [0.2, 0.4, 0.2],
-            x: [0, 50, 0],
-            y: [0, 30, 0]
+            scale: [1, 1.2, 1],
+            opacity: [0.2, 0.5, 0.2],
+            rotate: [0, 90, 0],
           }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[100px]" 
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -top-64 -right-64 w-[800px] h-[800px] bg-brand-primary/10 rounded-full blur-[120px]"
         />
         <motion.div 
           animate={{ 
-            scale: [1.1, 1, 1.1],
-            opacity: [0.1, 0.3, 0.1],
-            x: [0, -30, 0],
-            y: [0, 40, 0]
+            scale: [1.2, 1, 1.2],
+            opacity: [0.1, 0.4, 0.1],
+            rotate: [0, -90, 0],
           }}
-          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-indigo-300/10 rounded-full blur-[90px]" 
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -bottom-64 -left-64 w-[700px] h-[700px] bg-indigo-400/10 rounded-full blur-[100px]"
         />
       </div>
 
@@ -50,11 +48,11 @@ export default function Hero() {
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-6xl md:text-8xl lg:text-9xl font-display font-black leading-[0.85] tracking-tighter text-slate-900 text-balance"
+              transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
+              className="text-7xl md:text-8xl lg:text-[10rem] font-display font-black leading-[0.8] tracking-tight text-slate-900 text-balance"
             >
               {t('hero.h1a' as any)}
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-primary to-indigo-400">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-primary via-indigo-500 to-indigo-400">
                 {t('hero.h1Grad' as any)}
               </span>
               <br />
@@ -135,10 +133,10 @@ export default function Hero() {
             </motion.div>
           </div>
 
-          <div className="lg:col-span-5 grid grid-cols-2 gap-4">
-             <div className="space-y-4">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-4 hover:shadow-md transition-shadow">
-                   <div className="w-10 h-10 bg-indigo-50 text-brand-primary rounded-xl flex items-center justify-center">
+          <div className="lg:col-span-5 grid grid-cols-2 gap-6 mt-16 lg:mt-0">
+             <div className="space-y-6">
+                <div className="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 border border-white flex flex-col gap-4 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                   <div className="w-12 h-12 bg-indigo-50 text-brand-primary rounded-2xl flex items-center justify-center">
                      <Play className="w-5 h-5" />
                    </div>
                    <div>
@@ -146,10 +144,10 @@ export default function Hero() {
                     <p className="text-xs text-slate-500 leading-relaxed font-medium">Multiplayer leaderboards and real-time competition for KCSE.</p>
                    </div>
                 </div>
-                <div className="bg-slate-900 p-6 rounded-3xl shadow-2xl text-white flex flex-col gap-4 transform translate-y-4 overflow-hidden relative group border border-slate-800">
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl shadow-slate-900/20 text-white flex flex-col gap-4 transform translate-y-6 overflow-hidden relative group border border-slate-800 hover:shadow-slate-900/30 transition-all duration-500 hover:-translate-y-1">
                    <div className="absolute inset-0 bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors" />
                    <div className="relative z-10 space-y-4">
-                    <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10">
+                    <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10">
                         <Sparkles className="w-5 h-5 text-indigo-400" />
                     </div>
                     <div>
@@ -159,9 +157,9 @@ export default function Hero() {
                    </div>
                 </div>
              </div>
-             <div className="space-y-4 pt-8">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-4 hover:shadow-md transition-shadow">
-                   <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+             <div className="space-y-6 pt-12">
+                <div className="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 border border-white flex flex-col gap-4 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                   <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                    </div>
                    <div>
@@ -169,8 +167,8 @@ export default function Hero() {
                     <p className="text-xs text-slate-500 leading-relaxed font-medium">Synced PDF parsing powered by Syncfusion Enterprise.</p>
                    </div>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-4 hover:shadow-md transition-shadow">
-                   <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
+                <div className="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 border border-white flex flex-col gap-4 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                   <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                    </div>
                    <div>

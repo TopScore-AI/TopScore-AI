@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/resources_provider.dart';
@@ -133,11 +134,12 @@ class HomeTab extends StatelessWidget {
         isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     return Selector<AuthProvider,
-        ({String? name, String? photo, String? grade})>(
+        ({String? name, String? photo, String? grade, int? xp})>(
       selector: (_, auth) => (
         name: auth.userModel?.displayName,
         photo: auth.userModel?.photoURL,
         grade: auth.userModel?.gradeLabel,
+        xp: auth.userModel?.xp,
       ),
       builder: (context, data, _) {
         final firstName = data.name?.split(' ')[0] ?? 'Student';
@@ -157,7 +159,7 @@ class HomeTab extends StatelessWidget {
                       children: [
                         // Mini progress ring
                         _DailyProgressRing(
-                          progress: 0.6,
+                          progress: (data.xp ?? 0) % 50 / 50.0,
                           size: 48,
                           child: (data.photo != null && data.photo!.isNotEmpty)
                               ? CircleAvatar(
@@ -258,7 +260,8 @@ class HomeTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.15 : 0.2),
+                          color: theme.colorScheme.primary
+                              .withValues(alpha: isDark ? 0.15 : 0.2),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -272,7 +275,8 @@ class HomeTab extends StatelessWidget {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(CupertinoIcons.sparkles, color: theme.colorScheme.primary, size: 18),
+                          child: Icon(CupertinoIcons.sparkles,
+                              color: theme.colorScheme.primary, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -297,7 +301,7 @@ class HomeTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.1, end: 0),
               ),
             ),
 
@@ -692,9 +696,15 @@ class _SubjectChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: BounceWrapper(
-        onTap: () => context.push('/ai-tutor', extra: {
-          'initial_message': 'Help me study $label',
-        }),
+        onTap: () {
+          if (label == 'Kiswahili') {
+            context.push('/language-tree', extra: {'language': 'Swahili'});
+          } else {
+            context.push('/ai-tutor', extra: {
+              'initial_message': 'Help me study $label',
+            });
+          }
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(

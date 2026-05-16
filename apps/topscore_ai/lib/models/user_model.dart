@@ -31,6 +31,11 @@ class UserModel {
   final List<String> accessedDocuments;
   final DateTime? lastDocumentAccessDate;
 
+  // Referral system
+  final String? referralCode;
+  final String? referredBy;
+  final int referralCount;
+
   UserModel({
     required this.uid,
     required this.email,
@@ -59,6 +64,9 @@ class UserModel {
     this.freeMessagesLastAt,
     this.accessedDocuments = const [],
     this.lastDocumentAccessDate,
+    this.referralCode,
+    this.referredBy,
+    this.referralCount = 0,
   });
 
   /// Whether this user is under 18 based on dateOfBirth (Kenya DPA 2019 Section 33)
@@ -125,6 +133,9 @@ class UserModel {
       'free_messages_last_at': freeMessagesLastAt?.millisecondsSinceEpoch,
       'accessedDocuments': accessedDocuments,
       'lastDocumentAccessDate': lastDocumentAccessDate?.millisecondsSinceEpoch,
+      'referral_code': referralCode,
+      'referred_by': referredBy,
+      'referral_count': referralCount,
     };
   }
 
@@ -186,6 +197,9 @@ class UserModel {
           ? List<String>.from(map['accessedDocuments'])
           : [],
       lastDocumentAccessDate: getDateTime(map['lastDocumentAccessDate']),
+      referralCode: map['referral_code'],
+      referredBy: map['referred_by'],
+      referralCount: map['referral_count'] ?? 0,
     );
   }
 
@@ -217,6 +231,9 @@ class UserModel {
     DateTime? freeMessagesLastAt,
     List<String>? accessedDocuments,
     DateTime? lastDocumentAccessDate,
+    String? referralCode,
+    String? referredBy,
+    int? referralCount,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -247,6 +264,9 @@ class UserModel {
       accessedDocuments: accessedDocuments ?? this.accessedDocuments,
       lastDocumentAccessDate:
           lastDocumentAccessDate ?? this.lastDocumentAccessDate,
+      referralCode: referralCode ?? this.referralCode,
+      referredBy: referredBy ?? this.referredBy,
+      referralCount: referralCount ?? this.referralCount,
     );
   }
 

@@ -52,9 +52,12 @@ export default function Curriculum() {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: i * 0.1 }}
               viewport={{ once: true }}
-              className="bg-slate-50 p-10 rounded-[2.5rem] border border-slate-100 hover:bg-white hover:shadow-2xl hover:shadow-indigo-50 transition-all duration-500 group"
+              className="bg-slate-50/50 backdrop-blur-sm p-10 rounded-[2.5rem] border border-slate-100 hover:bg-white hover:shadow-2xl hover:shadow-indigo-100/50 transition-all duration-500 group relative overflow-hidden"
             >
-              <div className={`${item.color} w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-10 shadow-xl shadow-current/10 group-hover:scale-110 transition-transform`}>
+              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                {item.icon}
+              </div>
+              <div className={`${item.color} w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-10 shadow-xl shadow-current/20 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500`}>
                 {item.icon}
               </div>
               <div className="space-y-4">

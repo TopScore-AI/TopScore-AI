@@ -203,7 +203,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildAvatar(user, theme, isDark),
             const SizedBox(height: 20),
             if (user != null) ...[
-              _buildXpCard(user, theme, isDark),
+            GestureDetector(
+              onTap: () => context.push('/achievements'),
+              child: _buildXpCard(user, theme, isDark),
+            ),
               const SizedBox(height: 20),
             ],
             if (_isEditing)
@@ -773,6 +776,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           activeThumbColor: theme.colorScheme.primary,
         ),
         onTap: () {},
+        theme: theme,
+        isDark: isDark,
+      ),
+      const SizedBox(height: 10),
+      _tile(
+        icon: Icons.card_giftcard_rounded,
+        iconColor: Colors.pinkAccent,
+        title: 'Refer & Earn',
+        subtitle: 'Gift Premium to friends, get rewards',
+        onTap: () => context.push('/referral'),
         theme: theme,
         isDark: isDark,
       ),

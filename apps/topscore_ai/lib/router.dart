@@ -1,6 +1,7 @@
 import '../../constants/colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'services/analytics_service.dart';
@@ -46,6 +47,8 @@ import 'screens/legal/account_deletion_screen.dart'
 import 'screens/support/support_screen.dart' deferred as support;
 import 'screens/notifications/notification_preferences_screen.dart'
     deferred as notif_prefs;
+import 'screens/student/achievements_screen.dart' deferred as achievements;
+import 'screens/student/referral_screen.dart' deferred as referral;
 
 // Deferred loading widget for consistent UX
 class PremiumSkeletonLoader extends StatelessWidget {
@@ -210,13 +213,22 @@ CustomTransitionPage<void> _buildCustomTransitionPage({
 }) {
   return CustomTransitionPage<void>(
     key: key,
-    transitionDuration: const Duration(milliseconds: 180),
-    reverseTransitionDuration: const Duration(milliseconds: 150),
+    transitionDuration: 400.ms,
+    reverseTransitionDuration: 300.ms,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
-        opacity: CurveTween(curve: Curves.easeOut).animate(animation),
-        child: child,
+        opacity: CurveTween(curve: Curves.easeInOutCubic).animate(animation),
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.03),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          )),
+          child: child,
+        ),
       );
     },
   );
@@ -789,6 +801,32 @@ final GoRouter router = GoRouter(
             return support.SupportScreen();
           }
           return const PremiumSkeletonLoader(message: 'Loading Support...');
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/referral',
+      builder: (context, state) {
+        return FutureBuilder(
+          future: referral.loadLibrary(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return referral.ReferralScreen();
+            }
+            return const PremiumSkeletonLoader(message: 'Loading Rewards...');
+          },
+        );
+      },
+    ),
+    GoRoute(
+      path: '/achievements',
+      builder: (context, state) => FutureBuilder(
+        future: achievements.loadLibrary(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return achievements.AchievementsScreen();
+          }
+          return const PremiumSkeletonLoader(message: 'Loading Achievements...');
         },
       ),
     ),

@@ -8,7 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:waveform_flutter/waveform_flutter.dart' as wf;
-import 'dart:ui';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../message_model.dart';
 import '../chat_controller.dart';
 
@@ -135,180 +135,151 @@ class _ChatInputAreaState extends State<ChatInputArea> {
             widget.onPaste,
       },
       child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            if (!isDark)
               BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.15 : 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-                spreadRadius: 2,
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
               ),
-            ],
-          ),
-          child: ClipRRect(
+          ],
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1F20) : const Color(0xFFF0F4F9),
             borderRadius: BorderRadius.circular(32),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : Colors.white.withValues(alpha: 0.65),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.white.withValues(alpha: 0.8),
-                    width: 1.5,
-                  ),
-                  borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.05),
+              width: 1.0,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.replyingToMessage != null)
+                _ReplyPreviewWidget(
+                  replyingToMessage: widget.replyingToMessage!,
+                  onCancelReply: widget.onCancelReply,
+                  isDark: isDark,
                 ),
-                child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.replyingToMessage != null)
-                  _ReplyPreviewWidget(
-                    replyingToMessage: widget.replyingToMessage!,
-                    onCancelReply: widget.onCancelReply,
-                    isDark: isDark,
-                  ),
-                if (widget.pendingAttachments.isNotEmpty)
-                  _MultiAttachmentPreviewWidget(
-                    attachments: widget.pendingAttachments,
-                    onRemoveAttachment: widget.onRemoveAttachment,
-                    theme: theme,
-                    isDark: isDark,
-                  ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Semantics(
-                        label: 'Attach media or file',
-                        button: true,
-                        child: CompositedTransformTarget(
-                          link: _attachLink,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.15)
-                                  : Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: IconButton(
-                              key: widget.attachButtonKey,
-                              icon: Transform.rotate(
-                                angle: -0.785,
-                                child: const Icon(CupertinoIcons.paperclip,
-                                    size: 20),
-                              ),
-                              color: theme.colorScheme.primary,
-                              tooltip: 'Attach file',
-                              onPressed: () {
-                                final controller =
-                                    context.read<ChatController>();
-                                controller.showAttachmentMenu(
-                                    context, theme, isDark,
-                                    link: _attachLink);
-                              },
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
+              if (widget.pendingAttachments.isNotEmpty)
+                _MultiAttachmentPreviewWidget(
+                  attachments: widget.pendingAttachments,
+                  onRemoveAttachment: widget.onRemoveAttachment,
+                  theme: theme,
+                  isDark: isDark,
+                ).animate().fadeIn().slideY(begin: 0.1, end: 0),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Semantics(
+                      label: 'Attach media or file',
+                      button: true,
+                      child: CompositedTransformTarget(
+                        link: _attachLink,
+                        child: IconButton(
+                          key: widget.attachButtonKey,
+                          icon: const Icon(CupertinoIcons.add, size: 24),
+                          color: isDark ? Colors.white70 : Colors.black54,
+                          tooltip: 'Attach file',
+                          onPressed: () {
+                            final controller = context.read<ChatController>();
+                            controller.showAttachmentMenu(
+                                context, theme, isDark,
+                                link: _attachLink);
+                          },
                         ),
                       ),
                     ),
-                    Expanded(
-                      child: widget.isRecording
-                          ? _LiveVoiceWaveform(
-                              amplitudeStream: widget.amplitudeStream,
-                              isDark: isDark,
-                            )
-                          : TextField(
-                              controller: widget.textController,
-                              focusNode: widget.messageFocusNode,
-                              enabled: true,
-                              style: theme.textTheme.bodyLarge?.copyWith(
+                  ),
+                  Expanded(
+                    child: widget.isRecording
+                        ? _LiveVoiceWaveform(
+                            amplitudeStream: widget.amplitudeStream,
+                            isDark: isDark,
+                          )
+                        : TextField(
+                            controller: widget.textController,
+                            focusNode: widget.messageFocusNode,
+                            enabled: true,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontSize: 16,
+                              fontFamily: GoogleFonts.nunito().fontFamily,
+                              fontWeight: FontWeight.w600,
+                              color: theme.textTheme.bodyLarge?.color,
+                            ),
+                            cursorColor: theme.colorScheme.primary,
+                            cursorWidth: 2.0,
+                            cursorRadius: const Radius.circular(1),
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: _hasTextContent
+                                ? TextInputAction.send
+                                : TextInputAction.newline,
+                            onSubmitted: (_) {
+                              if (_hasTextContent &&
+                                  !widget.isGenerating &&
+                                  !isAnyAttachmentUploading &&
+                                  !widget.isOffline) {
+                                widget.onSendMessage();
+                              }
+                            },
+                            minLines: 1,
+                            maxLines: null,
+                            decoration: InputDecoration(
+                              hintText: widget.isRecording
+                                  ? "Listening…"
+                                  : _effectiveHint,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
+                              hintStyle: GoogleFonts.nunito(
+                                color: isDark ? Colors.white38 : Colors.black38,
                                 fontSize: 16,
-                                fontFamily: GoogleFonts.nunito().fontFamily,
-                                fontWeight: FontWeight.w600,
-                                color: theme.textTheme.bodyLarge?.color,
+                                fontWeight: FontWeight.w500,
                               ),
-                              cursorColor: theme.colorScheme.primary,
-                              cursorWidth: 2.0,
-                              cursorRadius: const Radius.circular(1),
-                              keyboardType: TextInputType.multiline,
-                              textInputAction: _hasTextContent
-                                  ? TextInputAction.send
-                                  : TextInputAction.newline,
-                              onSubmitted: (_) {
-                                if (_hasTextContent &&
-                                    !widget.isGenerating &&
-                                    !isAnyAttachmentUploading &&
-                                    !widget.isOffline) {
-                                  widget.onSendMessage();
-                                }
-                              },
-                              minLines: 1,
-                              maxLines: null,
-                              decoration: InputDecoration(
-                                hintText: widget.isRecording
-                                    ? "Listening…"
-                                    : _effectiveHint,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                filled: false,
-                                hintStyle: GoogleFonts.nunito(
-                                  color: theme.hintColor,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 26,
-                                ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 18,
                               ),
                             ),
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _DynamicRightActions(
+                      hasContent: _hasTextContent ||
+                          widget.pendingAttachments.isNotEmpty,
+                      isGenerating: widget.isGenerating,
+                      isUploading: isAnyAttachmentUploading,
+                      isRecording: widget.isRecording,
+                      isOffline: widget.isOffline,
+                      isConnecting: widget.isConnecting,
+                      isDark: isDark,
+                      theme: theme,
+                      onStopGeneration: widget.onStopGeneration,
+                      onSendMessage: widget.onSendMessage,
+                      onStopListeningAndSend: widget.onStopListeningAndSend,
+                      onDictation: widget.onDictation,
+                      onStartLiveVoiceMode: widget.onStartLiveVoiceMode,
+                      onStartFeynmanMode: widget.onStartFeynmanMode,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _DynamicRightActions(
-                        hasContent: _hasTextContent ||
-                            widget.pendingAttachments.isNotEmpty,
-                        isGenerating: widget.isGenerating,
-                        isUploading: isAnyAttachmentUploading,
-                        isRecording: widget.isRecording,
-                        isOffline: widget.isOffline,
-                        isConnecting: widget.isConnecting,
-                        isDark: isDark,
-                        theme: theme,
-                        onStopGeneration: widget.onStopGeneration,
-                        onSendMessage: widget.onSendMessage,
-                        onStopListeningAndSend: widget.onStopListeningAndSend,
-                        onDictation: widget.onDictation,
-                        onStartLiveVoiceMode: widget.onStartLiveVoiceMode,
-                        onStartFeynmanMode: widget.onStartFeynmanMode,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-      ),
       ),
     );
   }
@@ -354,11 +325,9 @@ class _DynamicRightActions extends StatelessWidget {
         label: 'Stop generating response',
         button: true,
         child: IconButton(
-          icon: const Icon(CupertinoIcons.stop_fill, size: 28),
+          icon: Icon(CupertinoIcons.stop_circle_fill, size: 32, color: theme.primaryColor),
           onPressed: onStopGeneration,
-          color: isDark ? Colors.white : Colors.black,
           tooltip: 'Stop generation',
-          visualDensity: VisualDensity.compact,
         ),
       );
     }
@@ -421,78 +390,31 @@ class _DynamicRightActions extends StatelessWidget {
         Semantics(
           label: isRecording ? 'Stop dictation' : 'Start dictation',
           button: true,
-          child: Container(
-            decoration: BoxDecoration(
-              color: isRecording
-                  ? Colors.redAccent.withValues(alpha: 0.15)
-                  : (isDark
-                      ? Colors.white.withValues(alpha: 0.15)
-                      : Colors.white),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+          child: IconButton(
+            icon: Icon(
+              isRecording ? CupertinoIcons.stop_circle_fill : CupertinoIcons.mic,
+              size: 24,
             ),
-            child: IconButton(
-              icon: Icon(
-                isRecording ? CupertinoIcons.stop_circle : CupertinoIcons.mic,
-                size: 20,
-              ),
-              color: isRecording ? Colors.redAccent : theme.colorScheme.primary,
-              tooltip: isRecording ? 'Stop recording' : 'Dictate',
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                isRecording ? onStopListeningAndSend() : onDictation();
-              },
-              visualDensity: VisualDensity.compact,
-            ),
+            color: isRecording ? Colors.redAccent : (isDark ? Colors.white70 : Colors.black54),
+            tooltip: isRecording ? 'Stop recording' : 'Dictate',
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              isRecording ? onStopListeningAndSend() : onDictation();
+            },
           ),
         ),
         const SizedBox(width: 4),
         Semantics(
           label: 'Start live voice conversation',
           button: true,
-          child: Container(
-            margin: const EdgeInsets.only(right: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                onStartLiveVoiceMode();
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(CupertinoIcons.waveform,
-                      size: 18, color: Colors.white),
-                  const SizedBox(width: 6),
-                  Text(
-                    'LIVE',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          child: IconButton(
+            icon: const Icon(CupertinoIcons.waveform, size: 24),
+            color: theme.primaryColor,
+            tooltip: 'Live Voice',
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              onStartLiveVoiceMode();
+            },
           ),
         ),
       ],
