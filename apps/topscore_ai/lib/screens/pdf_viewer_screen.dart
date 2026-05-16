@@ -39,6 +39,8 @@ import '../models/download_model.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../widgets/app_spinner.dart';
+import '../widgets/topscore_watermark.dart';
+import '../widgets/bounce_wrapper.dart';
 
 // ---------------------------------------------------------------------------
 // PdfViewerScreen — production-grade PDF reader
@@ -1371,10 +1373,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE8E8E8),
-      body: _buildBody(theme, isDark),
+    return TopScoreWatermark(
+      opacity: 0.15,
+      isDark: isDark,
+      child: Scaffold(
+        backgroundColor:
+            isDark ? const Color(0xFF1A1A1A) : const Color(0xFFE8E8E8),
+        body: _buildBody(theme, isDark),
+      ),
     );
   }
 
@@ -1655,11 +1661,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     final isDark = theme.brightness == Brightness.dark;
     final fg = color ?? (isDark ? Colors.white : AppColors.text);
 
-    return InkWell(
+    return BounceWrapper(
       onTap: isLoading ? null : onTap,
-      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: color != null ? color.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1672,13 +1681,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
               )
             else
               Icon(icon, color: fg, size: 20),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
-              label,
+              label.toUpperCase(),
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white60 : AppColors.textSecondary,
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+                color: fg.withValues(alpha: 0.8),
+                letterSpacing: 0.5,
               ),
             ),
           ],

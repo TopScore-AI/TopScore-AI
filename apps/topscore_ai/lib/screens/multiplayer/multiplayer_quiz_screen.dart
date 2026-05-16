@@ -6,9 +6,11 @@ import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:lottie/lottie.dart';
 import '../../services/multiplayer_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/app_spinner.dart';
+import '../../widgets/glass_card.dart';
 
 // ─── Kahoot colour palette ────────────────────────────────────────────────────
 const _kColors = [
@@ -413,12 +415,12 @@ class _MultiplayerQuizScreenState extends State<MultiplayerQuizScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
+        physics: const BouncingScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 1.55,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.4,
         ),
         itemCount: options.length,
         itemBuilder: (_, i) => _AnswerTile(
@@ -434,7 +436,7 @@ class _MultiplayerQuizScreenState extends State<MultiplayerQuizScreen>
               _correctAnswerIndex != i,
           isLocked: _hasSubmitted,
           onTap: () => _submitAnswer(i),
-          delay: Duration(milliseconds: 80 * i),
+          delay: Duration(milliseconds: 100 * i),
         ),
       ),
     );
@@ -442,38 +444,31 @@ class _MultiplayerQuizScreenState extends State<MultiplayerQuizScreen>
 
   // ── Waiting banner ─────────────────────────────────────────────────────────
   Widget _buildWaitingBanner() {
-    final color = _selectedAnswerIndex != null
-        ? _kColors[_selectedAnswerIndex! % _kColors.length]
-        : Colors.white24;
-
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: AppSpinner(strokeWidth: 2, color: Colors.white70),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Answer locked in! Waiting for others…',
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        borderRadius: 24,
+        opacity: 0.1,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Lottie.asset('assets/lottie/loading.json', height: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Great choice! Waiting for your friends to answer...',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ).animate().fadeIn().slideY(begin: 0.3);
+    ).animate().fadeIn().slideY(begin: 0.2, curve: Curves.easeOutCubic);
   }
 }
 
@@ -854,9 +849,9 @@ class _LeaderboardScreen extends StatelessWidget {
   Widget _buildPodium(List<Map<String, dynamic>> lb) {
     // Order: 2nd | 1st | 3rd
     final slots = [
-      if (lb.length >= 2) (lb[1], 2, 90.0, Colors.grey.shade400),
-      (lb[0], 1, 130.0, const Color(0xFFFFD700)),
-      if (lb.length >= 3) (lb[2], 3, 70.0, const Color(0xFFCD7F32)),
+      if (lb.length >= 2) (lb[1], 2, 100.0, const Color(0xFFE2E8F0)),
+      (lb[0], 1, 150.0, const Color(0xFFFFD700)),
+      if (lb.length >= 3) (lb[2], 3, 80.0, const Color(0xFFE58E00)),
     ];
 
     return Row(
@@ -865,7 +860,7 @@ class _LeaderboardScreen extends StatelessWidget {
       children: slots.map((s) {
         final (player, rank, height, color) = s;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           child: _PodiumSlot(
               player: player, rank: rank, height: height, color: color),
         );
@@ -957,39 +952,49 @@ class _PodiumSlot extends StatelessWidget {
           const Text('🔥', style: TextStyle(fontSize: 20))
               .animate(onPlay: (c) => c.repeat())
               .shake(duration: 600.ms),
-        Text(player['avatar'] ?? '👤', style: const TextStyle(fontSize: 28)),
-        const SizedBox(height: 4),
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+          ),
+          alignment: Alignment.center,
+          child: Text(player['avatar'] ?? '👤', style: const TextStyle(fontSize: 24)),
+        ),
+        const SizedBox(height: 8),
         SizedBox(
-          width: 72,
+          width: 80,
           child: Text(
             player['name'] ?? '',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.plusJakartaSans(
               color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
             ),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (streak >= 2)
-          Text(
-            '$streak streak!',
-            style: const TextStyle(
-                color: Colors.orangeAccent,
-                fontSize: 9,
-                fontWeight: FontWeight.bold),
-          ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Container(
-          width: 80,
+          width: 85,
           height: height,
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            gradient: LinearGradient(
+              colors: [color, color.withValues(alpha: 0.7)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 12)
+              BoxShadow(
+                color: color.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              )
             ],
           ),
           child: Column(
@@ -998,17 +1003,25 @@ class _PodiumSlot extends StatelessWidget {
               Text(
                 '$rank',
                 style: GoogleFonts.outfit(
-                  fontSize: rank == 1 ? 36 : 28,
+                  fontSize: rank == 1 ? 42 : 32,
                   fontWeight: FontWeight.w900,
-                  color: Colors.white,
+                  color: rank == 1 ? const Color(0xFF1A1A1A) : Colors.white,
                 ),
               ),
-              Text(
-                '${player['score']} pts',
-                style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.bold),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${player['score']}',
+                  style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: rank == 1 ? const Color(0xFF1A1A1A) : Colors.white70,
+                      fontWeight: FontWeight.w800),
+                ),
               ),
             ],
           ),

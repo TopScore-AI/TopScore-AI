@@ -37,6 +37,7 @@ import 'tutor_client/chat_screen.dart' deferred as chat;
 import 'tutor_client/screens/lesson_mode_screen.dart' deferred as lesson_mode;
 import 'screens/language_tree_screen.dart' deferred as language_tree;
 import 'screens/activity_history_screen.dart' deferred as activity;
+import 'screens/student/achievements_screen.dart' deferred as achievements;
 import 'screens/multiplayer/multiplayer_lobby_screen.dart'
     deferred as multiplayer_lobby;
 import 'screens/legal/privacy_policy_screen.dart' deferred as privacy;
@@ -432,6 +433,18 @@ final GoRouter router = GoRouter(
             return summarizer.PdfSummarizerScreen();
           }
           return const PremiumSkeletonLoader(message: 'Loading Summarizer...');
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/achievements',
+      builder: (context, state) => FutureBuilder(
+        future: achievements.loadLibrary(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return achievements.AchievementsScreen();
+          }
+          return const PremiumSkeletonLoader(message: 'Loading Achievements...');
         },
       ),
     ),

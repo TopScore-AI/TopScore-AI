@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'dart:ui';
 import 'package:universal_io/io.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:lottie/lottie.dart';
 import '../../shared/services/media_picker_service.dart';
 import 'package:provider/provider.dart';
 import '../../services/ai_service.dart';
@@ -114,7 +116,7 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
       setState(() {
         _summaryMarkdown = summary;
         _isUploading = false;
-        _statusText = "Summary Ready!";
+        _statusText = "Analysis Complete! ✨";
       });
 
       AnalyticsService.instance.logMaterialGenerated(
@@ -340,28 +342,37 @@ class _PdfSummarizerScreenState extends State<PdfSummarizerScreen> {
             ),
           ),
           child: _summaryMarkdown != null
-              ? SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: SelectionArea(
-                    child: StyledGptMarkdown(
-                      _summaryMarkdown!,
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        height: 1.6,
-                        color: isDark ? Colors.white : AppColors.text,
+              ? Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: SelectionArea(
+                          child: StyledGptMarkdown(
+                            _summaryMarkdown!,
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              height: 1.6,
+                              color: isDark ? Colors.white : AppColors.text,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    ).animate().fadeIn(duration: 600.ms),
+                  ],
                 )
               : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.auto_awesome_rounded,
-                      size: 64,
-                      color: (isDark ? Colors.white : AppColors.primary)
-                          .withValues(alpha: 0.2),
-                    ),
+                    if (_isUploading)
+                       Lottie.asset('assets/lottie/loading.json', height: 120)
+                    else
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 64,
+                        color: (isDark ? Colors.white : AppColors.primary)
+                            .withValues(alpha: 0.2),
+                      ),
                     const SizedBox(height: 20),
                     Text(
                       _statusText,

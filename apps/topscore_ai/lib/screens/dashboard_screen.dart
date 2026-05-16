@@ -3,13 +3,20 @@ import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/auth_provider.dart';
+import '../providers/connectivity_provider.dart';
+import '../providers/resources_provider.dart';
+import '../services/onboarding_tooltip_service.dart';
+import '../widgets/interest_update_sheet.dart';
 import '../../widgets/session_history_carousel.dart';
 import '../../widgets/bounce_wrapper.dart';
 import '../../constants/colors.dart';
 import '../../providers/notification_provider.dart';
 import '../tutor_client/chat_controller.dart';
+import '../tutor_client/services/buddy_progress_service.dart';
+import '../utils/image_cache_manager.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -19,6 +26,91 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final resourcesProvider =
+          Provider.of<ResourcesProvider>(context, listen: false);
+      resourcesProvider.loadRecentlyOpened();
+
+      // Load cloud file history for cross-device sync
+      final userId =
+          Provider.of<AuthProvider>(context, listen: false).userModel?.uid;
+      if (userId != null) {
+        resourcesProvider.loadCloudHistory(userId);
+      }
+
+      OnboardingTooltipService().init();
+      _checkMissingInterests();
+      _setupConnectivityListener();
+    });
+  }
+
+  late final VoidCallback _connectivityListener;
+
+  @override
+  void dispose() {
+    // Remove the listener to prevent memory leaks and BuildContext issues
+    Provider.of<ConnectivityProvider>(context, listen: false)
+        .removeListener(_connectivityListener);
+    super.dispose();
+  }
+
+  void _setupConnectivityListener() {
+    final connectivity =
+        Provider.of<ConnectivityProvider>(context, listen: false);
+    bool? wasOnline;
+
+    _connectivityListener = () {
+      if (!mounted) return;
+      final isOnline = connectivity.isOnline;
+      if (wasOnline != null && wasOnline != isOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(isOnline ? Icons.wifi : Icons.wifi_off,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Text(isOnline ? 'Back online' : 'You are offline',
+                    style: GoogleFonts.nunito(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700)),
+              ],
+            ),
+            backgroundColor: isOnline ? Colors.green : Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      wasOnline = isOnline;
+    };
+
+    connectivity.addListener(_connectivityListener);
+  }
+
+  void _checkMissingInterests() {
+    final user = Provider.of<AuthProvider>(context, listen: false).userModel;
+    if (user != null &&
+        user.role == 'student' &&
+        (user.interests == null || user.interests!.isEmpty)) {
+      showModalBottomSheet(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        builder: (context) => InterestUpdateSheet(userId: user.uid),
+      );
+    }
+  }
+
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -46,7 +138,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
-          // ... rest of the build method
           slivers: [
             // Header
             SliverSafeArea(
@@ -55,29 +146,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
                 sliver: SliverToBoxAdapter(
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Flexible(
-                        flex: 1,
-                        fit: FlexFit.tight,
+                      // Progress Ring with Avatar
+                      _DailyProgressRing(
+                        progress: 0.6,
+                        size: 48,
+                        child: BounceWrapper(
+                          onTap: () => context.push('/achievements'),
+                          child: (userData.photoURL != null &&
+                                  userData.photoURL!.isNotEmpty)
+                              ? CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage: CachedNetworkImageProvider(
+                                    userData.photoURL!,
+                                    cacheManager: ProfileImageCacheManager(),
+                                  ),
+                                )
+                              : Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        AppColors.primary
+                                            .withValues(alpha: 0.15),
+                                        const Color(0xFF8B5CF6)
+                                            .withValues(alpha: 0.1),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      firstName.isNotEmpty
+                                          ? firstName[0].toUpperCase()
+                                          : 'S',
+                                      style: GoogleFonts.poppins(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               _getGreeting(),
                               style: GoogleFonts.nunito(
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: subtextColor,
                                 letterSpacing: 0.2,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Text(
                               firstName,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w800,
-                                fontSize: 28,
+                                fontSize: 24,
                                 color: textColor,
                                 height: 1.15,
                               ),
@@ -86,123 +222,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      // Icons section with its own Row
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Notification Bell
-                          Selector<NotificationProvider, int>(
-                            selector: (_, p) => p.unreadCount,
-                            builder: (context, unreadCount, _) {
-                              return BounceWrapper(
-                                onTap: () => context.push('/notifications'),
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? Colors.white
-                                                .withValues(alpha: 0.05)
-                                            : theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.03),
+                      // Notification Bell
+                      Selector<NotificationProvider, int>(
+                        selector: (_, p) => p.unreadCount,
+                        builder: (context, unreadCount, _) {
+                          return BounceWrapper(
+                            onTap: () => context.push('/notifications'),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.03),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    CupertinoIcons.bell_fill,
+                                    size: 20,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                if (unreadCount > 0)
+                                  Positioned(
+                                    right: -2,
+                                    top: -2,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF6366F1),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: Icon(
-                                        CupertinoIcons.bell_fill,
-                                        size: 20,
-                                        color: isDark
-                                            ? Colors.white70
-                                            : theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.6),
-                                      ),
-                                    ),
-                                    if (unreadCount > 0)
-                                      Positioned(
-                                        right: -2,
-                                        top: -2,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF6366F1),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          constraints: const BoxConstraints(
-                                              minWidth: 16, minHeight: 16),
-                                          child: Text(
-                                            unreadCount.toString(),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          // Profile avatar
-                          BounceWrapper(
-                            onTap: () => context.push('/profile'),
-                            child: Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                image: userData.photoURL != null &&
-                                        userData.photoURL!.isNotEmpty
-                                    ? DecorationImage(
-                                        image: CachedNetworkImageProvider(
-                                            userData.photoURL!),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                                gradient: userData.photoURL != null &&
-                                        userData.photoURL!.isNotEmpty
-                                    ? null
-                                    : LinearGradient(
-                                        colors: [
-                                          AppColors.primary
-                                              .withValues(alpha: 0.15),
-                                          const Color(0xFF8B5CF6)
-                                              .withValues(alpha: 0.1),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : AppColors.primary
-                                          .withValues(alpha: 0.15),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: userData.photoURL != null &&
-                                      userData.photoURL!.isNotEmpty
-                                  ? null
-                                  : Center(
+                                      constraints: const BoxConstraints(
+                                          minWidth: 16, minHeight: 16),
                                       child: Text(
-                                        firstName.isNotEmpty
-                                            ? firstName[0].toUpperCase()
-                                            : 'S',
-                                        style: GoogleFonts.poppins(
-                                          color: AppColors.primary,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
+                                        unreadCount.toString(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
                                         ),
+                                        textAlign: TextAlign.center,
                                       ),
                                     ),
+                                  ),
+                              ],
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -322,6 +395,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Language Buddy Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "LANGUAGE QUESTS",
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: subtextColor,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _LanguageBuddyCarousel(isDark: isDark),
                   ],
                 ),
               ),
@@ -506,6 +602,282 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isDark: isDark,
       route: route,
       onTap: onTap,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAILY PROGRESS RING
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DailyProgressRing extends StatelessWidget {
+  final double progress; // 0.0 to 1.0
+  final double size;
+  final Widget? child;
+
+  const _DailyProgressRing({
+    required this.progress,
+    this.size = 48,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _ProgressRingPainter(
+          progress: progress.clamp(0.0, 1.0),
+          trackColor: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : AppColors.primary.withValues(alpha: 0.1),
+          progressColor: AppColors.primary,
+          strokeWidth: 3.5,
+        ),
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
+class _ProgressRingPainter extends CustomPainter {
+  final double progress;
+  final Color trackColor;
+  final Color progressColor;
+  final double strokeWidth;
+
+  _ProgressRingPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.progressColor,
+    this.strokeWidth = 3.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - strokeWidth) / 2;
+
+    // Track
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..color = trackColor,
+    );
+
+    // Progress arc
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2, // Start from top
+      2 * math.pi * progress,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = strokeWidth
+        ..color = progressColor,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProgressRingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANGUAGE BUDDY CAROUSEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LanguageBuddyCarousel extends StatefulWidget {
+  final bool isDark;
+  const _LanguageBuddyCarousel({required this.isDark});
+
+  @override
+  State<_LanguageBuddyCarousel> createState() => _LanguageBuddyCarouselState();
+}
+
+class _LanguageBuddyCarouselState extends State<_LanguageBuddyCarousel> {
+  static const _languages = [
+    {'name': 'French',     'flag': '🇫🇷', 'greeting': 'Bonjour !',  'color': 0xFF58CC02},
+    {'name': 'Spanish',    'flag': '🇪🇸', 'greeting': '¡Hola!',     'color': 0xFFFFC800},
+    {'name': 'Swahili',    'flag': '🇰🇪', 'greeting': 'Habari!',   'color': 0xFFEF4444},
+    {'name': 'German',     'flag': '🇩🇪', 'greeting': 'Hallo!',     'color': 0xFF1CB0F6},
+  ];
+
+  final _pageController = PageController(viewportFraction: 0.86);
+  int _page = 0;
+  final _progress = BuddyProgressService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _progress.load();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: _progress,
+          builder: (_, __) => _progressPill(),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 140,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _languages.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (_, i) {
+              final l = _languages[i];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: _buddyTile(
+                  name: l['name'] as String,
+                  flag: l['flag'] as String,
+                  greeting: l['greeting'] as String,
+                  color: Color(l['color'] as int),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_languages.length, (i) {
+            final active = i == _page;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: active ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: active ? const Color(0xFF58CC02) : Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _progressPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: widget.isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('🔥', style: TextStyle(fontSize: 14)),
+          const SizedBox(width: 4),
+          Text('${_progress.streak}',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 12)),
+          const SizedBox(width: 12),
+          const Text('❤️', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 4),
+          Text('${_progress.hearts}/${BuddyProgressService.maxHearts}',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 12)),
+          const SizedBox(width: 12),
+          const Text('⭐', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 4),
+          Text('${_progress.dailyXp}/${BuddyProgressService.dailyGoal} XP',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buddyTile({
+    required String name,
+    required String flag,
+    required String greeting,
+    required Color color,
+  }) {
+    return BounceWrapper(
+      onTap: () => context.push('/language-tree', extra: {'language': name}),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color, color.withValues(alpha: 0.78)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: widget.isDark ? 0.15 : 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: Text(flag, style: const TextStyle(fontSize: 32)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('LEARN $name'.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 9,
+                            color: Colors.white,
+                            letterSpacing: 0.8)),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(greeting,
+                      style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 2),
+                  Text('Continue your quest',
+                      style: GoogleFonts.nunito(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 28),
+          ],
+        ),
+      ),
     );
   }
 }
