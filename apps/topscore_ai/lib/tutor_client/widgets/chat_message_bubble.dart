@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -518,83 +517,47 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
       alignment: Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 850),
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.only(
-                  top: 8.0, bottom: 24.0, left: 12.0, right: 12.0),
-              child: Row(
+                  top: 4.0, bottom: 8.0, left: 16.0, right: 16.0),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                            blurRadius: 15,
-                            offset: const Offset(0, 6),
+                  if (widget.message.status == MessageStatus.error)
+                    _buildAiErrorCard(theme, isDark)
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((widget.isStreaming || widget.message.isThinking) &&
+                            widget.message.text.isEmpty &&
+                            (widget.message.reasoning == null ||
+                                widget.message.reasoning!.isEmpty))
+                          _ThinkingSkeleton(
+                              isDark: isDark,
+                              status: widget.status ??
+                                  (widget.message.isThinking
+                                      ? "Thinking..."
+                                      : null)),
+                        if (widget.message.reasoning != null &&
+                            widget.message.reasoning!.isNotEmpty)
+                          TopScoreReasoningView(
+                            content: widget.message.reasoning!,
+                            isThinking: widget.message.text.isEmpty,
                           ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? theme.colorScheme.surface.withValues(alpha: 0.4)
-                                  : Colors.white.withValues(alpha: 0.7),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.white.withValues(alpha: 0.8),
-                                width: 1.5,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: widget.message.status == MessageStatus.error
-                                ? _buildAiErrorCard(theme, isDark)
-                                : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      if ((widget.isStreaming ||
-                                              widget.message.isThinking) &&
-                                          widget.message.text.isEmpty &&
-                                          (widget.message.reasoning == null ||
-                                              widget.message.reasoning!.isEmpty))
-                                        _ThinkingSkeleton(
-                                            isDark: isDark,
-                                            status: widget.status ??
-                                                (widget.message.isThinking
-                                                    ? "Thinking..."
-                                                    : null)),
-                                      if (widget.message.reasoning != null &&
-                                          widget.message.reasoning!.isNotEmpty)
-                                        TopScoreReasoningView(
-                                          content: widget.message.reasoning!,
-                                          isThinking: widget.message.text.isEmpty,
-                                        ),
-                                      if (widget.message.replyToText != null)
-                                        _buildReplyPreview(theme, false),
-                                      if (widget.message.text.isNotEmpty)
-                                        _buildMarkdown(
-                                            context, theme, isDark, settings),
-                                      if (widget.isStreaming &&
-                                          widget.message.text.isNotEmpty)
-                                        const _StreamingCursor(),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
+                        if (widget.message.replyToText != null)
+                          _buildReplyPreview(theme, false),
+                        if (widget.message.text.isNotEmpty)
+                          _buildMarkdown(context, theme, isDark, settings),
+                        if (widget.isStreaming &&
+                            widget.message.text.isNotEmpty)
+                          const _StreamingCursor(),
+                      ],
                     ),
-                  ),
                 ],
               ),
             ),
@@ -971,13 +934,13 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
 
   Widget _buildMarkdown(BuildContext context, ThemeData theme, bool isDark,
       SettingsProvider settings) {
-    final baseStyle = GoogleFonts.nunito(
-      fontSize: settings.fontSize + 2,
-      fontWeight: FontWeight.w500,
+    final baseStyle = GoogleFonts.plusJakartaSans(
+      fontSize: settings.fontSize + 1,
+      fontWeight: widget.message.isUser ? FontWeight.w600 : FontWeight.w500,
       height: widget.message.isUser ? settings.lineHeight : 1.6,
       color: widget.message.isUser
           ? Colors.white
-          : theme.colorScheme.onSurface.withValues(alpha: 0.9),
+          : theme.colorScheme.onSurface.withValues(alpha: 0.95),
     );
 
     final content = _cleanContent(widget.message.text);
@@ -1225,7 +1188,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 4, left: 12),
       child: Row(
         children: [
           if (widget.speakingMessageId == widget.message.id &&
@@ -1948,10 +1911,10 @@ class _ThinkingSkeletonState extends State<_ThinkingSkeleton>
 
   Widget _buildLine(Color color, double widthFraction) {
     return Container(
-      height: 12,
+      height: 8,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
       ),
       width: 300 * widthFraction,
     );

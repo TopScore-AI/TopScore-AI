@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import '../../constants/colors.dart';
+import '../../widgets/gpt_markdown_wrapper.dart';
 
 class InteractiveTableWidget extends StatelessWidget {
   final String title;
@@ -150,7 +150,7 @@ class InteractiveTableWidget extends StatelessWidget {
                                 horizontal: 24,
                                 vertical: 16,
                               ),
-                              child: GptMarkdown(
+                              child: StyledGptMarkdown(
                                 cell.toString().trim(),
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
