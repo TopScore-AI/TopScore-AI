@@ -7,6 +7,7 @@ import 'mnemonic_card.dart';
 import 'punnett_square_widget.dart';
 import 'interactive_sim_widget.dart';
 import 'p5_playground_widget.dart';
+import '../../widgets/graph_artifact_widget.dart';
 
 /// A factory that dispatches dynamic UI widgets based on the configuration sent by the server.
 class UiWidgetFactory extends StatelessWidget {
@@ -57,6 +58,19 @@ class UiWidgetFactory extends StatelessWidget {
           return AiImageWidget(
             title: title,
             url: imageUrl.toString(),
+          );
+
+        case 'graph':
+        case 'graph_widget':
+        case 'diagram':
+        case 'plotly':
+          return GraphArtifactWidget(
+            graphDataJson: jsonEncode({
+              'id': data['id'],
+              'title': title,
+              'config': config,
+              ...config, // Flatten config for GraphArtifactWidget expectations
+            }),
           );
 
         case 'mnemonic_card':

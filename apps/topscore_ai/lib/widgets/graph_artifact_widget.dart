@@ -82,8 +82,14 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
     description = _cleanText(description);
 
     String? imageUrl = _data['url'] ?? _data['image_url'] ?? _data['graph_url'];
-    final base64Image = _data['image_base64'] ?? _data['base64_image'] ?? _data['image_data'];
+    var base64Image = _data['image_base64'] ?? _data['base64_image'] ?? _data['image_data'];
     
+    // Check if imageUrl is actually a data URI
+    if (imageUrl != null && imageUrl.startsWith('data:')) {
+      base64Image = imageUrl;
+      imageUrl = null;
+    }
+
     // Resolve relative URLs from backend
     if (imageUrl != null && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
       final base = AppConfig.backendBaseUrl;
@@ -115,9 +121,9 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
           children: [
             _buildHeader(theme, title, isDark, false),
             // Display Image (Base64 or Network)
-            if (base64Image != null)
+            if (base64Image != null && base64Image.toString().isNotEmpty)
               GestureDetector(
-                onTap: () => _showFullScreenImage(context, base64Image, isBase64: true),
+                onTap: () => _showFullScreenImage(context, base64Image.toString(), isBase64: true),
                 child: Hero(
                   tag: 'graph_${_data['id']}_b64',
                   child: Image.memory(
@@ -125,6 +131,11 @@ class _GraphArtifactWidgetState extends State<GraphArtifactWidget> {
                       ? base64Image.toString().split(',').last 
                       : base64Image.toString()),
                     fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 150,
+                      color: isDark ? Colors.grey[900] : Colors.grey[200],
+                      child: const Center(child: Icon(Icons.broken_image)),
+                    ),
                   ),
                 ),
               )

@@ -122,33 +122,36 @@ extension ChatControllerMessaging on ChatController {
       case 'artifact':
         final artifactType = data['artifact_type'] ?? type;
         final rawUrl = data['url']?.toString();
-        final isValidUrl = rawUrl != null && rawUrl.startsWith('http');
+        final isValidUrl = rawUrl != null && (rawUrl.startsWith('http') || rawUrl.startsWith('data:'));
 
         if ((artifactType == 'image' || artifactType == 'graph' || artifactType == 'diagram' || artifactType == 'image_widget') && isValidUrl) {
-          // Image/Graph/Diagram tools (serpapi / wikimedia / fetch_educational_images / graphing_tool / generate_educational_diagram) emit
-          // `{type:'artifact', artifact_type:'image'|'graph'|'diagram', url, title, source}` WITHOUT
-          // an `id`. _handleUiWidgetEvent requires a non-null id to attach the
-          // widget, so synthesize a stable one from the url if needed.
           final rawId = data['id'];
-          final url = data['url']?.toString() ?? '';
+          final url = rawUrl;
           final synthId = (rawId is String && rawId.isNotEmpty)
               ? rawId
               : 'img_${url.hashCode}';
+
           final normalizedWidget = {
             'id': synthId,
-            'type': 'image_widget',
+            'type': (artifactType == 'graph' || artifactType == 'diagram') ? artifactType : 'image_widget',
             'title': data['title'] ?? (artifactType == 'graph' ? 'Generated Graph' : 'Image Illustration'),
             'config': {
-              'url': data['url'],
+              'url': url,
               'title': data['title'] ?? (artifactType == 'graph' ? 'Generated Graph' : 'Image Illustration'),
               'source': data['source'],
               'source_url': data['source_url'],
+              ...data,
             }
           };
           return _handleUiWidgetEvent(normalizedWidget);
         }
 
-        // Other unhandled artifacts
+        // Generic fallback for other artifact types (e.g. for widgets sent as artifacts)
+        if (data['id'] != null) {
+          final Map<String, dynamic> normalized = Map<String, dynamic>.from(data);
+          normalized['type'] = artifactType;
+          return _handleUiWidgetEvent(normalized);
+        }
         return null;
 
       case 'tool_call':
@@ -247,10 +250,11 @@ extension ChatControllerMessaging on ChatController {
         final isValidUrl = rawUrl != null && rawUrl.startsWith('http');
 
         if (isValidUrl) {
+          final type = data['artifact_type'] ?? data['type'];
           final normalized = {
             'id': data['id'] ?? rawUrl.hashCode.toString(),
-            'type': 'image_widget',
-            'title': data['title'] ?? 'Image Illustration',
+            'type': (type == 'graph' || type == 'diagram') ? type : 'image_widget',
+            'title': data['title'] ?? (type == 'graph' ? 'Generated Graph' : 'Image Illustration'),
             'config': {
               'url': data['url'],
               'title': data['title'],
@@ -1585,13 +1589,14 @@ extension ChatControllerMessaging on ChatController {
             : 'img_${url.hashCode}';
         final normalized = {
           'id': synthId,
-          'type': 'image_widget',
+          'type': (type == 'graph' || type == 'diagram') ? type : 'image_widget',
           'to_message_id': targetId,
           'title': item['title'] ?? (type == 'graph' ? 'Generated Graph' : 'Image Illustration'),
           'config': {
             'url': url,
             'title': item['title'] ?? (type == 'graph' ? 'Generated Graph' : 'Image Illustration'),
             'source': item['source'],
+            ...item,
           }
         };
         _handleUiWidgetEvent(normalized);

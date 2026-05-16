@@ -12,15 +12,18 @@ import '../../utils/sharing_utils.dart';
 import '../../utils/web_download_helper.dart';
 import 'package:universal_io/io.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 
 class FullScreenImageViewer extends StatefulWidget {
   final String imageUrl;
   final String? heroTag;
+  final bool isBase64;
 
   const FullScreenImageViewer({
     super.key,
     required this.imageUrl,
     this.heroTag,
+    this.isBase64 = false,
   });
 
   @override
@@ -32,6 +35,24 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
 
   Future<void> _handleDownload() async {
     if (_isDownloading) return;
+
+    if (widget.isBase64) {
+      final bytes = base64Decode(widget.imageUrl.split(',').last);
+      final filename = 'topscore_${DateTime.now().millisecondsSinceEpoch}.png';
+      if (kIsWeb) {
+        WebDownloadHelper.downloadBytes(bytes, filename);
+      } else {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/$filename');
+        await file.writeAsBytes(bytes);
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path)],
+          text: 'Shared from TopScore AI',
+        ));
+      }
+      return;
+    }
+
     setState(() => _isDownloading = true);
 
     try {
@@ -110,27 +131,31 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               ),
             ),
             // Share Button
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: CircleAvatar(
-                backgroundColor: Colors.black.withValues(alpha: 0.5),
-                child: IconButton(
-                  icon: const Icon(CupertinoIcons.share,
-                      color: Colors.white, size: 20),
-                  onPressed: () {
-                    final cleanLink =
-                        SharingUtils.generateShareLink(widget.imageUrl);
-                    SharePlus.instance.share(ShareParams(
-                      text: 'Check this out on TopScore AI:\n$cleanLink',
-                    ));
-                  },
+            if (!widget.isBase64)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: CircleAvatar(
+                  backgroundColor: Colors.black.withValues(alpha: 0.5),
+                  child: IconButton(
+                    icon: const Icon(CupertinoIcons.share,
+                        color: Colors.white, size: 20),
+                    onPressed: () {
+                      final cleanLink =
+                          SharingUtils.generateShareLink(widget.imageUrl);
+                      SharePlus.instance.share(ShareParams(
+                        text: 'Check this out on TopScore AI:\n$cleanLink',
+                      ));
+                    },
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         body: PhotoView(
-          imageProvider: CachedNetworkImageProvider(widget.imageUrl),
+          imageProvider: widget.isBase64
+              ? MemoryImage(base64Decode(widget.imageUrl.split(',').last))
+                  as ImageProvider
+              : CachedNetworkImageProvider(widget.imageUrl),
           loadingBuilder: (context, event) => const Center(
             child: AppSpinner(color: Colors.white),
           ),
