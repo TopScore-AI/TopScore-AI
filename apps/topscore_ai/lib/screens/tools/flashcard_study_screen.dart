@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
@@ -65,11 +66,11 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
       return;
     }
     // Vertical swipes: mark known/unknown on the current card.
-    if (_dragPosition.dy < -120) {
+    if (_dragPosition.dy < -100) {
       _markCurrent(known: true);
       return;
     }
-    if (_dragPosition.dy > 120) {
+    if (_dragPosition.dy > 100) {
       _markCurrent(known: false);
       return;
     }
@@ -211,23 +212,28 @@ class _FlashcardStudyScreenState extends State<FlashcardStudyScreen> {
                   child: AnimatedContainer(
                     duration: _isDragging
                         ? Duration.zero
-                        : const Duration(milliseconds: 400),
-                    curve: Curves.easeOutQuart,
+                        : const Duration(milliseconds: 450),
+                    curve: Curves.easeOutBack,
                     transform:
                         (_dragPosition.dx.isFinite && _dragPosition.dy.isFinite)
                             ? (Matrix4.translationValues(
                                 _dragPosition.dx, _dragPosition.dy, 0)
-                              ..rotateZ(_dragPosition.dx / 1000))
+                              ..rotateZ(_dragPosition.dx / 1200))
                             : Matrix4.identity(),
                     transformAlignment: Alignment.center,
                     child: SizedBox(
                       width: MediaQuery.of(context).size.width - 48,
                       child: FlippableFlashcard(
+                        key: ValueKey(_deck[_currentIndex].front),
                         card: _deck[_currentIndex],
                       ),
                     ),
                   ),
-                ),
+                ).animate(target: _isDragging ? 0 : 1).scale(
+                    begin: const Offset(0.98, 0.98),
+                    end: const Offset(1, 1),
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutBack),
 
                 // Swiping Overlays (Horizontal)
                 if (_isDragging &&
