@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
-import 'package:flutter/gestures.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -466,139 +465,115 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
   Widget _buildActivatedPlayground(bool isDark, ThemeData theme) {
     final barBg = isDark ? AppColors.surfaceDark : AppColors.background;
     final barBorder = isDark ? AppColors.borderDark : AppColors.border;
-    const double totalHeight = 650.0;
+    const double totalHeight = 680.0;
 
-    return DefaultTabController(
-      length: 2,
-      child: Container(
-        height: totalHeight,
-        margin: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceElevatedDark : AppColors.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: barBorder, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-              blurRadius: 30,
-              offset: const Offset(0, 15),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Column(
-            children: [
-              // Top Controls Bar
-              Container(
-                height: 52,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: barBg,
-                  border: Border(bottom: BorderSide(color: barBorder)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.code_rounded, size: 18, color: AppColors.topscoreBlue),
-                        const SizedBox(width: 8),
-                        Text(
-                          widget.title,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+    return Container(
+      height: totalHeight,
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceElevatedDark : AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: barBorder, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: [
+            // Top Controls Bar
+            Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: barBg,
+                border: Border(bottom: BorderSide(color: barBorder)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.code_rounded, size: 18, color: AppColors.topscoreBlue),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.title,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      if (_levelMastered && _currentSyllabusLevel < SyllabusData.levels.length)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            color: AppColors.success,
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: _nextLevel,
+                            child: const Text('Next Level', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
                         ),
-                      ],
-                    ),
-                    GestureDetector(
-                      onTap: _deactivate,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(CupertinoIcons.power, size: 14, color: Colors.redAccent),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Close',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                          ],
+                      GestureDetector(
+                        onTap: _deactivate,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(CupertinoIcons.power, size: 14, color: Colors.redAccent),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
-              
-              // Custom TabBar (Left and Right Tabs)
-              Container(
-                decoration: BoxDecoration(
-                  color: barBg,
-                  border: Border(bottom: BorderSide(color: barBorder)),
-                ),
-                child: TabBar(
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(CupertinoIcons.play_circle, size: 16),
-                          const SizedBox(width: 8),
-                          Text('Playground', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(CupertinoIcons.doc_text, size: 16),
-                          const SizedBox(width: 8),
-                          Text('Code Editor', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                  ],
-                  labelColor: AppColors.topscoreBlue,
-                  unselectedLabelColor: isDark ? Colors.white38 : Colors.grey,
-                  indicatorColor: AppColors.topscoreBlue,
-                  indicatorWeight: 3,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  dividerColor: Colors.transparent,
-                ),
-              ),
+            ),
 
-              // Tab Content
-              Expanded(
-                child: TabBarView(
-                  physics: const NeverScrollableScrollPhysics(), // Allow internal interaction
-                  children: [
-                    _buildTopPanel(isDark, theme),
-                    _buildBottomPanel(isDark, theme),
-                  ],
-                ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 650;
+
+                  if (isWide) {
+                    return Row(
+                      children: [
+                        Expanded(flex: 3, child: _buildEditorPanel(isDark, theme)),
+                        VerticalDivider(width: 1, color: barBorder),
+                        Expanded(flex: 2, child: _buildPreviewPanel(isDark, theme)),
+                      ],
+                    );
+                  } else {
+                    return Column(
+                      children: [
+                        Expanded(flex: 3, child: _buildEditorPanel(isDark, theme)),
+                        Divider(height: 1, color: barBorder),
+                        Expanded(flex: 2, child: _buildPreviewPanel(isDark, theme)),
+                      ],
+                    );
+                  }
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTopPanel(bool isDark, ThemeData theme) {
+  Widget _buildPreviewPanel(bool isDark, ThemeData theme) {
     return Container(
-      color: isDark ? AppColors.surfaceDark : AppColors.background,
+      color: isDark ? const Color(0xFF131314) : const Color(0xFFF0F4F9),
       child: Column(
         children: [
           // The Canvas Container
@@ -609,25 +584,29 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? AppColors.borderDark : AppColors.border,
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 15,
-                    spreadRadius: -5,
-                  ),
-                ],
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  if (_isWebviewLoading)
+                  if (_loadedHtml == null)
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(CupertinoIcons.play_fill, color: Colors.white.withValues(alpha: 0.2), size: 48),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Click "Run Code" to preview',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white.withValues(alpha: 0.3), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (_isWebviewLoading)
                     const Center(child: CupertinoActivityIndicator(radius: 16))
                   else
                     InAppWebView(
+                      key: ValueKey(_loadedHtml.hashCode),
                       initialData: InAppWebViewInitialData(
                         data: _loadedHtml ?? '',
                         mimeType: 'text/html',
@@ -641,10 +620,6 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
                         disableVerticalScroll: true,
                         disableHorizontalScroll: true,
                       ),
-                      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                        Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer()),
-                        Factory<HorizontalDragGestureRecognizer>(() => HorizontalDragGestureRecognizer()),
-                      },
                       onWebViewCreated: (controller) {
                         _webViewController = controller;
                         if (!kIsWeb) {
@@ -665,7 +640,7 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
                                   _showHintPanel = false;
                                   _currentSocraticHint = null;
                                   _revealCode = null;
-                                  _levelMastered = true; // Unlock progress!
+                                  _levelMastered = true;
                                 });
                               }
                             },
@@ -674,40 +649,40 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
                       },
                     ),
                   // Overlay controls
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Row(
-                      children: [
-                        _buildCanvasAction(
-                          icon: Icons.refresh_rounded,
-                          onTap: _runModifiedCode,
-                          tooltip: 'Restart Sketch',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildCanvasAction(
-                          icon: Icons.fullscreen_rounded,
-                          onTap: _showFullscreenPreview,
-                          tooltip: 'Fullscreen',
-                        ),
-                      ],
+                  if (_loadedHtml != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Row(
+                        children: [
+                          _buildCanvasAction(
+                            icon: Icons.refresh_rounded,
+                            onTap: _runModifiedCode,
+                            tooltip: 'Restart Sketch',
+                          ),
+                          const SizedBox(width: 8),
+                          _buildCanvasAction(
+                            icon: Icons.fullscreen_rounded,
+                            onTap: _showFullscreenPreview,
+                            tooltip: 'Fullscreen',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
           ),
           
-          // Celebration Card or Socratic Mascot Hint Panel
-          _levelMastered 
-              ? _buildCelebrationCard(isDark, theme) 
-              : _buildMascotHintPanel(isDark, theme),
+          if (_levelMastered)
+             _buildCelebrationCard(isDark, theme)
+          else if (_showHintPanel)
+             _buildMascotHintPanel(isDark, theme),
 
-          // Variable Tweak Control Panel (If variables exist in p5 file)
           if (_tweakableVariables.isNotEmpty)
             _buildModernTweakPanel(isDark),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -828,14 +803,45 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
     );
   }
 
-  Widget _buildBottomPanel(bool isDark, ThemeData theme) {
+  void _nextLevel() {
+     setState(() {
+      _currentSyllabusLevel++;
+      _levelMastered = false;
+      _codeController.text = _cleanInitialCode(
+          SyllabusData.levels[_currentSyllabusLevel - 1].code);
+      _activeTab = 1; // Switch to text code for levels
+      _loadedHtml = null; // Hide preview until run
+    });
+  }
+
+  Widget _buildEditorPanel(bool isDark, ThemeData theme) {
     final editorBg = isDark ? AppColors.surfaceDark : AppColors.surfaceVariant;
     final editorBorder = isDark ? AppColors.borderDark : AppColors.border;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    return Container(
+      padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'LESSON $_currentSyllabusLevel: ${SyllabusData.levels[_currentSyllabusLevel - 1].topic.toUpperCase()}',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              color: AppColors.topscoreBlue,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            SyllabusData.levels[_currentSyllabusLevel - 1].instruction,
+            style: GoogleFonts.nunito(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
           _buildTabSelector(isDark),
           const SizedBox(height: 12),
           Expanded(
@@ -851,7 +857,6 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
                       borderRadius: BorderRadius.circular(16),
                       child: Row(
                         children: [
-                          // Line numbers
                           Container(
                             width: 32,
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -863,18 +868,16 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
                               valueListenable: _codeController,
                               builder: (context, value, _) {
                                 final lineCount = value.text.split('\n').length;
-                                return SingleChildScrollView(
-                                  child: Column(
-                                    children: List.generate(
-                                      lineCount,
-                                      (i) => Text(
-                                        '${i + 1}',
-                                        style: GoogleFonts.firaCode(
-                                          fontSize: 10,
-                                          color: isDark ? Colors.white24 : Colors.black26,
-                                        ),
-                                        textAlign: TextAlign.center,
+                                return Column(
+                                  children: List.generate(
+                                    lineCount,
+                                    (i) => Text(
+                                      '${i + 1}',
+                                      style: GoogleFonts.firaCode(
+                                        fontSize: 10,
+                                        color: isDark ? Colors.white24 : Colors.black26,
                                       ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                 );
@@ -907,7 +910,6 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
           ),
           if (_activeTab == 1) ...[
             const SizedBox(height: 8),
-            // THE CODER'S ACCESSORY BAR
             _buildCoderAccessoryBar(isDark),
           ],
           const SizedBox(height: 12),
@@ -1477,33 +1479,33 @@ class _P5PlaygroundWidgetState extends State<P5PlaygroundWidget> {
 class SyllabusData {
   static final List<SyllabusLevel> levels = [
     SyllabusLevel(
-      topic: "Introduction to p5.js",
-      code: "function setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  background(220);\n  ellipse(width/2, height/2, 50, 50);\n}",
+      topic: "Set the Scene",
+      instruction: "Start by picking a background color! Change 220 to a number between 0 and 255.",
+      code: "function draw() {\n  background(220);\n}",
+      successCriteria: "typeof background === 'function'",
+    ),
+    SyllabusLevel(
+      topic: "Draw a Circle",
+      instruction: "Let's put something on the canvas. Add 'circle(200, 200, 50);' inside the draw function.",
+      code: "function draw() {\n  background(240);\n  circle(200, 200, 50);\n}",
       successCriteria: "true",
     ),
     SyllabusLevel(
-      topic: "Shapes and Colors",
-      code: "function setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  background(220);\n  fill(255, 0, 0);\n  rect(width/2 - 25, height/2 - 25, 50, 50);\n}",
+      topic: "Color it Red",
+      instruction: "Use 'fill(255, 0, 0);' before drawing the circle to change its color.",
+      code: "function draw() {\n  background(240);\n  fill(255, 0, 0);\n  circle(200, 200, 50);\n}",
       successCriteria: "true",
     ),
     SyllabusLevel(
-      topic: "Variables and Animation",
-      code: "let x = 0;\nfunction setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  background(220);\n  ellipse(x, height/2, 50, 50);\n  x = (x + 2) % width;\n}",
+      topic: "Make it Move",
+      instruction: "Variables make code dynamic. Watch how 'frameCount' makes the circle slide!",
+      code: "function draw() {\n  background(240);\n  circle(frameCount % 400, 200, 50);\n}",
       successCriteria: "true",
     ),
     SyllabusLevel(
-      topic: "Interactivity",
-      code: "function setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  background(220);\n  ellipse(mouseX, mouseY, 50, 50);\n}",
-      successCriteria: "true",
-    ),
-    SyllabusLevel(
-      topic: "Loops",
-      code: "function setup() {\n  createCanvas(windowWidth, windowHeight);\n}\n\nfunction draw() {\n  background(220);\n  for (let i = 0; i < 10; i++) {\n    ellipse(i * 40 + 20, height/2, 30, 30);\n  }\n}",
-      successCriteria: "true",
-    ),
-    SyllabusLevel(
-      topic: "Advanced Creativity",
-      code: "function setup() {\n  createCanvas(windowWidth, windowHeight);\n  background(220);\n}\n\nfunction draw() {\n  if (mouseIsPressed) {\n    fill(random(255), random(255), random(255));\n    ellipse(mouseX, mouseY, 20, 20);\n  }\n}",
+      topic: "Follow the Mouse",
+      instruction: "Replace the numbers in circle() with 'mouseX' and 'mouseY'.",
+      code: "function draw() {\n  background(240, 240, 240, 20);\n  circle(mouseX, mouseY, 50);\n}",
       successCriteria: "true",
     ),
   ];
@@ -1511,10 +1513,16 @@ class SyllabusData {
 
 class SyllabusLevel {
   final String topic;
+  final String instruction;
   final String code;
   final String successCriteria;
 
-  SyllabusLevel({required this.topic, required this.code, required this.successCriteria});
+  SyllabusLevel({
+    required this.topic,
+    required this.instruction,
+    required this.code,
+    required this.successCriteria,
+  });
 }
 
 class _P5FullscreenPreview extends StatelessWidget {
