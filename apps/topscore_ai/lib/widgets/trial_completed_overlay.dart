@@ -19,9 +19,9 @@ class TrialCompletedOverlay extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final headline = requiresAccount ? "Trial Completed" : "Free Limit Reached";
+    final headline = requiresAccount ? "Daily Trial Completed" : "Free Limit Reached";
     final subtitle = requiresAccount
-        ? "You've used your 6 free messages."
+        ? "You've used your 6 free AI messages for today."
         : "You've used all 6 free messages for this period.";
 
     return Scaffold(
@@ -134,9 +134,9 @@ class TrialCompletedOverlay extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: (isDark ? Colors.white : Colors.black)
-                                .withValues(alpha: 0.04),
+                            color: AppColors.primaryPurple.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.primaryPurple.withValues(alpha: 0.1)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,6 +146,8 @@ class TrialCompletedOverlay extends StatelessWidget {
                               _BenefitItem(text: "AI Flashcards & Quiz Generation"),
                               const SizedBox(height: 12),
                               _BenefitItem(text: "Live Voice AI Tutor sessions"),
+                              const SizedBox(height: 12),
+                              _BenefitItem(text: "Handwritten Homework Scanner"),
                             ],
                           ),
                         ),
